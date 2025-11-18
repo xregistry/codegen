@@ -1,5 +1,5 @@
 """
-Configuration management commands for xregistry-cg.
+Configuration management commands for xregistry.
 
 Provides commands to get, set, list, and reset user configuration.
 """
