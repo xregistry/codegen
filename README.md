@@ -103,10 +103,10 @@ samples directory of this repository:
 The tool requires Python 3.10 or later. Install directly from GitHub:
 
 ```bash
-pip install git+https://github.com/xregistry/codegen.git
+pip install xregistry-cg
 ```
 
-This installs the `xregistry` package with two command-line aliases:
+This installs the `xregistry-cg` package with two command-line aliases:
 
 - `xregistry` - Full command name
 - `xcg` - Short alias for convenience

@@ -27,7 +27,7 @@ async function checkXRegistryTool(context: vscode.ExtensionContext, outputChanne
                     }
                     outputChannel.show(true);
                     outputChannel.appendLine('Installing xregistry CLI...');
-                    await execShellCommand('pip install xregistry', outputChannel);
+                    await execShellCommand('pip install xregistry-cg', outputChannel);
                     vscode.window.showInformationMessage('xregistry CLI has been installed successfully.');
                     return true;
                 }
