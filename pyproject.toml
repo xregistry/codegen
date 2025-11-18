@@ -3,7 +3,7 @@ build-backend = "flit_scm:buildapi"
 requires = ["flit_core>=3.2", "flit_scm", "wheel"]
 
 [project]
-name = "xregistry"
+name = "xregistry-cg"
 dynamic = ["version"]
 authors = [
     { name = "Clemens Vasters", email = "clemensv@microsoft.com"}

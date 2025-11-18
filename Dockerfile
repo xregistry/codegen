@@ -45,7 +45,7 @@ ENTRYPOINT ["xregistry"]
 CMD ["--help"]
 
 # Labels for container metadata
-LABEL org.opencontainers.image.title="xRegistry CLI" \
+LABEL org.opencontainers.image.title="xRegistry Code Generation" \
       org.opencontainers.image.description="A command-line tool for xRegistry with code generation for messaging and eventing applications" \
       org.opencontainers.image.vendor="CNCF" \
       org.opencontainers.image.source="https://github.com/xregistry/codegen"

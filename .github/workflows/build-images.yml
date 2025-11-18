@@ -14,7 +14,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/xregistry-cli
+  IMAGE_NAME: ${{ github.repository }}/xregistry-cg
 
 jobs:
   build:
@@ -120,7 +120,7 @@ jobs:
     steps:
       - name: Build Summary
         run: |
-          echo "🎉 xRegistry CLI Docker image built, signed, and verified successfully!"
+          echo "🎉 xRegistry Code Generation Docker image built, signed, and verified successfully!"
           echo ""
           echo "📦 Image:"
           echo "  • ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
