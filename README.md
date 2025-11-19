@@ -114,6 +114,8 @@ docker pull ghcr.io/xregistry/codegen:latest
 
 The container uses `/work` as its working directory, which you should map to your local project directory:
 
+> **Note:** Due to the volume mapping, file paths in Docker commands must be relative paths within or below your current directory (e.g., `./definitions.json`, `./output`). Absolute paths or paths outside the mounted directory won't be accessible to the container.
+
 <details>
 <summary><strong>Linux / macOS</strong></summary>
 
