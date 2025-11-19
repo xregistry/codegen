@@ -38,7 +38,14 @@ RUN pip install --no-cache-dir /tmp/dist/*.whl && \
 RUN useradd -m -u 1001 xregistry && \
     chown -R xregistry:xregistry /app
 
+# Create working directory for user projects
+RUN mkdir -p /work && \
+    chown -R xregistry:xregistry /work
+
 USER xregistry
+
+# Set working directory for mounted volumes
+WORKDIR /work
 
 # Set the entrypoint
 ENTRYPOINT ["xregistry"]

@@ -100,6 +100,98 @@ samples directory of this repository:
 
 ## Installation
 
+### Option 1: Docker (Recommended)
+
+The easiest way to use the tool is via the pre-built Docker image. No Python installation required!
+
+**Pull the image:**
+
+```bash
+docker pull ghcr.io/xregistry/codegen:latest
+```
+
+**Usage with folder mapping:**
+
+The container uses `/work` as its working directory, which you should map to your local project directory:
+
+<details>
+<summary><strong>Linux / macOS</strong></summary>
+
+```bash
+# Validate a definition file
+docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen:latest \
+  validate --definitions ./my-catalog.json
+
+# Generate code
+docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen:latest \
+  generate --projectname MyProject --language cs --style amqpproducer \
+  --definitions ./my-catalog.json --output ./generated
+
+# List available templates
+docker run --rm ghcr.io/xregistry/codegen:latest list
+```
+
+</details>
+
+<details>
+<summary><strong>Windows (PowerShell)</strong></summary>
+
+```powershell
+# Validate a definition file
+docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen:latest `
+  validate --definitions ./my-catalog.json
+
+# Generate code
+docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen:latest `
+  generate --projectname MyProject --language cs --style amqpproducer `
+  --definitions ./my-catalog.json --output ./generated
+
+# List available templates
+docker run --rm ghcr.io/xregistry/codegen:latest list
+```
+
+</details>
+
+<details>
+<summary><strong>Windows (Command Prompt)</strong></summary>
+
+```cmd
+REM Validate a definition file
+docker run --rm -v %cd%:/work ghcr.io/xregistry/codegen:latest ^
+  validate --definitions ./my-catalog.json
+
+REM Generate code
+docker run --rm -v %cd%:/work ghcr.io/xregistry/codegen:latest ^
+  generate --projectname MyProject --language cs --style amqpproducer ^
+  --definitions ./my-catalog.json --output ./generated
+
+REM List available templates
+docker run --rm ghcr.io/xregistry/codegen:latest list
+```
+
+</details>
+
+**Convenience alias (optional):**
+
+For easier use, create an alias in your shell:
+
+```bash
+# Linux / macOS (.bashrc or .zshrc)
+alias xcg='docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen:latest'
+
+# Windows (PowerShell profile)
+function xcg { docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen:latest $args }
+```
+
+Then use it like a native command:
+
+```bash
+xcg validate --definitions ./my-catalog.json
+xcg generate --projectname MyProject --language py --style kafkaproducer --definitions ./my-catalog.json --output ./out
+```
+
+### Option 2: Python Package
+
 The tool requires Python 3.10 or later. Install directly from GitHub:
 
 ```bash
