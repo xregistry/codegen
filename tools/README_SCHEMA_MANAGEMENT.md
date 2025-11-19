@@ -1,6 +1,61 @@
-# xRegistry Model Schema Management
+# xRegistry Tools
 
-This directory contains tools for managing and validating the xRegistry model schema files.
+This directory contains tools for managing the xRegistry code generator project.
+
+## Template and Extension Management
+
+### `generate_commands_json.py`
+
+Automatically generates `xregistry/commands.json` by scanning the template directories and their `_templateinfo.json` files.
+
+**Usage:**
+```bash
+python tools/generate_commands_json.py
+```
+
+**What it does:**
+- Scans `xregistry/templates/{language}/{style}/` directories
+- Reads `_templateinfo.json` files for metadata (description, priority)
+- Generates command entries with proper language/style mappings
+- Sorts commands by priority and name
+- Outputs to `xregistry/commands.json`
+
+**When to use:**
+- After adding new template styles
+- After updating template descriptions or priorities
+- To ensure commands.json is in sync with available templates
+
+### `update_vscode_extension.py`
+
+Updates the VS Code extension (`xregistry_vscode`) from `commands.json`.
+
+**Usage:**
+```bash
+# Update only package.json (recommended)
+python tools/update_vscode_extension.py --extension-root ./xregistry_vscode --commands ./xregistry/commands.json
+
+# Also regenerate src/extension.ts
+python tools/update_vscode_extension.py --extension-root ./xregistry_vscode --commands ./xregistry/commands.json --update-extension-ts
+
+# Or use the convenience scripts
+./tools/updatevsce.ps1  # Windows
+./tools/updatevsce.sh   # Linux/Mac
+```
+
+**What it does:**
+- Updates `package.json` with commands, menus, and submenus
+- Sets version from latest git tag
+- Organizes commands by language groups (Python, TypeScript, C#, Java, etc.)
+- Optionally regenerates `src/extension.ts` with command handlers
+
+**When to use:**
+- After updating `commands.json`
+- After running `generate_commands_json.py`
+- Before publishing a new VS Code extension version
+
+## Model Schema Management
+
+This section contains tools for managing and validating the xRegistry model schema files.
 
 ## Files
 

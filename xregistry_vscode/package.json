@@ -1,11 +1,11 @@
 {
   "name": "xregistry-vscode",
   "version": "0.13.0",
-  "displayName": "CloudEvents Registry Tool",
-  "description": "A GUI wrapper for the CloudEvents Registry CLI",
-  "publisher": "cedisco",
+  "displayName": "xRegistry Code Generator",
+  "description": "Generate type-safe messaging/eventing SDKs from xRegistry message catalogs",
+  "publisher": "xregistry-cg",
   "license": "SEE LICENSE IN LICENSE.txt",
-  "icon": "cloudevents-icon-color.png",
+  "icon": "xregistry-icon-color.png",
   "galleryBanner": {
     "color": "#0078d7",
     "theme": "light"
@@ -34,253 +34,263 @@
     "commands": [
       {
         "category": "XRegistry",
-        "command": "xregistry.generate-py-amqpconsumer",
-        "title": "Generate Python AMQP 1.0 Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-py-amqpproducer",
-        "title": "Generate Python AMQP 1.0 Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-py-ehconsumer",
-        "title": "Generate Python Azure Event Hubs Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-py-ehproducer",
-        "title": "Generate Python Azure Event Hubs Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-py-kafkaconsumer",
-        "title": "Generate Python Apache Kafka Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-py-kafkaproducer",
-        "title": "Generate Python Apache Kafka Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-py-mqttclient",
-        "title": "Generate Python MQTT Client"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-py-sbconsumer",
-        "title": "Generate Python Azure Service Bus Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-py-sbproducer",
-        "title": "Generate Python Azure Service Bus Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-amqpconsumer",
-        "title": "Generate TypeScript AMQP 1.0 Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-amqpproducer",
-        "title": "Generate TypeScript AMQP 1.0 Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-egproducer",
-        "title": "Generate TypeScript Azure Event Grid Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-ehproducer",
-        "title": "Generate TypeScript Azure Event Hubs Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-mqttclient",
-        "title": "Generate TypeScript MQTT 5.0 Client"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-producerhttp",
-        "title": "Generate TypeScript HTTP Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-sbconsumer",
-        "title": "Generate TypeScript Azure Service Bus Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-sbproducer",
-        "title": "Generate TypeScript Azure Service Bus Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-dashboard",
-        "title": "Generate TypeScript Dashboard"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-ehconsumer",
-        "title": "Generate TypeScript Azure Event Hubs Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-kafkaconsumer",
-        "title": "Generate TypeScript Apache Kafka Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-ts-kafkaproducer",
-        "title": "Generate TypeScript Apache Kafka Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-java-amqpconsumer",
-        "title": "Generate Java AMQP 1.0 Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-java-amqpjmsproducer",
-        "title": "Generate Java AMQP JMS Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-java-amqpproducer",
-        "title": "Generate Java AMQP 1.0 Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-java-ehconsumer",
-        "title": "Generate Java Azure Event Hubs Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-java-ehproducer",
-        "title": "Generate Java Azure Event Hubs Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-java-kafkaconsumer",
-        "title": "Generate Java Apache Kafka Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-java-kafkaproducer",
-        "title": "Generate Java Apache Kafka Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-java-mqttclient",
-        "title": "Generate Java MQTT 5.0 Client"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-java-sbconsumer",
-        "title": "Generate Java Azure Service Bus Consumer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-java-sbproducer",
-        "title": "Generate Java Azure Service Bus Producer"
-      },
-      {
-        "category": "XRegistry",
         "command": "xregistry.generate-cs-amqpconsumer",
-        "title": "Generate C# AMQP 1.0 Consumer"
+        "title": "C# AMQP 1.0 Consumer"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-cs-amqpproducer",
-        "title": "Generate C# AMQP 1.0 Producer"
+        "title": "C# AMQP 1.0 Producer"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-cs-egproducer",
-        "title": "Generate C# Azure Event Grid Producer"
+        "title": "C# Azure Event Grid Producer"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-cs-ehconsumer",
-        "title": "Generate C# Azure Event Hubs Consumer"
+        "title": "C# Azure Event Hubs Consumer"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-cs-ehproducer",
-        "title": "Generate C# Azure Event Hubs Producer"
+        "title": "C# Azure Event Hubs Producer"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-cs-kafkaconsumer",
-        "title": "Generate C# Apache Kafka Consumer"
+        "title": "C# Apache Kafka Consumer"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-cs-kafkaproducer",
-        "title": "Generate C# Apache Kafka Producer"
+        "title": "C# Apache Kafka Producer"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-cs-mqttclient",
-        "title": "Generate C# MQTT 5.0 Client"
+        "title": "C# MQTT 5.0 Client"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-cs-sbconsumer",
-        "title": "Generate C# Azure Service Bus Consumer"
+        "title": "C# Azure Service Bus Consumer"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-cs-sbproducer",
-        "title": "Generate C# Azure Service Bus Producer"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-cs-egazfn",
-        "title": "Generate C# Azure Event Grid Azure Function"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-cs-ehazfn",
-        "title": "Generate C# Azure Event Hubs Azure Function"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-cs-sbazfn",
-        "title": "Generate C# Azure Service Bus Azure Function"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-asyncapi-consumer",
-        "title": "Generate AsyncAPI Consumer Definition"
-      },
-      {
-        "category": "XRegistry",
-        "command": "xregistry.generate-asyncapi-producer",
-        "title": "Generate AsyncAPI Producer Definition"
+        "title": "C# Azure Service Bus Producer"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-openapi-producer",
-        "title": "Generate OpenAPI Producer Definition"
+        "title": "OpenAPI Producer Definition"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-openapi-subscriber",
-        "title": "Generate OpenAPI Subscriber Definition"
+        "title": "OpenAPI Subscriber Definition"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-py-amqpconsumer",
+        "title": "Python AMQP 1.0 Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-py-amqpproducer",
+        "title": "Python AMQP 1.0 Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-py-ehconsumer",
+        "title": "Python Azure Event Hubs Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-py-ehproducer",
+        "title": "Python Azure Event Hubs Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-py-kafkaconsumer",
+        "title": "Python Apache Kafka Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-py-kafkaproducer",
+        "title": "Python Apache Kafka Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-py-mqttclient",
+        "title": "Python MQTT Client"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-py-sbconsumer",
+        "title": "Python Azure Service Bus Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-py-sbproducer",
+        "title": "Python Azure Service Bus Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-dashboard",
+        "title": "TypeScript Dashboard"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-ehconsumer",
+        "title": "TypeScript Azure Event Hubs Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-kafkaconsumer",
+        "title": "TypeScript Apache Kafka Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-kafkaproducer",
+        "title": "TypeScript Apache Kafka Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-cs-egazfn",
+        "title": "C# Azure Event Grid Azure Function"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-cs-ehazfn",
+        "title": "C# Azure Event Hubs Azure Function"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-cs-sbazfn",
+        "title": "C# Azure Service Bus Azure Function"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-asaql-dispatch",
-        "title": "Generate Azure Stream Analytics Query Dispatch"
+        "title": "Azure Stream Analytics Query Dispatch"
       },
       {
         "category": "XRegistry",
         "command": "xregistry.generate-asaql-dispatchpayload",
-        "title": "Generate Azure Stream Analytics Query Dispatch with Payload"
+        "title": "Azure Stream Analytics Query Dispatch with Payload"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-asyncapi-consumer",
+        "title": "AsyncAPI Consumer Definition"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-asyncapi-producer",
+        "title": "AsyncAPI Producer Definition"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-amqpconsumer",
+        "title": "Java AMQP 1.0 Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-amqpjmsproducer",
+        "title": "Java AMQP JMS Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-amqpproducer",
+        "title": "Java AMQP 1.0 Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-ehconsumer",
+        "title": "Java Azure Event Hubs Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-ehproducer",
+        "title": "Java Azure Event Hubs Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-kafkaconsumer",
+        "title": "Java Apache Kafka Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-kafkaproducer",
+        "title": "Java Apache Kafka Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-mqttclient",
+        "title": "Java MQTT 5.0 Client"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-producer",
+        "title": "JAVA producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-sbconsumer",
+        "title": "Java Azure Service Bus Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-java-sbproducer",
+        "title": "Java Azure Service Bus Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-py-producer",
+        "title": "PY producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-amqpconsumer",
+        "title": "TypeScript AMQP 1.0 Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-amqpproducer",
+        "title": "TypeScript AMQP 1.0 Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-egproducer",
+        "title": "TypeScript Azure Event Grid Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-ehproducer",
+        "title": "TypeScript Azure Event Hubs Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-mqttclient",
+        "title": "TypeScript MQTT 5.0 Client"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-producerhttp",
+        "title": "TypeScript HTTP Producer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-sbconsumer",
+        "title": "TypeScript Azure Service Bus Consumer"
+      },
+      {
+        "category": "XRegistry",
+        "command": "xregistry.generate-ts-sbproducer",
+        "title": "TypeScript Azure Service Bus Producer"
       }
     ],
     "languages": [
@@ -294,92 +304,29 @@
           ".yaml.json"
         ],
         "icon": {
-          "light": "./themes/icons/cloudevents-icon-color.svg",
-          "dark": "./themes/icons/cloudevents-icon-color.svg"
+          "light": "./themes/icons/xregistry-icon-color.svg",
+          "dark": "./themes/icons/xregistry-icon-color.svg"
         }
       }
     ],
     "menus": {
-      "xregistry.asyncapi": [
+      "explorer/context": [
         {
-          "title": "Consumer Definition",
-          "command": "xregistry.generate-asyncapi-consumer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Producer Definition",
-          "command": "xregistry.generate-asyncapi-producer",
-          "when": "resourceExtname == .json"
-        }
-      ],
-      "xregistry.openapi": [
-        {
-          "title": "Producer Definition",
-          "command": "xregistry.generate-openapi-producer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Subscriber Definition",
-          "command": "xregistry.generate-openapi-subscriber",
-          "when": "resourceExtname == .json"
-        }
-      ],
-      "xregistry.py": [
-        {
-          "title": "AMQP 1.0 Consumer",
-          "command": "xregistry.generate-py-amqpconsumer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "AMQP 1.0 Producer",
-          "command": "xregistry.generate-py-amqpproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Apache Kafka Consumer",
-          "command": "xregistry.generate-py-kafkaconsumer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Apache Kafka Producer",
-          "command": "xregistry.generate-py-kafkaproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Event Hubs Consumer",
-          "command": "xregistry.generate-py-ehconsumer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Event Hubs Producer",
-          "command": "xregistry.generate-py-ehproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Service Bus Consumer",
-          "command": "xregistry.generate-py-sbconsumer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Service Bus Producer",
-          "command": "xregistry.generate-py-sbproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "MQTT Client",
-          "command": "xregistry.generate-py-mqttclient",
+          "submenu": "xregistrySubmenu",
+          "group": "8_transformation",
+          "title": "Generate Code",
           "when": "resourceExtname == .json"
         }
       ],
       "xregistrySubmenu": [
         {
-          "submenu": "xregistry.asaql",
-          "title": "Azure Stream Analytics",
+          "submenu": "xregistry.py",
+          "title": "Python",
           "when": "resourceExtname == .json"
         },
         {
-          "submenu": "xregistry.asyncapi",
-          "title": "AsyncAPI",
+          "submenu": "xregistry.ts",
+          "title": "TypeScript",
           "when": "resourceExtname == .json"
         },
         {
@@ -393,219 +340,292 @@
           "when": "resourceExtname == .json"
         },
         {
+          "submenu": "xregistry.asyncapi",
+          "title": "AsyncAPI",
+          "when": "resourceExtname == .json"
+        },
+        {
           "submenu": "xregistry.openapi",
           "title": "OpenAPI",
           "when": "resourceExtname == .json"
         },
         {
-          "submenu": "xregistry.py",
-          "title": "Python",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "submenu": "xregistry.ts",
-          "title": "TypeScript",
+          "submenu": "xregistry.asaql",
+          "title": "Azure Stream Analytics",
           "when": "resourceExtname == .json"
         }
       ],
-      "xregistry.asaql": [
+      "xregistry.py": [
         {
-          "title": "Query Dispatch",
-          "command": "xregistry.generate-asaql-dispatch",
+          "title": "PY producer",
+          "command": "xregistry.generate-py-producer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Query Dispatch with Payload",
-          "command": "xregistry.generate-asaql-dispatchpayload",
-          "when": "resourceExtname == .json"
-        }
-      ],
-      "xregistry.cs": [
-        {
-          "title": "AMQP 1.0 Consumer",
-          "command": "xregistry.generate-cs-amqpconsumer",
+          "title": "Python AMQP 1.0 Consumer",
+          "command": "xregistry.generate-py-amqpconsumer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "AMQP 1.0 Producer",
-          "command": "xregistry.generate-cs-amqpproducer",
+          "title": "Python AMQP 1.0 Producer",
+          "command": "xregistry.generate-py-amqpproducer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Apache Kafka Consumer",
-          "command": "xregistry.generate-cs-kafkaconsumer",
+          "title": "Python Apache Kafka Consumer",
+          "command": "xregistry.generate-py-kafkaconsumer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Apache Kafka Producer",
-          "command": "xregistry.generate-cs-kafkaproducer",
+          "title": "Python Apache Kafka Producer",
+          "command": "xregistry.generate-py-kafkaproducer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Azure Event Grid Azure Function",
-          "command": "xregistry.generate-cs-egazfn",
+          "title": "Python Azure Event Hubs Consumer",
+          "command": "xregistry.generate-py-ehconsumer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Azure Event Grid Producer",
-          "command": "xregistry.generate-cs-egproducer",
+          "title": "Python Azure Event Hubs Producer",
+          "command": "xregistry.generate-py-ehproducer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Azure Event Hubs Azure Function",
-          "command": "xregistry.generate-cs-ehazfn",
+          "title": "Python Azure Service Bus Consumer",
+          "command": "xregistry.generate-py-sbconsumer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Azure Event Hubs Consumer",
-          "command": "xregistry.generate-cs-ehconsumer",
+          "title": "Python Azure Service Bus Producer",
+          "command": "xregistry.generate-py-sbproducer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Azure Event Hubs Producer",
-          "command": "xregistry.generate-cs-ehproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Service Bus Azure Function",
-          "command": "xregistry.generate-cs-sbazfn",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Service Bus Consumer",
-          "command": "xregistry.generate-cs-sbconsumer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Service Bus Producer",
-          "command": "xregistry.generate-cs-sbproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "MQTT 5.0 Client",
-          "command": "xregistry.generate-cs-mqttclient",
-          "when": "resourceExtname == .json"
-        }
-      ],
-      "explorer/context": [
-        {
-          "submenu": "xregistrySubmenu",
-          "group": "8_transformation",
-          "title": "Generate Code",
-          "when": "resourceExtname == .json"
-        }
-      ],
-      "xregistry.java": [
-        {
-          "title": "AMQP 1.0 Consumer",
-          "command": "xregistry.generate-java-amqpconsumer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "AMQP 1.0 Producer",
-          "command": "xregistry.generate-java-amqpproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "AMQP JMS Producer",
-          "command": "xregistry.generate-java-amqpjmsproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Apache Kafka Consumer",
-          "command": "xregistry.generate-java-kafkaconsumer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Apache Kafka Producer",
-          "command": "xregistry.generate-java-kafkaproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Event Hubs Consumer",
-          "command": "xregistry.generate-java-ehconsumer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Event Hubs Producer",
-          "command": "xregistry.generate-java-ehproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Service Bus Consumer",
-          "command": "xregistry.generate-java-sbconsumer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "Azure Service Bus Producer",
-          "command": "xregistry.generate-java-sbproducer",
-          "when": "resourceExtname == .json"
-        },
-        {
-          "title": "MQTT 5.0 Client",
-          "command": "xregistry.generate-java-mqttclient",
+          "title": "Python MQTT Client",
+          "command": "xregistry.generate-py-mqttclient",
           "when": "resourceExtname == .json"
         }
       ],
       "xregistry.ts": [
         {
-          "title": "AMQP 1.0 Consumer",
+          "title": "TypeScript AMQP 1.0 Consumer",
           "command": "xregistry.generate-ts-amqpconsumer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "AMQP 1.0 Producer",
+          "title": "TypeScript AMQP 1.0 Producer",
           "command": "xregistry.generate-ts-amqpproducer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Apache Kafka Consumer",
+          "title": "TypeScript Apache Kafka Consumer",
           "command": "xregistry.generate-ts-kafkaconsumer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Apache Kafka Producer",
+          "title": "TypeScript Apache Kafka Producer",
           "command": "xregistry.generate-ts-kafkaproducer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Azure Event Grid Producer",
+          "title": "TypeScript Azure Event Grid Producer",
           "command": "xregistry.generate-ts-egproducer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Azure Event Hubs Consumer",
+          "title": "TypeScript Azure Event Hubs Consumer",
           "command": "xregistry.generate-ts-ehconsumer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Azure Event Hubs Producer",
+          "title": "TypeScript Azure Event Hubs Producer",
           "command": "xregistry.generate-ts-ehproducer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Azure Service Bus Consumer",
+          "title": "TypeScript Azure Service Bus Consumer",
           "command": "xregistry.generate-ts-sbconsumer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Azure Service Bus Producer",
+          "title": "TypeScript Azure Service Bus Producer",
           "command": "xregistry.generate-ts-sbproducer",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "Dashboard",
+          "title": "TypeScript Dashboard",
           "command": "xregistry.generate-ts-dashboard",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "HTTP Producer",
+          "title": "TypeScript HTTP Producer",
           "command": "xregistry.generate-ts-producerhttp",
           "when": "resourceExtname == .json"
         },
         {
-          "title": "MQTT 5.0 Client",
+          "title": "TypeScript MQTT 5.0 Client",
           "command": "xregistry.generate-ts-mqttclient",
+          "when": "resourceExtname == .json"
+        }
+      ],
+      "xregistry.cs": [
+        {
+          "title": "C# AMQP 1.0 Consumer",
+          "command": "xregistry.generate-cs-amqpconsumer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# AMQP 1.0 Producer",
+          "command": "xregistry.generate-cs-amqpproducer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# Apache Kafka Consumer",
+          "command": "xregistry.generate-cs-kafkaconsumer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# Apache Kafka Producer",
+          "command": "xregistry.generate-cs-kafkaproducer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# Azure Event Grid Azure Function",
+          "command": "xregistry.generate-cs-egazfn",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# Azure Event Grid Producer",
+          "command": "xregistry.generate-cs-egproducer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# Azure Event Hubs Azure Function",
+          "command": "xregistry.generate-cs-ehazfn",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# Azure Event Hubs Consumer",
+          "command": "xregistry.generate-cs-ehconsumer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# Azure Event Hubs Producer",
+          "command": "xregistry.generate-cs-ehproducer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# Azure Service Bus Azure Function",
+          "command": "xregistry.generate-cs-sbazfn",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# Azure Service Bus Consumer",
+          "command": "xregistry.generate-cs-sbconsumer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# Azure Service Bus Producer",
+          "command": "xregistry.generate-cs-sbproducer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "C# MQTT 5.0 Client",
+          "command": "xregistry.generate-cs-mqttclient",
+          "when": "resourceExtname == .json"
+        }
+      ],
+      "xregistry.java": [
+        {
+          "title": "JAVA producer",
+          "command": "xregistry.generate-java-producer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Java AMQP 1.0 Consumer",
+          "command": "xregistry.generate-java-amqpconsumer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Java AMQP 1.0 Producer",
+          "command": "xregistry.generate-java-amqpproducer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Java AMQP JMS Producer",
+          "command": "xregistry.generate-java-amqpjmsproducer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Java Apache Kafka Consumer",
+          "command": "xregistry.generate-java-kafkaconsumer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Java Apache Kafka Producer",
+          "command": "xregistry.generate-java-kafkaproducer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Java Azure Event Hubs Consumer",
+          "command": "xregistry.generate-java-ehconsumer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Java Azure Event Hubs Producer",
+          "command": "xregistry.generate-java-ehproducer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Java Azure Service Bus Consumer",
+          "command": "xregistry.generate-java-sbconsumer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Java Azure Service Bus Producer",
+          "command": "xregistry.generate-java-sbproducer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Java MQTT 5.0 Client",
+          "command": "xregistry.generate-java-mqttclient",
+          "when": "resourceExtname == .json"
+        }
+      ],
+      "xregistry.asyncapi": [
+        {
+          "title": "AsyncAPI Consumer Definition",
+          "command": "xregistry.generate-asyncapi-consumer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "AsyncAPI Producer Definition",
+          "command": "xregistry.generate-asyncapi-producer",
+          "when": "resourceExtname == .json"
+        }
+      ],
+      "xregistry.openapi": [
+        {
+          "title": "OpenAPI Producer Definition",
+          "command": "xregistry.generate-openapi-producer",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "OpenAPI Subscriber Definition",
+          "command": "xregistry.generate-openapi-subscriber",
+          "when": "resourceExtname == .json"
+        }
+      ],
+      "xregistry.asaql": [
+        {
+          "title": "Azure Stream Analytics Query Dispatch",
+          "command": "xregistry.generate-asaql-dispatch",
+          "when": "resourceExtname == .json"
+        },
+        {
+          "title": "Azure Stream Analytics Query Dispatch with Payload",
+          "command": "xregistry.generate-asaql-dispatchpayload",
           "when": "resourceExtname == .json"
         }
       ]
@@ -616,12 +636,12 @@
         "label": "Generate Code"
       },
       {
-        "id": "xregistry.asaql",
-        "label": "Azure Stream Analytics"
+        "id": "xregistry.py",
+        "label": "Python"
       },
       {
-        "id": "xregistry.asyncapi",
-        "label": "AsyncAPI"
+        "id": "xregistry.ts",
+        "label": "TypeScript"
       },
       {
         "id": "xregistry.cs",
@@ -632,28 +652,27 @@
         "label": "Java"
       },
       {
+        "id": "xregistry.asyncapi",
+        "label": "AsyncAPI"
+      },
+      {
         "id": "xregistry.openapi",
         "label": "OpenAPI"
       },
       {
-        "id": "xregistry.py",
-        "label": "Python"
-      },
-      {
-        "id": "xregistry.ts",
-        "label": "TypeScript"
+        "id": "xregistry.asaql",
+        "label": "Azure Stream Analytics"
       }
     ]
   },
   "scripts": {
     "vscode:prepublish": "npm run esbuild-base -- --minify",
-    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
     "esbuild": "npm run esbuild-base -- --sourcemap",
     "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
     "test-compile": "tsc -p ./"
   },
   "dependencies": {
-    "@vscode/webview-ui-toolkit": "^1.4.0",
     "typescript": "5.6.3"
   },
   "devDependencies": {
