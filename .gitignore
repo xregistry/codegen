@@ -1,5 +1,5 @@
 tmp/
-xregistry/_version.py
+xrcg/_version.py
 *.egg-info/
 build/
 **/.vscode/**
