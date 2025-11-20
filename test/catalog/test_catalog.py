@@ -22,7 +22,7 @@ import requests
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
 
-from xregistry.cli import main as cli
+from xrcg.cli import main as cli
 
 # --------------------------------------------------------------------------- #
 # constants / tracing                                                         #

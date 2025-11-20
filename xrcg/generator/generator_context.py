@@ -1,7 +1,7 @@
 """Context for the code generator."""
 
-from xregistry.generator.context_stacks_manager import ContextStacksManager
-from xregistry.generator.xregistry_loader import XRegistryLoader
+from xrcg.generator.context_stacks_manager import ContextStacksManager
+from xrcg.generator.xregistry_loader import XRegistryLoader
 
 
 class GeneratorContext:

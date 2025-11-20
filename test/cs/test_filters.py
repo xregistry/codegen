@@ -18,10 +18,10 @@ import pytest
 # Get the project root directory (two levels up from this file)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-# Add the project root to the Python path so we can import xregistry
+# Add the project root to the Python path so we can import xrcg
 sys.path.insert(0, project_root)
 
-import xregistry
+import xrcg
 
 
 def run_dotnet_test_with_filters(xreg_file: str, output_dir: str, projectname: str, 
@@ -56,8 +56,8 @@ def run_dotnet_test_with_filters(xreg_file: str, output_dir: str, projectname: s
             sys.argv.extend(['--endpoint', endpoint])
         
         print(f"\n=== Running xregistry with args: {sys.argv} ===")
-        result = xregistry.cli()
-        assert result == 0, f"xregistry.cli() returned {result}"
+        result = xrcg.cli()
+        assert result == 0, f"xrcg.cli() returned {result}"
         
         # Find the generated .sln file
         sln_files = []

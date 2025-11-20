@@ -1,6 +1,6 @@
 import platform
 import re
-import xregistry
+import xrcg
 import random
 import string
 import sys
@@ -34,7 +34,7 @@ def test_codegen_cs():
     This does a basic test of the code generation for all the styles in the cs template.    
     """
     input_dir = os.path.join(
-        project_root, 'xregistry/templates/cs'.replace('/', os.path.sep))
+        project_root, 'xrcg/templates/cs'.replace('/', os.path.sep))
     # loop through all dirs in the input directory that have no leading underscore in their name
     for dir_name in os.listdir(input_dir):
         print(f'Processing {dir_name}')
@@ -46,14 +46,14 @@ def test_codegen_cs():
                 tempfile.gettempdir(), f'tmp/test/cs/{dir_name}'.replace('/', os.path.sep))
             if not dir_name.startswith('_') and os.path.isdir(os.path.join(input_dir, dir_name)):
                 # generate the code for each directory
-                sys.argv = ['xregistry', 'generate',
+                sys.argv = ['xrcg', 'generate',
                             '--style', dir_name,
                             '--language', 'cs',
                             '--definitions', os.path.join(
                                 project_root, 'test/xreg/contoso-erp.xreg.json'.replace('/', os.path.sep)),
                             '--output', output_dir,
                             '--projectname', f'Test.{pascal(dir_name)}']
-                assert xregistry.cli() == 0
+                assert xrcg.cli() == 0
                 # run dotnet build on the solution file in the output directory
                 cmd = ['dotnet', 'build'] if platform.system() == "Windows" else 'dotnet build'
                 assert subprocess.check_call(cmd, cwd=output_dir, shell=True) == 0
@@ -66,7 +66,7 @@ def test_codegen_cs():
 
 def test_codegen_py():
     input_dir = os.path.join(
-        project_root, 'xregistry/templates/py'.replace('/', os.path.sep))
+        project_root, 'xrcg/templates/py'.replace('/', os.path.sep))
     # loop through all dirs in the input directory that have no leading underscore in their name
     for dir_name in os.listdir(input_dir):
         if os.path.exists(os.path.join(tempfile.gettempdir(), f'tmp/test/py/{dir_name}/'.replace('/', os.path.sep))):
@@ -76,14 +76,14 @@ def test_codegen_py():
             tempfile.gettempdir(), f'tmp/test/py/{dir_name}'.replace('/', os.path.sep))
         if not dir_name.startswith('_') and os.path.isdir(os.path.join(input_dir, dir_name)):
             # generate the code for each directory
-            sys.argv = ['xregistry', 'generate',
+            sys.argv = ['xrcg', 'generate',
                         '--style', dir_name,
                         '--language', 'py',
                         '--definitions', os.path.join(
                             project_root, 'samples/message-definitions/contoso-erp.xreg.json'.replace('/', os.path.sep)),
                         '--output', output_dir,
                         '--projectname', f'test_build_{dir_name}']
-            assert xregistry.cli() == 0
+            assert xrcg.cli() == 0
 
 
 @pytest.mark.parametrize('template_name', ['amqpconsumer', 'amqpproducer', 'kafkaproducer'])
@@ -104,13 +104,13 @@ def test_codegen_java(template_name):
         shutil.rmtree(output_dir, ignore_errors=True)
     
     # Generate code
-    sys.argv = ['xregistry', 'generate',
+    sys.argv = ['xrcg', 'generate',
                 '--style', template_name,
                 '--language', 'java',
                 '--definitions', os.path.join(project_root, 'test/java/contoso-erp-java.xreg.json'),
                 '--output', output_dir,
                 '--projectname', f'test.{template_name}']
-    assert xregistry.cli() == 0
+    assert xrcg.cli() == 0
     
     # Find generated directories
     subdirs = [d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))]

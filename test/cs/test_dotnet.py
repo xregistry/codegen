@@ -5,7 +5,7 @@ import subprocess
 import sys
 import os
 import tempfile
-import xregistry
+import xrcg
 import pytest
 
 project_root = os.path.abspath(
@@ -33,14 +33,14 @@ def run_dotnet_test(xreg_file: str, output_dir: str, projectname: str, style: st
         None
     """
 
-    sys.argv = ['xregistry', 'generate',
+    sys.argv = ['xrcg', 'generate',
                 '--definitions', xreg_file,
                 '--output', output_dir,
                 '--projectname', projectname,
                 '--style', style,
                 '--language', "cs"]
     print(f"sys.argv: {sys.argv}")
-    assert xregistry.cli() == 0
+    assert xrcg.cli() == 0
     
     # Use shell=True on Windows for .cmd files, direct execution on Linux
     use_shell = platform.system() == 'Windows'

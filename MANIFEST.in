@@ -1,1 +1,1 @@
-recursive-include xregistry/templates *.jinja *.json
+recursive-include xrcg/templates *.jinja *.json

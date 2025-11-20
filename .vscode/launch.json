@@ -36,7 +36,7 @@
     {
       "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
       "name": "Launch Extension",
-      "preLaunchTask": "tsc: build - xregistry_vscode/tsconfig.json",
+      "preLaunchTask": "tsc: build - xrcg_vscode/tsconfig.json",
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
       "request": "launch",
       "type": "extensionHost"

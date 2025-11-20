@@ -14,13 +14,13 @@ from unittest.mock import Mock, patch, mock_open
 import base64
 from typing import Dict, Any
 
-from xregistry.generator.xregistry_loader import (
+from xrcg.generator.xregistry_loader import (
     XRegistryUrlParser, 
     DependencyResolver, 
     ResourceResolver, 
     XRegistryLoader
 )
-from xregistry.common.model import Model
+from xrcg.common.model import Model
 
 
 class TestXRegistryUrlParser(unittest.TestCase):
@@ -169,7 +169,7 @@ class TestDependencyResolver(unittest.TestCase):
         result = self.resolver.resolve_reference("https://example.com/test", {})
         self.assertIsNone(result)
     
-    @patch('xregistry.generator.xregistry_loader.XRegistryUrlParser')
+    @patch('xrcg.generator.xregistry_loader.XRegistryUrlParser')
     def test_build_composed_document_registry_level(self, mock_parser_class):
         """Test building composed document from registry level."""
         mock_parser = Mock()
@@ -329,7 +329,7 @@ class TestXRegistryLoader(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        with patch('xregistry.generator.xregistry_loader.Model'):
+        with patch('xrcg.generator.xregistry_loader.Model'):
             self.loader = XRegistryLoader()
     
     def test_load_basic_functionality(self):
@@ -575,7 +575,7 @@ class TestIntegration(unittest.TestCase):
     
     def test_end_to_end_loading_with_resource_resolution(self):
         """Test end-to-end loading with resource resolution."""
-        with patch('xregistry.generator.xregistry_loader.Model'):
+        with patch('xrcg.generator.xregistry_loader.Model'):
             loader = XRegistryLoader()
             
             # Mock the model to have the expected structure
@@ -613,7 +613,7 @@ class TestDocumentStacking(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         
         # Mock the Model class to return a mock with the expected structure
-        with patch('xregistry.generator.xregistry_loader.Model') as MockModel:
+        with patch('xrcg.generator.xregistry_loader.Model') as MockModel:
             mock_model = Mock()
             mock_model.groups = {
                 "messagegroups": {

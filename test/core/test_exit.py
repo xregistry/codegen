@@ -6,8 +6,8 @@ import pytest
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.append(os.path.join(project_root))
 
-from xregistry.commands.generate_code import *
-from xregistry.generator.jinja_extensions import JinjaExtensions
+from xrcg.commands.generate_code import *
+from xrcg.generator.jinja_extensions import JinjaExtensions
 
 def test_exit():
     """"""

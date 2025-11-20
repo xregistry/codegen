@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-The xRegistry Code Generation CLI (`xregistry` / `xcg`) is a Python-based tool that generates production-ready, type-safe messaging/eventing SDKs from [xRegistry](https://xregistry.io/) message catalog definitions. It's not a simple code snippet generator—it produces complete, compile-ready projects with tests, dependency management, and Docker-based integration tests.
+The xRegistry Code Generation CLI (`xrcg`) is a Python-based tool that generates production-ready, type-safe messaging/eventing SDKs from [xRegistry](https://xregistry.io/) message catalog definitions. It's not a simple code snippet generator—it produces complete, compile-ready projects with tests, dependency management, and Docker-based integration tests.
 
 **Core Architecture:** Template-driven code generation using Jinja2 extensions → Schema conversion via [Avrotize](https://github.com/clemensv/avrotize) → Multi-language SDK output (C#, Java, Python, TypeScript).
 
@@ -10,8 +10,8 @@ The xRegistry Code Generation CLI (`xregistry` / `xcg`) is a Python-based tool t
 
 ### 1. The Two Operating Modes
 
-- **Manifest Mode** (`xcg manifest`): Works with local JSON/YAML files containing xRegistry definitions (offline, Git-friendly)
-- **Catalog Mode** (`xcg catalog`): Interacts with remote xRegistry HTTP APIs (team collaboration, currently supports [xreg-github](https://github.com/duglin/xreg-github/))
+- **Manifest Mode** (`xrcg manifest`): Works with local JSON/YAML files containing xRegistry definitions (offline, Git-friendly)
+- **Catalog Mode** (`xrcg catalog`): Interacts with remote xRegistry HTTP APIs (team collaboration, currently supports [xreg-github](https://github.com/duglin/xreg-github/))
 
 ### 2. xRegistry Document Structure
 
@@ -63,15 +63,15 @@ xregistry/templates/
 
 **Primary commands:**
 ```bash
-xcg generate --projectname MyProject --language cs --style producer --definitions ./my-catalog.json --output ./out
-xcg validate --definitions ./my-catalog.json
-xcg list --templates ./custom-templates      # Enumerate available templates
-xcg config set defaults.language cs           # Persist defaults to platform-specific config
-xcg manifest messagegroup add --manifest ./catalog.json --id orders
-xcg catalog endpoint get --id orders-endpoint # Requires registry.base_url config
+xrcg generate --projectname MyProject --language cs --style producer --definitions ./my-catalog.json --output ./out
+xrcg validate --definitions ./my-catalog.json
+xrcg list --templates ./custom-templates      # Enumerate available templates
+xrcg config set defaults.language cs           # Persist defaults to platform-specific config
+xrcg manifest messagegroup add --manifest ./catalog.json --id orders
+xrcg catalog endpoint get --id orders-endpoint # Requires registry.base_url config
 ```
 
-**Config precedence:** CLI args → `xcg config` values → environment (`XREGISTRY_MODEL_PATH`) → defaults
+**Config precedence:** CLI args → `xrcg config` values → environment (`XREGISTRY_MODEL_PATH`) → defaults
 
 **Config storage:** `%APPDATA%\xregistry\config.json` (Windows) / `~/.config/xregistry/config.json` (Linux/Mac)
 

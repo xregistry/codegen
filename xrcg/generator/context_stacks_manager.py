@@ -1,6 +1,6 @@
 import os
 from typing import Any, Dict, List
-from xregistry.cli import logger
+from xrcg.cli import logger
 
 
 class ContextStacksManager:

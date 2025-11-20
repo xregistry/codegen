@@ -11,7 +11,7 @@ project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.insert(0, project_root)  # Prioritize local xregistry over installed version
 
-import xregistry
+import xrcg
 
 
 # this test invokes the xregistry command line tool to generate a C# proxy and a consumer
@@ -31,14 +31,14 @@ def run_python_test(xreg_file: str, output_dir: str, projectname: str, style: st
         None
     """
 
-    sys.argv = ['xregistry', 'generate',
+    sys.argv = ['xrcg', 'generate',
                 '--definitions', xreg_file,
                 '--output', output_dir,
                 '--projectname', projectname,
                 '--style', style,
                 '--language', "py"]
     print(f"sys.argv: {sys.argv}")
-    assert xregistry.cli() == 0
+    assert xrcg.cli() == 0
     use_shell = platform.system() == 'Windows'
     subprocess.check_call(['make', 'test', '-C', output_dir], cwd=os.path.dirname(__file__), shell=use_shell)
 

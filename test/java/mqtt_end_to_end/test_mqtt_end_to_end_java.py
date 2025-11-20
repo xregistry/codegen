@@ -9,7 +9,7 @@ import time
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'.replace('/', os.path.sep)))
 sys.path.append(os.path.join(project_root))
 
-import xregistry
+import xrcg
 
 # this test invokes the xregistry command line tool to generate a C# proxy and a consumer
 # and then builds the proxy and the consumer and runs a prepared test that integrates both
@@ -26,13 +26,13 @@ def run_test():
         subprocess.check_call(['mvn', '--quiet', 'clean', 'install', local_repo_arg], cwd=local_ce_libs)
 
     # generate the producer
-    sys.argv = ['xregistry', 'generate',  
+    sys.argv = ['xrcg', 'generate',  
                 '--style', 'producer', 
                 '--language', 'java',
                 '--definitions', os.path.join(os.path.dirname(__file__), 'mqtt_end_to_end.xreg.json'),
                 '--output', os.path.join(project_root, 'tmp/test/java/mqtt_end_to_end/producer/'.replace('/', os.path.sep)),
                 '--projectname', 'Contoso.ERP.Producer']
-    assert xregistry.cli() == 0
+    assert xrcg.cli() == 0
     subprocess.check_call(['mvn', '--quiet', 'install', local_repo_arg], cwd=os.path.join(project_root, 'tmp/test/java/mqtt_end_to_end/producer/'.replace('/', os.path.sep)))
     # generate the consumer
     sys.argv = [ 'xregistry', 'generate', 
@@ -41,7 +41,7 @@ def run_test():
                 '--definitions', os.path.join(os.path.dirname(__file__), 'mqtt_end_to_end.xreg.json'),
                 '--output', os.path.join(project_root, 'tmp/test/java/mqtt_end_to_end/consumer/'),
                 '--projectname', 'Contoso.ERP.Consumer']
-    assert xregistry.cli() == 0
+    assert xrcg.cli() == 0
     subprocess.check_call(['mvn', '--quiet', 'clean', 'install',local_repo_arg], cwd=os.path.join(project_root, 'tmp/test/java/mqtt_end_to_end/consumer/'.replace('/', os.path.sep)))
     # run mvn verify on the s here that references the generated files already
     

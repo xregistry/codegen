@@ -6,9 +6,9 @@ import argparse
 import logging
 import sys
 
-from xregistry.commands import catalog
-from xregistry.commands.catalog import CatalogSubcommands, ManifestSubcommands
-from xregistry.commands.config import add_config_subcommands
+from xrcg.commands import catalog
+from xrcg.commands.catalog import CatalogSubcommands, ManifestSubcommands
+from xrcg.commands.config import add_config_subcommands
 
 logging.basicConfig(level=logging.DEBUG if sys.gettrace() is not None else logging.ERROR, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

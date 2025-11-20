@@ -10,7 +10,7 @@ from typing import Any
 from jinja2.parser import Parser
 from jinja2 import nodes
 from jinja2.ext import Extension
-from xregistry.cli import logger
+from xrcg.cli import logger
 
 
 class TemplateError(Exception):

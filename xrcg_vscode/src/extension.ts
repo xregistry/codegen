@@ -7,16 +7,16 @@ const currentVersionMajor = 0;
 const currentVersionMinor = 13;
 const currentVersionPatch = 0;
 
-async function checkXRegistryTool(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel): Promise<boolean> {
+async function checkXrcgTool(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel): Promise<boolean> {
     try {
         const toolAvailable = await execShellCommand('xregistry --help')
             .then(async (output: string) => {
-                outputChannel.appendLine('xregistry CLI found');
+                outputChannel.appendLine('xrcg CLI found');
                 return true;
             })
             .catch(async (error) => {
                 const installOption = await vscode.window.showWarningMessage(
-                    'xregistry CLI is not available. Do you want to install it?', 'Yes', 'No');
+                    'xrcg CLI is not available. Do you want to install it?', 'Yes', 'No');
                 if (installOption === 'Yes') {
                     if (!await isPythonAvailable()) {
                         const downloadOption = await vscode.window.showErrorMessage('Python 3.10 or higher must be installed. Do you want to open the download page?', 'Yes', 'No');
@@ -26,16 +26,16 @@ async function checkXRegistryTool(context: vscode.ExtensionContext, outputChanne
                         return false;
                     }
                     outputChannel.show(true);
-                    outputChannel.appendLine('Installing xregistry CLI...');
+                    outputChannel.appendLine('Installing xrcg CLI...');
                     await execShellCommand('pip install git+https://github.com/xregistry/codegen.git', outputChannel);
-                    vscode.window.showInformationMessage('xregistry CLI has been installed successfully.');
+                    vscode.window.showInformationMessage('xrcg CLI has been installed successfully.');
                     return true;
                 }
                 return false;
             });
         return toolAvailable;
     } catch (error) {
-        vscode.window.showErrorMessage('Error checking xregistry CLI availability: ' + error);
+        vscode.window.showErrorMessage('Error checking xrcg CLI availability: ' + error);
         return false;
     }
 }
@@ -113,9 +113,9 @@ function getSuggestedOutputPath(inputFilePath: string, template: string): string
 
 export function activate(context: vscode.ExtensionContext) {
     const disposables: vscode.Disposable[] = [];
-    const outputChannel = vscode.window.createOutputChannel('xregistry');
+    const outputChannel = vscode.window.createOutputChannel('xrcg');
 
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-py-amqpconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-py-amqpconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -148,13 +148,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language py --style amqpconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language py --style amqpconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-py-amqpproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-py-amqpproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -187,13 +187,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language py --style amqpproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language py --style amqpproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-py-ehconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-py-ehconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -226,13 +226,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language py --style ehconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language py --style ehconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-py-ehproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-py-ehproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -265,13 +265,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language py --style ehproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language py --style ehproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-py-kafkaconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-py-kafkaconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -304,13 +304,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language py --style kafkaconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language py --style kafkaconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-py-kafkaproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-py-kafkaproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -343,13 +343,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language py --style kafkaproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language py --style kafkaproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-py-mqttclient', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-py-mqttclient', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -382,13 +382,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language py --style mqttclient --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language py --style mqttclient --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-py-sbconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-py-sbconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -421,13 +421,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language py --style sbconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language py --style sbconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-py-sbproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-py-sbproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -460,13 +460,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language py --style sbproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language py --style sbproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-amqpconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-amqpconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -499,13 +499,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style amqpconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style amqpconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-amqpproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-amqpproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -538,13 +538,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style amqpproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style amqpproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-egproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-egproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -577,13 +577,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style egproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style egproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-ehproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-ehproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -616,13 +616,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style ehproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style ehproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-mqttclient', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-mqttclient', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -655,13 +655,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style mqttclient --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style mqttclient --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-producerhttp', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-producerhttp', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -694,13 +694,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style producerhttp --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style producerhttp --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-sbconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-sbconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -733,13 +733,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style sbconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style sbconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-sbproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-sbproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -772,13 +772,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style sbproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style sbproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-dashboard', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-dashboard', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -811,13 +811,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style dashboard --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style dashboard --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-ehconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-ehconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -850,13 +850,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style ehconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style ehconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-kafkaconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-kafkaconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -889,13 +889,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style kafkaconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style kafkaconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-ts-kafkaproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-kafkaproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -928,13 +928,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language ts --style kafkaproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language ts --style kafkaproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-java-amqpconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-java-amqpconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -967,13 +967,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language java --style amqpconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language java --style amqpconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-java-amqpjmsproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-java-amqpjmsproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1006,13 +1006,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language java --style amqpjmsproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language java --style amqpjmsproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-java-amqpproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-java-amqpproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1045,13 +1045,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language java --style amqpproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language java --style amqpproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-java-ehconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-java-ehconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1084,13 +1084,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language java --style ehconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language java --style ehconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-java-ehproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-java-ehproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1123,13 +1123,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language java --style ehproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language java --style ehproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-java-kafkaconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-java-kafkaconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1162,13 +1162,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language java --style kafkaconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language java --style kafkaconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-java-kafkaproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-java-kafkaproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1201,13 +1201,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language java --style kafkaproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language java --style kafkaproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-java-mqttclient', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-java-mqttclient', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1240,13 +1240,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language java --style mqttclient --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language java --style mqttclient --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-java-sbconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-java-sbconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1279,13 +1279,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language java --style sbconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language java --style sbconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-java-sbproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-java-sbproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1318,13 +1318,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language java --style sbproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language java --style sbproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-amqpconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-amqpconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1357,13 +1357,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style amqpconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style amqpconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-amqpproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-amqpproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1396,13 +1396,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style amqpproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style amqpproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-egproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-egproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1435,13 +1435,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style egproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style egproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-ehconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-ehconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1474,13 +1474,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style ehconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style ehconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-ehproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-ehproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1513,13 +1513,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style ehproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style ehproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-kafkaconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-kafkaconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1552,13 +1552,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style kafkaconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style kafkaconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-kafkaproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-kafkaproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1591,13 +1591,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style kafkaproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style kafkaproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-mqttclient', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-mqttclient', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1630,13 +1630,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style mqttclient --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style mqttclient --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-sbconsumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-sbconsumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1669,13 +1669,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style sbconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style sbconsumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-sbproducer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-sbproducer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1708,13 +1708,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style sbproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style sbproducer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-egazfn', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-egazfn', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1747,13 +1747,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style egazfn --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style egazfn --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-ehazfn', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-ehazfn', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1786,13 +1786,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style ehazfn --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style ehazfn --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-cs-sbazfn', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-sbazfn', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1825,13 +1825,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language cs --style sbazfn --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language cs --style sbazfn --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-asyncapi-consumer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-asyncapi-consumer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1864,13 +1864,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language asyncapi --style consumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language asyncapi --style consumer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-asyncapi-producer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-asyncapi-producer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1903,13 +1903,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language asyncapi --style producer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language asyncapi --style producer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-openapi-producer', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-openapi-producer', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1942,13 +1942,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language openapi --style producer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language openapi --style producer --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-openapi-subscriber', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-openapi-subscriber', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -1981,13 +1981,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language openapi --style subscriber --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language openapi --style subscriber --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-asaql-dispatch', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-asaql-dispatch', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -2020,13 +2020,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language asaql --style dispatch --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language asaql --style dispatch --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
-    disposables.push(vscode.commands.registerCommand('xregistry.generate-asaql-dispatchpayload', async (uri: vscode.Uri) => {
+    disposables.push(vscode.commands.registerCommand('xrcg.generate-asaql-dispatchpayload', async (uri: vscode.Uri) => {
         const filePath = uri.fsPath;
         
         // Only process .xreg.json files
@@ -2059,10 +2059,10 @@ export function activate(context: vscode.ExtensionContext) {
         if (!outputPath || outputPath.length === 0) { return; }
         
         // Check if xregistry tool is available
-        if (!await checkXRegistryTool(context, outputChannel)) { return; }
+        if (!await checkXrcgTool(context, outputChannel)) { return; }
         
         const outputDir = outputPath[0].fsPath;
-                const command = `xregistry generate --language asaql --style dispatchpayload --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
+                const command = `xrcg generate --language asaql --style dispatchpayload --definitions "${filePath}" --output "${outputDir}" --projectname "${projectName}"`; 
         executeCommand(command, outputPath[0], outputChannel);
     }));
     context.subscriptions.push(...disposables);
