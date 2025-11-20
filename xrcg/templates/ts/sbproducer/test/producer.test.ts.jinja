@@ -25,12 +25,7 @@ const QUEUE_NAME = 'myqueue';
 // Increased timeout for container startup and tests
 jest.setTimeout(300000);
 
-{%- for messagegroupid, messagegroup in messagegroups.items() %}
-{%- set pascal_group_name = messagegroupid | pascal %}
-{%- set class_name = (pascal_group_name | strip_namespace) + "Producer" %}
-{%- set test_class_name = (project_name | strip_dots | pascal) + (pascal_group_name | strip_dots) + "Tests" %}
-
-describe('{{ test_class_name }}', () => {
+describe('{{ project_name | strip_dots | pascal }} Service Bus Producer Tests', () => {
     let sqlEdgeContainer: StartedTestContainer;
     let serviceBusEmulatorContainer: StartedTestContainer;
     let network: Network;
@@ -142,61 +137,68 @@ describe('{{ test_class_name }}', () => {
         console.log('Test environment cleaned up');
     }, 120000);
     
-    {%- set message_list = messagegroup.messages.items() | list %}
-    {%- for messageid, message in message_list %}
-    {%- set messagename = messageid | strip_namespace | pascal %}
-    {%- set message_snake = messageid | snake %}
-    {%- set body_type = util.body_type(data_project_name, root, message) %}
+{%- for messagegroupid, messagegroup in messagegroups.items() %}
+{%- set pascal_group_name = messagegroupid | pascal %}
+{%- set class_name = (pascal_group_name | strip_namespace) + "Producer" %}
+{%- set test_group_name = (pascal_group_name | strip_dots) %}
     
-    test('should send {{ messagename }} message to Service Bus emulator', async () => {
-        console.log('Testing {{ messagename }} message...');
+    describe('{{ test_group_name }} Message Group', () => {
+{%- set message_list = messagegroup.messages.items() | list %}
+{%- for messageid, message in message_list %}
+{%- set messagename = messageid | strip_namespace | pascal %}
+{%- set message_snake = messageid | snake %}
+{%- set body_type = util.body_type(data_project_name, root, message) %}
         
-        const serviceBusClient = new ServiceBusClient(serviceBusConnectionString);
-        const producer = new {{ class_name }}(serviceBusClient, QUEUE_NAME);
-        
-        try {
-            // Create test data
-            const testData = {} as {{ body_type }};
+        test('should send {{ messagename }} message', async () => {
+            console.log('Testing {{ messagename }} message...');
             
-            // Send 5 messages to test proper message handling
-            for (let i = 0; i < 5; i++) {
-                await producer.send{{ messagename }}(testData);
-            }
-            
-            console.log('{{ messagename }}: 5 messages sent successfully');
-            
-            // Verify messages were received
-            const receiver = serviceBusClient.createReceiver(QUEUE_NAME);
+            const serviceBusClient = new ServiceBusClient(serviceBusConnectionString);
+            const producer = new {{ class_name }}(serviceBusClient, QUEUE_NAME);
             
             try {
-                const messages = await receiver.receiveMessages(5, { maxWaitTimeInMs: 10000 });
+                // Create test data
+                const testData = {} as {{ body_type }};
                 
-                expect(messages.length).toBe(5);
-                console.log(`{{ messagename }}: Received ${messages.length} messages`);
-                
-                // Complete all received messages
-                for (const msg of messages) {
-                    {%- if uses_cloudevents_message %}
-                    // Verify CloudEvents properties
-                    const appProps = msg.applicationProperties || {};
-                    const hasCloudEventsType = 'cloudEvents:type' in appProps || 
-                                              'cloudEvents_type' in appProps ||
-                                              'ce_type' in appProps;
-                    expect(hasCloudEventsType).toBe(true);
-                    {%- endif %}
-                    
-                    await receiver.completeMessage(msg);
+                // Send 5 messages to test proper message handling
+                for (let i = 0; i < 5; i++) {
+                    await producer.send{{ messagename }}(testData);
                 }
                 
-                console.log('{{ messagename }}: All messages completed');
+                console.log('{{ messagename }}: 5 messages sent successfully');
+                
+                // Verify messages were received
+                const receiver = serviceBusClient.createReceiver(QUEUE_NAME);
+                
+                try {
+                    const messages = await receiver.receiveMessages(5, { maxWaitTimeInMs: 10000 });
+                    
+                    expect(messages.length).toBe(5);
+                    console.log(`{{ messagename }}: Received ${messages.length} messages`);
+                    
+                    // Complete all received messages
+                    for (const msg of messages) {
+                        {%- if uses_cloudevents_message %}
+                        // Verify CloudEvents properties
+                        const appProps = msg.applicationProperties || {};
+                        const hasCloudEventsType = 'cloudEvents:type' in appProps || 
+                                                  'cloudEvents_type' in appProps ||
+                                                  'ce_type' in appProps;
+                        expect(hasCloudEventsType).toBe(true);
+                        {%- endif %}
+                        
+                        await receiver.completeMessage(msg);
+                    }
+                    
+                    console.log('{{ messagename }}: All messages completed');
+                } finally {
+                    await receiver.close();
+                }
             } finally {
-                await receiver.close();
+                await producer.close();
+                await serviceBusClient.close();
             }
-        } finally {
-            await producer.close();
-            await serviceBusClient.close();
-        }
-    }, 60000);
-    {%- endfor %}
-});
+        }, 60000);
 {%- endfor %}
+    });
+{%- endfor %}
+});
