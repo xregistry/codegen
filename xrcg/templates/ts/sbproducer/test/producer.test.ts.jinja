@@ -76,7 +76,6 @@ describe('{{ project_name | strip_dots | pascal }} Service Bus Producer Tests', 
                 'ACCEPT_EULA': 'Y',
                 'MSSQL_SA_PASSWORD': 'StrongPassword!1'
             })
-            .withExposedPorts(1433)
             .withStartupTimeout(120000)
             .start();
         
@@ -95,13 +94,12 @@ describe('{{ project_name | strip_dots | pascal }} Service Bus Producer Tests', 
                 target: '/ServiceBus_Emulator/ConfigFiles/Config.json',
                 mode: 'ro'
             }])
-            .withExposedPorts(5672)
             .withEnvironment({
                 'SQL_SERVER': 'sqledge',
                 'MSSQL_SA_PASSWORD': 'StrongPassword!1',
                 'ACCEPT_EULA': 'Y'
             })
-            .withStartupTimeout(180000)
+            .withStartupTimeout(240000)  // Increased to 4 minutes
             .start();
         
         console.log('Service Bus emulator container started');
