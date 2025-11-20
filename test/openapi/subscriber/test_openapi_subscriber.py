@@ -9,7 +9,7 @@ import shutil
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
 sys.path.append(os.path.join(project_root))
 
-import xregistry
+import xrcg
 
 # this test invokes the xregistry command line tool to generate a C# proxy and a consumer
 # and then builds the proxy and the consumer and runs a prepared test that integrates both
@@ -20,13 +20,13 @@ def test_openapi_subscriber():
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     # generate the subscriber
-    sys.argv = ['xregistry', 'generate',
+    sys.argv = ['xrcg', 'generate',
                 '--style', 'subscriber', 
                 '--language', 'openapi',
                 '--definitions', os.path.join(os.path.dirname(__file__), 'openapi_subscriber.xreg.json'),
                 '--output', output_dir,
                 '--projectname', 'ContosoErpSubscriber']
-    assert xregistry.cli() == 0
+    assert xrcg.cli() == 0
     # Verify the output file was generated
     output_file = os.path.join(output_dir, "ContosoErpSubscriber/ContosoErpSubscriber.yml").replace('/', os.path.sep)
     assert os.path.exists(output_file), f"Expected output file not found: {output_file}"

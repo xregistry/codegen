@@ -5,7 +5,7 @@ import subprocess
 import sys
 import os
 import tempfile
-import xregistry
+import xrcg
 import pytest
 
 project_root = os.path.abspath(
@@ -29,14 +29,14 @@ def run_typescript_test(xreg_file: str, output_dir: str, projectname: str, style
         None
     """
 
-    sys.argv = ['xregistry', 'generate',
+    sys.argv = ['xrcg', 'generate',
                 '--definitions', xreg_file,
                 '--output', output_dir,
                 '--projectname', projectname,
                 '--style', style,
                 '--language', "ts"]
     print(f"sys.argv: {sys.argv}")
-    assert xregistry.cli() == 0
+    assert xrcg.cli() == 0
     
     # The generated TypeScript project is in a subdirectory based on the style
     # Map style to directory name (e.g., kafkaproducer -> TestProjectKafkaProducer)

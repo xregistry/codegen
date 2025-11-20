@@ -8,8 +8,8 @@ Provides hierarchical configuration with the following priority order:
 4. Built-in defaults (lowest priority)
 
 Configuration file location:
-- Linux/macOS: ~/.config/xregistry/config.json
-- Windows: %APPDATA%/xregistry/config.json
+- Linux/macOS: ~/.config/xrcg/config.json
+- Windows: %APPDATA%/xrcg/config.json
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ class ConfigManager:
     """Manages configuration loading, saving, and hierarchical resolution."""
     
     def __init__(self) -> None:
-        self._config_dir = Path(platformdirs.user_config_dir("xregistry", "xregistry"))
+        self._config_dir = Path(platformdirs.user_config_dir("xrcg", "xrcg"))
         self._config_file = self._config_dir / "config.json"
         self._config: Optional[XRegistryConfig] = None
     

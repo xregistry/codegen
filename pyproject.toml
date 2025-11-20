@@ -3,7 +3,7 @@ build-backend = "flit_scm:buildapi"
 requires = ["flit_core>=3.2", "flit_scm", "wheel"]
 
 [project]
-name = "xregistry"
+name = "xrcg"
 dynamic = ["version"]
 authors = [
     { name = "Clemens Vasters", email = "clemensv@microsoft.com"}
@@ -38,11 +38,11 @@ dev = [
 ]
 
 [project.scripts]
-xregistry = "xregistry.cli:main"
-xcg = "xregistry.cli:main"
+xregistry = "xrcg.cli:main"
+xrcg = "xrcg.cli:main"
 
 [tool.setuptools_scm]
-write_to = "xregistry/_version.py"
+write_to = "xrcg/_version.py"
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"

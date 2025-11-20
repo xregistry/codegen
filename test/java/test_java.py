@@ -15,10 +15,10 @@ import pytest
 # Get the project root directory (two levels up from this file)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-# Add the project root to the Python path so we can import xregistry
+# Add the project root to the Python path so we can import xrcg
 sys.path.insert(0, project_root)
 
-import xregistry
+import xrcg
 
 # Environment variable check for CI/CD
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
@@ -45,7 +45,7 @@ def run_java_test(xreg_file: str, output_dir: str, projectname: str, style: str)
             '--style', style,
             '--language', 'java'
         ]
-        xregistry.cli()
+        xrcg.cli()
         
         # The code is generated in a subdirectory with the project name
         project_dir = os.path.join(output_dir, projectname)

@@ -2,12 +2,12 @@ import os
 import sys
 import pytest
 
-from xregistry.generator.jinja_filters import JinjaFilters
+from xrcg.generator.jinja_filters import JinjaFilters
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.append(os.path.join(project_root))
 
-from xregistry.commands.generate_code import *
+from xrcg.commands.generate_code import *
 
 def test_pascal():
     jf = JinjaFilters()

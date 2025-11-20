@@ -137,7 +137,7 @@ When you push a version tag (e.g., `v1.2.3`):
 2. Sign in with the same Microsoft account
 3. If you don't have a publisher:
    - Click **"Create publisher"**
-   - Use publisher ID: `xregistry-cg` (must match `package.json`)
+   - Use publisher ID: `xrcg-cg` (must match `package.json`)
 4. Verify publisher exists and is active
 
 #### Step 4: Add Token to GitHub
@@ -177,7 +177,7 @@ When you push a version tag (e.g., `v1.2.3`):
 - [ ] **Set up VS Code Marketplace publishing**
   - [ ] Create Azure DevOps account at https://dev.azure.com
   - [ ] Generate PAT with "Marketplace (Manage)" scope
-  - [ ] Verify publisher ID matches package.json: `xregistry-cg`
+  - [ ] Verify publisher ID matches package.json: `xrcg-cg`
   - [ ] Add `VSCE_PAT` secret to GitHub repository
   - [ ] Verify secret name is correct (case-sensitive)
 

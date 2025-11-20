@@ -5,7 +5,7 @@ on:
     branches: ["main"]
     tags: ["v*.*.*"]
     paths:
-      - "xregistry/**"
+      - "xrcg/**"
       - "Dockerfile"
       - "pyproject.toml"
       - "README.md"
@@ -14,7 +14,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/xregistry-cg
+  IMAGE_NAME: ${{ github.repository }}/xrcg
 
 jobs:
   build:

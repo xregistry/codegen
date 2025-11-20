@@ -3,8 +3,8 @@
 import re
 from typing import Any, Dict, List, Optional, Union
 
-from xregistry.cli import logger
-from xregistry.generator.jinja_filters import JinjaFilters
+from xrcg.cli import logger
+from xrcg.generator.jinja_filters import JinjaFilters
 
 JsonNode = Union[Dict[str, 'JsonNode'], List['JsonNode'], str, bool, int, float, None]
 

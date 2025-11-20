@@ -3,7 +3,7 @@
 from typing import Optional
 import urllib.parse
 
-from xregistry.cli import logger
+from xrcg.cli import logger
 
 
 class URLUtils:

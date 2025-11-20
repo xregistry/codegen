@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from xregistry.generator.xregistry_loader import XRegistryLoader
+from xrcg.generator.xregistry_loader import XRegistryLoader
 
 
 class TestBasemessageResolution(unittest.TestCase):
@@ -67,7 +67,7 @@ class TestBasemessageResolution(unittest.TestCase):
             json.dump(doc, f)
         
         # Load with mocked Model
-        with patch('xregistry.generator.xregistry_loader.Model') as MockModel:
+        with patch('xrcg.generator.xregistry_loader.Model') as MockModel:
             mock_model = Mock()
             mock_model.groups = {
                 "messagegroups": {
@@ -153,7 +153,7 @@ class TestBasemessageResolution(unittest.TestCase):
         with open(test_file, 'w') as f:
             json.dump(doc, f)
         
-        with patch('xregistry.generator.xregistry_loader.Model') as MockModel:
+        with patch('xrcg.generator.xregistry_loader.Model') as MockModel:
             mock_model = Mock()
             mock_model.groups = {
                 "messagegroups": {
@@ -209,7 +209,7 @@ class TestBasemessageResolution(unittest.TestCase):
         with open(test_file, 'w') as f:
             json.dump(doc, f)
         
-        with patch('xregistry.generator.xregistry_loader.Model') as MockModel:
+        with patch('xrcg.generator.xregistry_loader.Model') as MockModel:
             mock_model = Mock()
             mock_model.groups = {
                 "messagegroups": {
@@ -255,7 +255,7 @@ class TestBasemessageResolution(unittest.TestCase):
         with open(test_file, 'w') as f:
             json.dump(doc, f)
         
-        with patch('xregistry.generator.xregistry_loader.Model') as MockModel:
+        with patch('xrcg.generator.xregistry_loader.Model') as MockModel:
             mock_model = Mock()
             mock_model.groups = {
                 "messagegroups": {
@@ -325,7 +325,7 @@ class TestBasemessageResolution(unittest.TestCase):
         with open(test_file, 'w') as f:
             json.dump(doc, f)
         
-        with patch('xregistry.generator.xregistry_loader.Model') as MockModel:
+        with patch('xrcg.generator.xregistry_loader.Model') as MockModel:
             mock_model = Mock()
             mock_model.groups = {
                 "messagegroups": {
@@ -407,7 +407,7 @@ class TestBasemessageResolution(unittest.TestCase):
         with open(test_file, 'w') as f:
             json.dump(doc, f)
         
-        with patch('xregistry.generator.xregistry_loader.Model') as MockModel:
+        with patch('xrcg.generator.xregistry_loader.Model') as MockModel:
             mock_model = Mock()
             mock_model.groups = {
                 "messagegroups": {
@@ -485,7 +485,7 @@ class TestBasemessageResolution(unittest.TestCase):
         with open(test_file, 'w') as f:
             json.dump(doc, f)
         
-        with patch('xregistry.generator.xregistry_loader.Model') as MockModel:
+        with patch('xrcg.generator.xregistry_loader.Model') as MockModel:
             mock_model = Mock()
             mock_model.groups = {
                 "messagegroups": {
@@ -573,7 +573,7 @@ class TestBasemessageResolution(unittest.TestCase):
         with open(test_file, 'w') as f:
             json.dump(doc, f)
         
-        with patch('xregistry.generator.xregistry_loader.Model') as MockModel:
+        with patch('xrcg.generator.xregistry_loader.Model') as MockModel:
             mock_model = Mock()
             mock_model.groups = {
                 "messagegroups": {

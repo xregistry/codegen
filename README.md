@@ -107,7 +107,7 @@ The easiest way to use the tool is via the pre-built Docker image. No Python ins
 **Pull the image:**
 
 ```bash
-docker pull ghcr.io/xregistry/codegen/xregistry-cg:latest
+docker pull ghcr.io/xregistry/codegen/xrcg:latest
 ```
 
 **Usage with folder mapping:**
@@ -121,16 +121,16 @@ The container uses `/work` as its working directory, which you should map to you
 
 ```bash
 # Validate a definition file
-docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xregistry-cg:latest \
+docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xrcg:latest \
   validate --definitions ./my-catalog.json
 
 # Generate code
-docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xregistry-cg:latest \
+docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xrcg:latest \
   generate --projectname MyProject --language cs --style amqpproducer \
   --definitions ./my-catalog.json --output ./generated
 
 # List available templates
-docker run --rm ghcr.io/xregistry/codegen/xregistry-cg:latest list
+docker run --rm ghcr.io/xregistry/codegen/xrcg:latest list
 ```
 
 </details>
@@ -140,16 +140,16 @@ docker run --rm ghcr.io/xregistry/codegen/xregistry-cg:latest list
 
 ```powershell
 # Validate a definition file
-docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xregistry-cg:latest `
+docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xrcg:latest `
   validate --definitions ./my-catalog.json
 
 # Generate code
-docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xregistry-cg:latest `
+docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xrcg:latest `
   generate --projectname MyProject --language cs --style amqpproducer `
   --definitions ./my-catalog.json --output ./generated
 
 # List available templates
-docker run --rm ghcr.io/xregistry/codegen/xregistry-cg:latest list
+docker run --rm ghcr.io/xregistry/codegen/xrcg:latest list
 ```
 
 </details>
@@ -159,16 +159,16 @@ docker run --rm ghcr.io/xregistry/codegen/xregistry-cg:latest list
 
 ```cmd
 REM Validate a definition file
-docker run --rm -v %cd%:/work ghcr.io/xregistry/codegen/xregistry-cg:latest ^
+docker run --rm -v %cd%:/work ghcr.io/xregistry/codegen/xrcg:latest ^
   validate --definitions ./my-catalog.json
 
 REM Generate code
-docker run --rm -v %cd%:/work ghcr.io/xregistry/codegen/xregistry-cg:latest ^
+docker run --rm -v %cd%:/work ghcr.io/xregistry/codegen/xrcg:latest ^
   generate --projectname MyProject --language cs --style amqpproducer ^
   --definitions ./my-catalog.json --output ./generated
 
 REM List available templates
-docker run --rm ghcr.io/xregistry/codegen/xregistry-cg:latest list
+docker run --rm ghcr.io/xregistry/codegen/xrcg:latest list
 ```
 
 </details>
@@ -179,17 +179,17 @@ For easier use, create an alias in your shell:
 
 ```bash
 # Linux / macOS (.bashrc or .zshrc)
-alias xcg='docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xregistry-cg:latest'
+alias xrcg='docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xrcg:latest'
 
 # Windows (PowerShell profile)
-function xcg { docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xregistry-cg:latest $args }
+function xrcg { docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xrcg:latest $args }
 ```
 
 Then use it like a native command:
 
 ```bash
-xcg validate --definitions ./my-catalog.json
-xcg generate --projectname MyProject --language py --style kafkaproducer --definitions ./my-catalog.json --output ./out
+xrcg validate --definitions ./my-catalog.json
+xrcg generate --projectname MyProject --language py --style kafkaproducer --definitions ./my-catalog.json --output ./out
 ```
 
 ### Option 2: Python Package
@@ -200,25 +200,22 @@ The tool requires Python 3.10 or later. Install directly from GitHub:
 pip install git+https://github.com/xregistry/codegen.git
 ```
 
-This installs the `xregistry` package with two command-line aliases:
+This installs the `xrcg` package with a command-line tool:
 
-- `xregistry` - Full command name
-- `xcg` - Short alias for convenience
-
-Both commands are functionally identical. Use whichever you prefer.
+- `xrcg` - Command-line tool
 
 For local development and testing, see [Development Environment](docs/development_environment.md).
 
 ## Usage
 
-The tool is invoked as `xcg` (or `xregistry`) and supports the following subcommands:
+The tool is invoked as `xrcg` and supports the following subcommands:
 
-- `xcg generate`: Generate code from xRegistry definitions
-- `xcg validate`: Validate xRegistry definition files
-- `xcg list`: List available code generation templates
-- `xcg config`: Manage tool configuration (defaults, registry URLs, auth)
-- `xcg manifest`: Work with local xRegistry files (offline mode)
-- `xcg catalog`: Interact with remote xRegistry services (online mode)
+- `xrcg generate`: Generate code from xRegistry definitions
+- `xrcg validate`: Validate xRegistry definition files
+- `xrcg list`: List available code generation templates
+- `xrcg config`: Manage tool configuration (defaults, registry URLs, auth)
+- `xrcg manifest`: Work with local xRegistry files (offline mode)
+- `xrcg catalog`: Interact with remote xRegistry services (online mode)
 
 ### Working with xRegistry Data: Manifest vs Catalog
 
@@ -226,14 +223,14 @@ xRegistry CLI supports two modes for managing registry data:
 
 #### Manifest Mode (Local Files)
 
-Use `xcg manifest` commands to work with **local JSON files** containing xRegistry definitions:
+Use `xrcg manifest` commands to work with **local JSON files** containing xRegistry definitions:
 
 ```bash
 # Create/update local manifest file
-xcg manifest messagegroup add --manifest=./my-registry.json --id=orders ...
+xrcg manifest messagegroup add --manifest=./my-registry.json --id=orders ...
 
 # Add messages to the local file
-xcg manifest message add --manifest=./my-registry.json --messagegroupid=orders ...
+xrcg manifest message add --manifest=./my-registry.json --messagegroupid=orders ...
 ```
 
 **When to use manifest mode:**
@@ -245,16 +242,16 @@ xcg manifest message add --manifest=./my-registry.json --messagegroupid=orders .
 
 #### Catalog Mode (Remote Service)
 
-Use `xcg catalog` commands to interact with a **remote xRegistry HTTP API**:
+Use `xrcg catalog` commands to interact with a **remote xRegistry HTTP API**:
 
 ```bash
 # Set up registry connection
-xcg config set registry.base_url https://registry.example.com
-xcg config set registry.auth_token <token>
+xrcg config set registry.base_url https://registry.example.com
+xrcg config set registry.auth_token <token>
 
 # Work with remote registry
-xcg catalog messagegroup add --id=orders ...
-xcg catalog message add --messagegroupid=orders ...
+xrcg catalog messagegroup add --id=orders ...
+xrcg catalog message add --messagegroupid=orders ...
 ```
 
 **When to use catalog mode:**
@@ -266,7 +263,7 @@ xcg catalog message add --messagegroupid=orders ...
 
 **Note:** Currently supports [xreg-github](https://github.com/duglin/xreg-github/) registry implementation.
 
-Run `xcg manifest --help` or `xcg catalog --help` to see all available operations (add, get, update, delete, list) for endpoints, message groups, messages, and schemas.
+Run `xrcg manifest --help` or `xrcg catalog --help` to see all available operations (add, get, update, delete, list) for endpoints, message groups, messages, and schemas.
 
 ### Config Command
 
@@ -274,39 +271,39 @@ Manage persistent configuration to avoid repeating common arguments:
 
 ```bash
 # View all configuration
-xcg config list
+xrcg config list
 
 # Set default values
-xcg config set defaults.project_name MyProject
-xcg config set defaults.language cs
-xcg config set defaults.style producer
-xcg config set defaults.output_dir ./generated
+xrcg config set defaults.project_name MyProject
+xrcg config set defaults.language cs
+xrcg config set defaults.style producer
+xrcg config set defaults.output_dir ./generated
 
 # Set registry connection
-xcg config set registry.base_url https://registry.example.com
-xcg config set registry.auth_token <your-token>
+xrcg config set registry.base_url https://registry.example.com
+xrcg config set registry.auth_token <your-token>
 
 # Set custom model URL
-xcg config set model.url https://example.com/custom-model.json
+xrcg config set model.url https://example.com/custom-model.json
 
 # Get specific value
-xcg config get defaults.language
+xrcg config get defaults.language
 
 # Clear a value
-xcg config unset defaults.language
+xrcg config unset defaults.language
 
 # Reset all to defaults
-xcg config reset
+xrcg config reset
 
 # Export as JSON
-xcg config list --format json
+xrcg config list --format json
 ```
 
 Configuration is stored in a platform-specific location:
 
-- **Windows:** `%APPDATA%\xregistry\config.json`
-- **macOS:** `~/Library/Application Support/xregistry/config.json`
-- **Linux:** `~/.config/xregistry/config.json`
+- **Windows:** `%APPDATA%\xrcg\config.json`
+- **macOS:** `~/Library/Application Support/xrcg/config.json`
+- **Linux:** `~/.config/xrcg/config.json`
 
 **Available configuration keys:**
 
@@ -415,7 +412,7 @@ There is a test suite that validates all templates.
 The tool can generate OpenAPI definitions for producer endpoints with:
 
 ```shell
-xcg generate --language=openapi --style=producer --projectname=MyProjectProducer --definitions=definitions.json --output=MyProjectProducer
+xrcg generate --language=openapi --style=producer --projectname=MyProjectProducer --definitions=definitions.json --output=MyProjectProducer
 ```
 
 This will yield a `MyProjectProducer/MyProjectProducer.yml' file that can be used to generate a
@@ -424,7 +421,7 @@ producer client for the given endpoint.
 Similarly, the tool can generate OpenAPI definitions for subscriber endpoints with:
 
 ```shell
-xcg generate --language=openapi --style=subscriber --projectname=MyProjectSubscriber --definitions=definitions.json --output=MyProjectSubscriber
+xrcg generate --language=openapi --style=subscriber --projectname=MyProjectSubscriber --definitions=definitions.json --output=MyProjectSubscriber
 ```
 
 This will yield a `MyProjectSubscriber/MyProjectSubcriber.yml' file that can be
@@ -436,7 +433,7 @@ with the CloudEvents Subscription API.
 The tool can generate AsyncAPI definitions with:
 
 ```shell
-xcg generate --language=asyncapi --style=producer --projectname=MyProjectProducer --definitions=definitions.json --output=MyProjectProducer
+xrcg generate --language=asyncapi --style=producer --projectname=MyProjectProducer --definitions=definitions.json --output=MyProjectProducer
 ```
 
 For AsyncAPI, the tool support an extension parameter ce_content_mode that can be used to control the CloudEvents content mode of the generated AsyncAPI definition. The default is "structured" and the other supported value is "binary". The AsyncAPI template supports HTTP, MQTT, and AMQP 1.0 endpoints and injects the appropriate headers for the selected content mode for each protocol.
@@ -444,7 +441,7 @@ For AsyncAPI, the tool support an extension parameter ce_content_mode that can b
 Use it like this:
 
 ```shell
-xcg generate --language=asyncapi --style=producer --projectname=MyProjectProducer --definitions=definitions.json --output=MyProjectProducer --template-args ce_content_mode=binary
+xrcg generate --language=asyncapi --style=producer --projectname=MyProjectProducer --definitions=definitions.json --output=MyProjectProducer --template-args ce_content_mode=binary
 ```
 
 ##### AMQP 1.0
@@ -487,16 +484,16 @@ docker run -d --name rabbitmq-amqp \
 Generate AMQP 1.0 clients:
 ```bash
 # Java AMQP producer
-xregistry generate --language=java --style=amqpproducer --projectname=MyProducer --definitions=definitions.json --output=./output
+xrcg generate --language=java --style=amqpproducer --projectname=MyProducer --definitions=definitions.json --output=./output
 
 # C# AMQP consumer
-xregistry generate --language=cs --style=amqpconsumer --projectname=MyConsumer --definitions=definitions.json --output=./output
+xrcg generate --language=cs --style=amqpconsumer --projectname=MyConsumer --definitions=definitions.json --output=./output
 
 # Python AMQP producer
-xregistry generate --language=py --style=amqpproducer --projectname=MyProducer --definitions=definitions.json --output=./output
+xrcg generate --language=py --style=amqpproducer --projectname=MyProducer --definitions=definitions.json --output=./output
 
 # TypeScript AMQP consumer
-xregistry generate --language=ts --style=amqpconsumer --projectname=MyConsumer --definitions=definitions.json --output=./output
+xrcg generate --language=ts --style=amqpconsumer --projectname=MyConsumer --definitions=definitions.json --output=./output
 ```
 
 The generated code includes integration tests that work with ActiveMQ Artemis and both RabbitMQ 3.x (with plugin) and RabbitMQ 4.0+ (native support).

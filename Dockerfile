@@ -30,25 +30,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy built wheels from builder
 COPY --from=builder /build/dist /tmp/dist
 
-# Install xregistry package
+# Install xrcg package
 RUN pip install --no-cache-dir /tmp/dist/*.whl && \
     rm -rf /tmp/dist
 
 # Create a non-root user for security
-RUN useradd -m -u 1001 xregistry && \
-    chown -R xregistry:xregistry /app
+RUN useradd -m -u 1001 xrcg && \
+    chown -R xrcg:xrcg /app
 
 # Create working directory for user projects
 RUN mkdir -p /work && \
-    chown -R xregistry:xregistry /work
+    chown -R xrcg:xrcg /work
 
-USER xregistry
+USER xrcg
 
 # Set working directory for mounted volumes
 WORKDIR /work
 
 # Set the entrypoint
-ENTRYPOINT ["xregistry"]
+ENTRYPOINT ["xrcg"]
 CMD ["--help"]
 
 # Labels for container metadata

@@ -4,7 +4,7 @@ import yaml
 import re
 from typing import Any, List
 
-from xregistry.cli import logger
+from xrcg.cli import logger
 
 class JinjaFilters:
     """Custom Jinja2 filters."""

@@ -14,7 +14,7 @@ Generate type-safe messaging/eventing SDKs from [xRegistry](https://xregistry.io
 ## Requirements
 
 - Python 3.10 or later
-- [xRegistry Code Generator](https://pypi.org/project/xregistry/) CLI installed (`pip install xregistry`)
+- [xRegistry Code Generator](https://pypi.org/project/xrcg/) CLI installed (`pip install xrcg`)
 
 The extension will prompt you to install the CLI if it's not found.
 

@@ -7,7 +7,7 @@ import pytest
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.append(os.path.join(project_root))
 
-from xregistry.generator.jinja_extensions import JinjaExtensions, TemplateError
+from xrcg.generator.jinja_extensions import JinjaExtensions, TemplateError
 
 
 def test_error_with_message():

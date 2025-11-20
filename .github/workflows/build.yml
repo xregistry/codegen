@@ -23,7 +23,7 @@ jobs:
       uses: battila7/get-version-action@v2
     - name: Set version environment variable
       run: |
-        echo "XREGISTRY_VERSION=${{steps.get_version.outputs.version-without-v}}" > $GITHUB_ENV
+        echo "XRCG_VERSION=${{steps.get_version.outputs.version-without-v}}" > $GITHUB_ENV
     - name: Build Python package
       run: |
         python -m pip install --upgrade pip build wheel
@@ -35,7 +35,7 @@ jobs:
     - name: Build VSCode extension
       run: |
         npm install -g @vscode/vsce
-        cd xregistry_vscode      
+        cd xrcg_vscode      
         npm --no-git-tag-version version ${{steps.get_version.outputs.version-without-v}}  
         npm install
         vsce package

@@ -4,9 +4,9 @@ from typing import Any, Dict, List, Optional, Set, Union
 
 import jsonpointer
 
-from xregistry.cli import logger
-from xregistry.generator.generator_context import GeneratorContext
-from xregistry.generator.jinja_filters import JinjaFilters
+from xrcg.cli import logger
+from xrcg.generator.generator_context import GeneratorContext
+from xrcg.generator.jinja_filters import JinjaFilters
 
 JsonNode = Union[Dict[str, 'JsonNode'], List['JsonNode'], str, bool, int, float, None]
 

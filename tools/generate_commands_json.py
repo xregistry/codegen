@@ -2,7 +2,7 @@
 """
 Generate commands.json from template directories and _templateinfo.json files.
 
-This script scans the xregistry/templates directory structure and generates
+This script scans the xrcg/templates directory structure and generates
 a commands.json file that can be used by the CLI and VS Code extension.
 """
 

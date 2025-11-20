@@ -64,22 +64,22 @@ jobs:
 
     - name: Update extension version
       if: steps.get_version.outputs.has_tag == 'true'
-      working-directory: ./xregistry_vscode
+      working-directory: ./xrcg_vscode
       run: |
         npm --no-git-tag-version version ${{ steps.get_version.outputs.version }}
 
     - name: Install extension dependencies
-      working-directory: ./xregistry_vscode
+      working-directory: ./xrcg_vscode
       run: npm install
 
     - name: Build extension
-      working-directory: ./xregistry_vscode
+      working-directory: ./xrcg_vscode
       run: |
         npm run compile
         vsce package
 
     - name: Display extension information
-      working-directory: ./xregistry_vscode
+      working-directory: ./xrcg_vscode
       run: |
         echo "📦 Built VS Code extension:"
         ls -lh *.vsix
@@ -88,7 +88,7 @@ jobs:
 
     - name: Publish to VS Code Marketplace
       if: steps.check_secret.outputs.secret_available == 'true' && (steps.get_version.outputs.has_tag == 'true' || github.event.inputs.force_publish == 'true')
-      working-directory: ./xregistry_vscode
+      working-directory: ./xrcg_vscode
       run: |
         vsce publish -p ${{ secrets.VSCE_PAT }}
       env:
@@ -114,5 +114,5 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: vscode-extension
-        path: xregistry_vscode/*.vsix
+        path: xrcg_vscode/*.vsix
         retention-days: 30

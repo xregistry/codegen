@@ -9,7 +9,7 @@ import shutil
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
 sys.path.append(os.path.join(project_root))
 
-import xregistry
+import xrcg
 
 # this test invokes the xregistry command line tool to generate a C# proxy and a consumer
 # and then builds the proxy and the consumer and runs a prepared test that integrates both
@@ -20,13 +20,13 @@ def test_openapi_producer():
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir, ignore_errors=True)
     # generate the producer
-    sys.argv = ['xregistry', 'generate',  
+    sys.argv = ['xrcg', 'generate',  
                 '--style', 'producer', 
                 '--language', 'openapi',
                 '--definitions', os.path.join(os.path.dirname(__file__), 'openapi_producer.xreg.json'),
                 '--output', output_dir,
                 '--projectname', 'ContosoErpProducer']
-    assert xregistry.cli() == 0
+    assert xrcg.cli() == 0
     # Verify the output file was generated
     output_file = os.path.join(output_dir, "ContosoErpProducer/ContosoErpProducer.yml".replace('/', os.path.sep))
     assert os.path.exists(output_file), f"Expected output file not found: {output_file}"

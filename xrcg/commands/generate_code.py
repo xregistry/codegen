@@ -3,11 +3,11 @@
 """Generate code from the given arguments. """
 
 from typing import Any, Dict, List, Union
-from xregistry.cli import logger
-from xregistry.generator.generator_context import GeneratorContext
-from xregistry.generator.schema_utils import SchemaUtils
-from xregistry.generator.template_renderer import TemplateRenderer
-from xregistry.common.config import config_manager
+from xrcg.cli import logger
+from xrcg.generator.generator_context import GeneratorContext
+from xrcg.generator.schema_utils import SchemaUtils
+from xrcg.generator.template_renderer import TemplateRenderer
+from xrcg.common.config import config_manager
 from .validate_definitions import validate
 
 JsonNode = Union[Dict[str, 'JsonNode'], List['JsonNode'], str, None]

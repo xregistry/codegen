@@ -6,7 +6,7 @@ import os
 import json
 import jsonschema
 
-from xregistry.generator.xregistry_loader import XRegistryLoader
+from xrcg.generator.xregistry_loader import XRegistryLoader
 
 
 def validate_definition(args) -> int:

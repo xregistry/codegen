@@ -21,12 +21,12 @@ from jinja2 import Template, TemplateAssertionError, TemplateNotFound, TemplateR
 import urllib
 import urllib.parse
 
-from xregistry.cli import logger
-from xregistry.generator.generator_context import GeneratorContext
-from xregistry.generator.jinja_extensions import JinjaExtensions, TemplateError
-from xregistry.generator.jinja_filters import JinjaFilters
-from xregistry.generator.schema_utils import SchemaUtils
-from xregistry.generator.url_utils import URLUtils
+from xrcg.cli import logger
+from xrcg.generator.generator_context import GeneratorContext
+from xrcg.generator.jinja_extensions import JinjaExtensions, TemplateError
+from xrcg.generator.jinja_filters import JinjaFilters
+from xrcg.generator.schema_utils import SchemaUtils
+from xrcg.generator.url_utils import URLUtils
 
 JsonNode = Union[Dict[str, 'JsonNode'], List['JsonNode'], str, bool, int, float, None]
 
