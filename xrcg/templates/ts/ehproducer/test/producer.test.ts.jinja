@@ -86,7 +86,7 @@ describe('{{ test_class_name }}', () => {
                 'METADATA_SERVER': `${azuriteHost}:${azuriteBlobPort}`,
                 'ACCEPT_EULA': 'Y'
             })
-            .withWaitStrategy(Wait.forLogMessage(/.*Emulator is launching with config.*/))
+            .withWaitStrategy(Wait.forListeningPorts(5672))
             .withStartupTimeout(180000) // 3 minutes
             .start();
         
