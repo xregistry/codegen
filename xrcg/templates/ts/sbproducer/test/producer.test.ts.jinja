@@ -76,16 +76,16 @@ describe('{{ project_name | strip_dots | pascal }} Service Bus Producer Tests', 
                 'ACCEPT_EULA': 'Y',
                 'MSSQL_SA_PASSWORD': 'StrongPassword!1'
             })
-            .withStartupTimeout(120000)
             .start();
         
         console.log('SQL Edge container started');
         
         // Wait for SQL Edge to initialize
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        await new Promise(resolve => setTimeout(resolve, 15000));
         
         console.log('Starting Service Bus emulator container...');
-        // Start Service Bus emulator container
+        // Start Service Bus emulator container without explicit wait strategy
+        // The container will start and we'll wait with setTimeout instead
         serviceBusEmulatorContainer = await new GenericContainer('mcr.microsoft.com/azure-messaging/servicebus-emulator:latest')
             .withNetwork(network)
             .withNetworkAliases('sb-emulator')
@@ -100,19 +100,13 @@ describe('{{ project_name | strip_dots | pascal }} Service Bus Producer Tests', 
                 'MSSQL_SA_PASSWORD': 'StrongPassword!1',
                 'ACCEPT_EULA': 'Y'
             })
-            .withStartupTimeout(240000)  // Increased to 4 minutes
-            .withWaitStrategy({
-                async waitUntilReady(): Promise<void> {
-                    // Custom wait strategy that just waits a fixed time
-                    await new Promise(resolve => setTimeout(resolve, 60000));
-                }
-            })
             .start();
         
         console.log('Service Bus emulator container started');
         
         // Extended wait for Service Bus emulator to fully initialize
-        await new Promise(resolve => setTimeout(resolve, 45000));
+        // The emulator takes significant time to be ready for connections
+        await new Promise(resolve => setTimeout(resolve, 90000));  // 90 seconds total wait
         
         serviceBusConnectionString = 'Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;';
         
