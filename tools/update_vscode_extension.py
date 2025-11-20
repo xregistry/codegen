@@ -75,7 +75,7 @@ def update_package_json(package_json_path: Path, commands: List[Dict]) -> None:
     # Generate commands section
     package_json['contributes']['commands'] = []
     for command in commands:
-        cmd_id = f"xregistry.{command['command']}"
+        cmd_id = f"xrcg.{command['command']}"
         title = clip_command_description(command['description'])
         
         package_json['contributes']['commands'].append({
@@ -90,13 +90,13 @@ def update_package_json(package_json_path: Path, commands: List[Dict]) -> None:
     
     # Define group display names and order
     group_names = {
-        'python': {'label': 'Python', 'id': 'xregistry.py'},
-        'typescript': {'label': 'TypeScript', 'id': 'xregistry.ts'},
-        'csharp': {'label': 'C#', 'id': 'xregistry.cs'},
-        'java': {'label': 'Java', 'id': 'xregistry.java'},
-        'asyncapi': {'label': 'AsyncAPI', 'id': 'xregistry.asyncapi'},
-        'openapi': {'label': 'OpenAPI', 'id': 'xregistry.openapi'},
-        'azure-stream-analytics': {'label': 'Azure Stream Analytics', 'id': 'xregistry.asaql'}
+        'python': {'label': 'Python', 'id': 'xrcg.py'},
+        'typescript': {'label': 'TypeScript', 'id': 'xrcg.ts'},
+        'csharp': {'label': 'C#', 'id': 'xrcg.cs'},
+        'java': {'label': 'Java', 'id': 'xrcg.java'},
+        'asyncapi': {'label': 'AsyncAPI', 'id': 'xrcg.asyncapi'},
+        'openapi': {'label': 'OpenAPI', 'id': 'xrcg.openapi'},
+        'azure-stream-analytics': {'label': 'Azure Stream Analytics', 'id': 'xrcg.asaql'}
     }
     
     # Create submenu entries for each group
@@ -114,7 +114,7 @@ def update_package_json(package_json_path: Path, commands: List[Dict]) -> None:
             menu_entries[submenu_id] = []
             
             for command in sorted(groups[group_key], key=lambda x: x['description']):
-                cmd_id = f"xregistry.{command['command']}"
+                cmd_id = f"xrcg.{command['command']}"
                 title = clip_command_description(command['description'])
                 ext_conditions = " || ".join([f"resourceExtname == {ext}" for ext in command.get('extensions', ['.xreg.json'])])
                 
@@ -131,17 +131,17 @@ def update_package_json(package_json_path: Path, commands: List[Dict]) -> None:
     ext_condition = " || ".join([f"resourceExtname == {ext}" for ext in all_extensions])
     package_json['contributes']['menus']['explorer/context'] = [
         {
-            "submenu": "xregistrySubmenu",
+            "submenu": "xrcgSubmenu",
             "group": "8_transformation",
             "title": "Generate Code",
             "when": "resourceExtname == .json"
         }
     ]
     
-    # Add submenu entries to xregistrySubmenu
-    package_json['contributes']['menus']['xregistrySubmenu'] = []
+    # Add submenu entries to xrcgSubmenu
+    package_json['contributes']['menus']['xrcgSubmenu'] = []
     for submenu_id, submenu_data in [(gd['id'], gd['label']) for gd in [group_names[g] for g in group_names if g in groups]]:
-        package_json['contributes']['menus']['xregistrySubmenu'].append({
+        package_json['contributes']['menus']['xrcgSubmenu'].append({
             "submenu": submenu_id,
             "title": submenu_data,
             "when": "resourceExtname == .json"
@@ -153,7 +153,7 @@ def update_package_json(package_json_path: Path, commands: List[Dict]) -> None:
     
     # Update submenus section
     package_json['contributes']['submenus'] = [
-        {"id": "xregistrySubmenu", "label": "Generate Code"}
+        {"id": "xrcgSubmenu", "label": "Generate Code"}
     ]
     package_json['contributes']['submenus'].extend(submenus)
     
@@ -184,7 +184,7 @@ def generate_extension_ts(extension_ts_path: Path, commands: List[Dict]) -> None
         "async function checkXRegistryTool(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel): Promise<boolean> {",
         f"{INDENT}// Check if xregistry CLI is available",
         f"{INDENT}try {{",
-        f"{INDENT*2}return await execShellCommand('xcg --version', outputChannel)",
+        f"{INDENT*2}return await execShellCommand('xrcg --version', outputChannel)",
         f"{INDENT*3}.then((stdout) => {{",
         f"{INDENT*4}const versionMatch = stdout.match(/(\\d+)\\.(\\d+)\\.(\\d+)/);",
         f"{INDENT*4}if (!versionMatch) {{",
@@ -203,7 +203,7 @@ def generate_extension_ts(extension_ts_path: Path, commands: List[Dict]) -> None
         f"{INDENT*4}const installOption = await vscode.window.showWarningMessage(",
         f"{INDENT*5}'xregistry tool is not available. Do you want to install it?', 'Yes', 'No');",
         f"{INDENT*4}if (installOption === 'Yes') {{",
-        f"{INDENT*5}await execShellCommand('pip install xregistry', outputChannel);",
+        f"{INDENT*5}await execShellCommand('pip install xrcg', outputChannel);",
         f"{INDENT*5}vscode.window.showInformationMessage('xregistry tool has been installed successfully.');",
         f"{INDENT*5}return true;",
         f"{INDENT*4}}}",
@@ -276,13 +276,13 @@ def generate_extension_ts(extension_ts_path: Path, commands: List[Dict]) -> None
         language = command['language']
         style = command['style']
         
-        extension_ts_content.append(f"{INDENT*2}disposables.push(vscode.commands.registerCommand('xregistry.{cmd_id}', async (uri: vscode.Uri) => {{")
+        extension_ts_content.append(f"{INDENT*2}disposables.push(vscode.commands.registerCommand('xrcg.{cmd_id}', async (uri: vscode.Uri) => {{")
         extension_ts_content.append(f"{INDENT*3}if (!await checkXRegistryTool(context, outputChannel)) {{ return; }}")
         extension_ts_content.append(f"{INDENT*3}const filePath = uri.fsPath;")
         extension_ts_content.append(f"{INDENT*3}const outputPathSuggestion = getSuggestedOutputPath(filePath, '{{input_file_name}}-{language}-{style}');")
         extension_ts_content.append(f"{INDENT*3}const outputPath = await vscode.window.showSaveDialog({{ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : {{ 'All Files': ['*'] }} }});")
         extension_ts_content.append(f"{INDENT*3}if (!outputPath) {{ return; }}")
-        extension_ts_content.append(f"{INDENT*3}const command = `xcg generate --projectname ${{path.basename(outputPath.fsPath)}} --language {language} --style {style} --definitions ${{filePath}} --output ${{outputPath.fsPath}}`;")
+        extension_ts_content.append(f"{INDENT*3}const command = `xrcg generate --projectname ${{path.basename(outputPath.fsPath)}} --language {language} --style {style} --definitions ${{filePath}} --output ${{outputPath.fsPath}}`;")
         extension_ts_content.append(f"{INDENT*3}executeCommand(command, outputPath, outputChannel);")
         extension_ts_content.append(f"{INDENT*2}}}));")
         extension_ts_content.append("")
