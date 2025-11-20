@@ -4,7 +4,7 @@
 // Changes to this file may cause incorrect behavior and will be lost if the code is regenerated.
 
 import { EventHubProducerClient } from '@azure/event-hubs';
-import { GenericContainer, Network, StartedNetwork, StartedTestContainer, Wait } from 'testcontainers';
+import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
 import { AzuriteContainer, StartedAzuriteContainer } from '@testcontainers/azurite';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -54,38 +54,36 @@ jest.setTimeout(180000); // 3 minutes for container setup
 {%- set test_class_name = (project_name | strip_dots | pascal) + (pascal_group_name | strip_dots) + "Tests" %}
 
 describe('{{ test_class_name }}', () => {
-    let network: StartedNetwork;
     let azuriteContainer: StartedAzuriteContainer;
     let eventHubsEmulatorContainer: StartedTestContainer;
     let emulatorConfigPath: string;
     let eventHubConnectionString: string;
     
     beforeAll(async () => {
-        // Create network for containers to communicate
-        network = await Network.newNetwork();
-        
         // Create temporary config file for Event Hubs emulator
         emulatorConfigPath = path.join(os.tmpdir(), `emulator-config-${Date.now()}.json`);
         fs.writeFileSync(emulatorConfigPath, EMULATOR_CONFIG);
         
         // Start Azurite container (blob+table storage for Event Hubs checkpoints and metadata)
+        // Note: Azurite and Event Hubs emulator need to communicate, but for testing purposes
+        // we can use the default network and host.docker.internal or container IPs
         azuriteContainer = await new AzuriteContainer('mcr.microsoft.com/azure-storage/azurite:latest')
-            .withNetwork(network)
-            .withNetworkAliases('azurite')
             .start();
         
+        const azuriteHost = azuriteContainer.getHost();
+        const azuriteBlobPort = azuriteContainer.getMappedPort(10000);
+        
         // Start Event Hubs emulator container
+        // The emulator needs to access Azurite for blob and metadata storage
         eventHubsEmulatorContainer = await new GenericContainer('mcr.microsoft.com/azure-messaging/eventhubs-emulator:latest')
             .withCopyFilesToContainer([{
                 source: emulatorConfigPath,
                 target: '/Eventhubs_Emulator/ConfigFiles/Config.json'
             }])
-            .withNetwork(network)
-            .withNetworkAliases('eventhubs-emulator')
             .withExposedPorts(5672)
             .withEnvironment({
-                'BLOB_SERVER': 'azurite',
-                'METADATA_SERVER': 'azurite',
+                'BLOB_SERVER': `${azuriteHost}:${azuriteBlobPort}`,
+                'METADATA_SERVER': `${azuriteHost}:${azuriteBlobPort}`,
                 'ACCEPT_EULA': 'Y'
             })
             .withWaitStrategy(Wait.forLogMessage(/.*Emulator is launching with config.*/))
@@ -103,9 +101,6 @@ describe('{{ test_class_name }}', () => {
         if (azuriteContainer) {
             await azuriteContainer.stop();
         }
-        if (network) {
-            await network.close();
-        }
         if (emulatorConfigPath && fs.existsSync(emulatorConfigPath)) {
             fs.unlinkSync(emulatorConfigPath);
         }
@@ -115,6 +110,10 @@ describe('{{ test_class_name }}', () => {
     {%- for messageid, message in message_list[:3] %}
     {%- set messagename = messageid | strip_namespace | pascal %}
     {%- set body_type = util.body_type(data_project_name, root, message) %}
+    {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
+    {%- if isCloudEvent %}
+    {%- set uriargs = cloudEvents.DeclareUriTemplateArguments(message) %}
+    {%- endif %}
     
     test('should send {{ messagename }} messages', async () => {
         const producerClient = new EventHubProducerClient(eventHubConnectionString);
@@ -124,7 +123,11 @@ describe('{{ test_class_name }}', () => {
             // Send 5 messages to test proper message handling
             for (let i = 0; i < 5; i++) {
                 const testData = { test: 'data', iteration: i } as any;
-                await producer.send{{ messagename }}(testData);
+                await producer.send{{ messagename }}(testData{%- if uriargs -%}
+                {%- for arg in uriargs.split(',') if arg.strip() -%}
+                , 'test'
+                {%- endfor -%}
+                {%- endif %});
             }
             
             // Test passes if all sends succeed without throwing
@@ -145,7 +148,11 @@ describe('{{ test_class_name }}', () => {
                 index: i 
             } as any));
             
-            await producer.send{{ messagename }}Batch(testDataBatch);
+            await producer.send{{ messagename }}Batch(testDataBatch{%- if uriargs -%}
+            {%- for arg in uriargs.split(',') if arg.strip() -%}
+            , 'test'
+            {%- endfor -%}
+            {%- endif %});
             
             // Test passes if batch send succeeds without throwing
             expect(true).toBe(true);
