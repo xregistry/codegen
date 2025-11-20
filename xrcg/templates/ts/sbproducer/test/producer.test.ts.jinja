@@ -4,6 +4,10 @@
 // Changes to this file may cause incorrect behavior and will be lost if the code is regenerated.
 
 import { ServiceBusClient, ServiceBusReceiver } from '@azure/service-bus';
+import { GenericContainer, StartedTestContainer, Network, Wait } from 'testcontainers';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 {%- set messagegroups = root.messagegroups %}
 {%- set uses_cloudevents_message = cloudEvents.usesCloudEvents(root) %}
 
@@ -15,11 +19,10 @@ import { CloudEvent } from 'cloudevents';
 // Import data types
 import * as {{ data_project_name }} from '../../{{ data_project_name }}/dist/index.js';
 
-const SERVICEBUS_CONNECTION_STRING = process.env.SERVICEBUS_CONNECTION_STRING || 
-    'Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=XXXXX';
-const QUEUE_NAME = 'test-queue';
+const QUEUE_NAME = 'myqueue';
 
-jest.setTimeout(60000);
+// Increased timeout for container startup and tests
+jest.setTimeout(300000);
 
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set pascal_group_name = messagegroupid | pascal %}
@@ -27,32 +30,174 @@ jest.setTimeout(60000);
 {%- set test_class_name = (project_name | strip_dots | pascal) + (pascal_group_name | strip_dots) + "Tests" %}
 
 describe('{{ test_class_name }}', () => {
-    // Stub tests: verify code generation and compilation only
-    // For full integration testing, configure SERVICEBUS_CONNECTION_STRING environment variable
+    let sqlEdgeContainer: StartedTestContainer;
+    let serviceBusEmulatorContainer: StartedTestContainer;
+    let network: Network;
+    let serviceBusConnectionString: string;
+    let configFilePath: string;
+    
+    beforeAll(async () => {
+        // Create network for containers to communicate
+        network = await new Network().start();
+        
+        // Create Service Bus emulator configuration
+        const emulatorConfig = {
+            UserConfig: {
+                Namespaces: [
+                    {
+                        Name: 'sbemulatorns',
+                        Queues: [
+                            {
+                                Name: QUEUE_NAME,
+                                Properties: {
+                                    DeadLetteringOnMessageExpiration: false,
+                                    DefaultMessageTimeToLive: 'PT1H',
+                                    LockDuration: 'PT1M',
+                                    MaxDeliveryCount: 10,
+                                    RequiresDuplicateDetection: false,
+                                    RequiresSession: false
+                                }
+                            }
+                        ]
+                    }
+                ],
+                Logging: {
+                    Type: 'File'
+                }
+            }
+        };
+        
+        // Write config to temporary file
+        configFilePath = path.join(os.tmpdir(), `sb-emulator-config-${Date.now()}.json`);
+        fs.writeFileSync(configFilePath, JSON.stringify(emulatorConfig, null, 2));
+        
+        console.log('Starting SQL Edge container...');
+        // Start SQL Edge container (required by Service Bus emulator)
+        sqlEdgeContainer = await new GenericContainer('mcr.microsoft.com/azure-sql-edge:latest')
+            .withNetwork(network)
+            .withNetworkAliases('sqledge')
+            .withEnvironment({
+                'ACCEPT_EULA': 'Y',
+                'MSSQL_SA_PASSWORD': 'StrongPassword!1'
+            })
+            .withExposedPorts(1433)
+            .withWaitStrategy(Wait.forListeningPort())
+            .withStartupTimeout(120000)
+            .start();
+        
+        console.log('SQL Edge container started');
+        
+        // Wait for SQL Edge to initialize
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        
+        console.log('Starting Service Bus emulator container...');
+        // Start Service Bus emulator container
+        serviceBusEmulatorContainer = await new GenericContainer('mcr.microsoft.com/azure-messaging/servicebus-emulator:latest')
+            .withNetwork(network)
+            .withNetworkAliases('sb-emulator')
+            .withBindMounts([{
+                source: configFilePath,
+                target: '/ServiceBus_Emulator/ConfigFiles/Config.json',
+                mode: 'ro'
+            }])
+            .withExposedPorts(5672)
+            .withEnvironment({
+                'SQL_SERVER': 'sqledge',
+                'MSSQL_SA_PASSWORD': 'StrongPassword!1',
+                'ACCEPT_EULA': 'Y'
+            })
+            .withWaitStrategy(Wait.forLogMessage(/.*Emulator Service is Successfully Up!.*/))
+            .withStartupTimeout(180000)
+            .start();
+        
+        console.log('Service Bus emulator container started');
+        
+        // Extended wait for Service Bus emulator to fully initialize
+        await new Promise(resolve => setTimeout(resolve, 45000));
+        
+        serviceBusConnectionString = 'Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;';
+        
+        console.log('Test environment ready');
+    }, 300000);
+    
+    afterAll(async () => {
+        console.log('Cleaning up test environment...');
+        
+        if (serviceBusEmulatorContainer) {
+            await serviceBusEmulatorContainer.stop();
+        }
+        
+        if (sqlEdgeContainer) {
+            await sqlEdgeContainer.stop();
+        }
+        
+        if (network) {
+            await network.stop();
+        }
+        
+        // Clean up config file
+        if (configFilePath && fs.existsSync(configFilePath)) {
+            fs.unlinkSync(configFilePath);
+        }
+        
+        console.log('Test environment cleaned up');
+    }, 120000);
     
     {%- set message_list = messagegroup.messages.items() | list %}
-    {%- for messageid, message in message_list[:3] %}
+    {%- for messageid, message in message_list %}
     {%- set messagename = messageid | strip_namespace | pascal %}
+    {%- set message_snake = messageid | snake %}
     {%- set body_type = util.body_type(data_project_name, root, message) %}
     
-    test('should compile {{ messagename }} send method', () => {
-        const testData = {} as {{ body_type }};
+    test('should send {{ messagename }} message to Service Bus emulator', async () => {
+        console.log('Testing {{ messagename }} message...');
         
-        // Verify test data type is correct
-        expect(testData).toBeDefined();
-    });
-    
-    test('should compile {{ messagename }} batch send method', () => {
-        const testData = [
-            {} as {{ body_type }},
-            {} as {{ body_type }}
-        ];
+        const serviceBusClient = new ServiceBusClient(serviceBusConnectionString);
+        const producer = new {{ class_name }}(serviceBusClient, QUEUE_NAME);
         
-        // Verify test data array structure is correct
-        expect(testData).toHaveLength(2);
-        expect(testData[0]).toBeDefined();
-        expect(testData[1]).toBeDefined();
-    });
+        try {
+            // Create test data
+            const testData = {} as {{ body_type }};
+            
+            // Send 5 messages to test proper message handling
+            for (let i = 0; i < 5; i++) {
+                await producer.send{{ messagename }}(testData);
+            }
+            
+            console.log('{{ messagename }}: 5 messages sent successfully');
+            
+            // Verify messages were received
+            const receiver = serviceBusClient.createReceiver(QUEUE_NAME);
+            
+            try {
+                const messages = await receiver.receiveMessages(5, { maxWaitTimeInMs: 10000 });
+                
+                expect(messages.length).toBe(5);
+                console.log(`{{ messagename }}: Received ${messages.length} messages`);
+                
+                // Complete all received messages
+                for (const msg of messages) {
+                    {%- if uses_cloudevents_message %}
+                    // Verify CloudEvents properties
+                    const appProps = msg.applicationProperties || {};
+                    const hasCloudEventsType = 'cloudEvents:type' in appProps || 
+                                              'cloudEvents_type' in appProps ||
+                                              'ce_type' in appProps;
+                    expect(hasCloudEventsType).toBe(true);
+                    {%- endif %}
+                    
+                    await receiver.completeMessage(msg);
+                }
+                
+                console.log('{{ messagename }}: All messages completed');
+            } finally {
+                await receiver.close();
+            }
+        } finally {
+            await producer.close();
+            await serviceBusClient.close();
+        }
+    }, 60000);
     {%- endfor %}
 });
 {%- endfor %}
