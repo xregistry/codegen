@@ -20,6 +20,10 @@ using Microsoft.Extensions.Logging;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Networks;
+{%- for messagegroupid, messagegroup in messagegroups.items() %}
+{%- set groupname = messagegroupid  | pascal %}
+using {{ groupname | concat_namespace(project_name) | pascal }};
+{%- endfor %}
 
 namespace {{ project_name | pascal }}.Test
 {
@@ -204,6 +208,8 @@ namespace {{ project_name | pascal }}.Test
         {%- for messageid, message in messagegroup.messages.items() %}
         {%- set messagename = messageid | strip_namespace | pascal %}
         {%- set is_amqp = amqp.is_amqp(message) %}
+        {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
+        {%- set uriargs = cloudEvents.DeclareUriTemplateArguments(message) %}
         [Fact]
         public async Task Test{{ messagename }}Message()
         {
@@ -216,11 +222,19 @@ namespace {{ project_name | pascal }}.Test
                 {
                     {%- if message_body_type != "byte[]" %}
                     var eventDataInstance = new {{ message_body_type }}Tests().CreateInstance();
-                    var message = new ServiceBusMessage(eventDataInstance.ToString()); // Serialize if needed
                     {%- else %}
-                    var message = new ServiceBusMessage(new byte[0]);
+                    var eventDataInstance = new byte[0];
                     {%- endif %}
-
+                    
+                    // Use generated EventFactory to create the message
+                    var message = {{ pascal_group_name | strip_namespace }}EventFactory.Create{{ messagename }}Event(
+                        eventDataInstance
+                        {%- if uriargs %}
+                        {%- for arg in uriargs.split(',') if arg.strip() %}
+                        {%- set splitarg = arg.strip().split(' ')%}
+                        , "test-{{ splitarg[1] }}"
+                        {%- endfor -%}
+                        {%- endif %});
                     await _sender.SendMessageAsync(message);
                 }
                 _logger.LogInformation("5 test messages for {{ messagename }} sent.");
@@ -239,21 +253,25 @@ namespace {{ project_name | pascal }}.Test
             try
             {   
                 {%- set message_body_type = util.body_type(data_project_name, root, message) -%}
-                {%- if message_body_type != "byte[]" %}
-                var eventDataTest = new {{ message_body_type }}Tests();
                 var eventDataInstances = new ServiceBusMessage[10];
                 for (int i = 0; i < 10; i++)
                 {
-                    var instance = eventDataTest.CreateInstance();
-                    eventDataInstances[i] = new ServiceBusMessage(instance.ToString()); // Serialize if needed
+                    {%- if message_body_type != "byte[]" %}
+                    var eventDataInstance = new {{ message_body_type }}Tests().CreateInstance();
+                    {%- else %}
+                    var eventDataInstance = new byte[0];
+                    {%- endif %}
+                    
+                    // Use generated EventFactory to create the message
+                    eventDataInstances[i] = {{ pascal_group_name | strip_namespace }}EventFactory.Create{{ messagename }}Event(
+                        eventDataInstance
+                        {%- if uriargs %}
+                        {%- for arg in uriargs.split(',') if arg.strip() %}
+                        {%- set splitarg = arg.strip().split(' ')%}
+                        , "test-{{ splitarg[1] }}"
+                        {%- endfor -%}
+                        {%- endif %});
                 }
-                {%- else %}
-                var eventDataInstances = new ServiceBusMessage[10];
-                for (int i = 0; i < 10; i++)
-                {
-                    eventDataInstances[i] = new ServiceBusMessage(new byte[0]);
-                }
-                {%- endif %}
 
                 using ServiceBusMessageBatch messageBatch = await _sender.CreateMessageBatchAsync();
                 foreach (var eventData in eventDataInstances)
