@@ -7,11 +7,17 @@
 
 import * as {{ data_project_name }} from '../../{{ data_project_name }}/dist/index.js';
 import { {% for messagegroupid, messagegroup in messagegroups.items() -%}{%- set class_name = (messagegroupid | pascal | strip_namespace) + "EventGridProducer" %}{{ class_name }}{% if not loop.last %}, {% endif %}{% endfor %} } from '../src';
+import nock from 'nock';
 
 const EVENT_GRID_ENDPOINT = process.env.EVENT_GRID_ENDPOINT || 'https://localhost.eventgrid.azure.net/api/events';
 const EVENT_GRID_ACCESS_KEY = process.env.EVENT_GRID_ACCESS_KEY || 'test-key';
 
 jest.setTimeout(60000);
+
+// Parse endpoint URL for nock mocking
+const endpointUrl = new URL(EVENT_GRID_ENDPOINT);
+const baseUrl = `${endpointUrl.protocol}//${endpointUrl.host}`;
+const endpointPath = endpointUrl.pathname;
 
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set pascal_group_name = messagegroupid | pascal %}
@@ -19,42 +25,93 @@ jest.setTimeout(60000);
 {%- set test_class_name = (project_name | strip_dots | pascal) + (pascal_group_name | strip_dots) + "Tests" %}
 
 describe('{{ test_class_name }}', () => {
-    // Tests verify EventGrid producer class structure and method availability
-    // For full integration testing with Event Grid, configure EVENT_GRID_ENDPOINT and EVENT_GRID_ACCESS_KEY environment variables
+    beforeEach(() => {
+        // Clean all nock interceptors before each test
+        nock.cleanAll();
+    });
+
+    afterEach(() => {
+        // Verify all nock interceptors were used
+        if (!nock.isDone()) {
+            console.warn('Warning: Not all nock interceptors were used');
+        }
+    });
     
     {%- set message_list = messagegroup.messages.items() | list %}
     {%- for messageid, message in message_list[:3] %}
     {%- set messagename = messageid | strip_namespace | pascal %}
     {%- set body_type = util.body_type(data_project_name, root, message) %}
     
-    test('should have {{ messagename }} EventGrid producer with send method', () => {
-        // Verify producer class exists and has required methods
-        expect({{ class_name }}).toBeDefined();
-        expect({{ class_name }}.prototype.send{{ messagename }}).toBeDefined();
+    test('should send {{ messagename }} message successfully', async () => {
+        // Mock Event Grid API endpoint to accept CloudEvents
+        const scope = nock(baseUrl)
+            .post(endpointPath)
+            .query(true)  // Accept any query parameters
+            .reply(200, { value: [] });
         
-        // Verify producer can be instantiated
         const producer = new {{ class_name }}(EVENT_GRID_ENDPOINT, EVENT_GRID_ACCESS_KEY);
-        expect(producer).toBeDefined();
-        expect(producer.send{{ messagename }}).toBeDefined();
         
-        // Note: Actual send test would require valid Event Grid credentials
-        {%- if message.schemaurl %}
-        {%- set schema = schemaobj(message.schemaurl) %}
-        {%- if schema %}
-        {%- if schema.type == "avro" %}
-        {%- set avro_schema = schema.schema %}
-        {%- for field in avro_schema.fields[:3] %}
-        // Expected schema field: {{ field.name }}
+        // Create test data with minimal valid structure
+        const testData = {} as {{ body_type }};
+        
+        // Extract required parameters from message metadata
+        {%- set has_uri_template_params = false %}
+        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+        {%- set has_uri_template_params = true %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        const {{ placeholder }} = 'test-{{ placeholder }}';
         {%- endfor %}
-        {%- elif schema.type == "json" %}
-        {%- if schema.schema and schema.schema.properties %}
-        {%- for propname, prop in (schema.schema.properties.items() | list)[:3] %}
-        // Expected schema property: {{ propname }}
         {%- endfor %}
+        
+        {%- set has_optional_params = false %}
+        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
+        {%- set has_optional_params = true %}
+        {%- if attribute.required %}
+        const {{ attrname }} = 'test-{{ attrname }}';
         {%- endif %}
+        {%- endfor %}
+        
+        // Send the message
+        await producer.send{{ messagename }}(testData{%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}, {{ placeholder }}{%- endfor %}{%- endfor %}{%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] and attribute.required %}, {{ attrname }}{%- endfor %});
+        
+        // Verify the HTTP call was made
+        expect(scope.isDone()).toBe(true);
+    });
+    
+    test('should send {{ messagename }} batch successfully', async () => {
+        // Mock Event Grid API endpoint to accept CloudEvents
+        const scope = nock(baseUrl)
+            .post(endpointPath)
+            .query(true)  // Accept any query parameters
+            .reply(200, { value: [] });
+        
+        const producer = new {{ class_name }}(EVENT_GRID_ENDPOINT, EVENT_GRID_ACCESS_KEY);
+        
+        // Create test data array with minimal valid structure
+        const testDataArray = [
+            {} as {{ body_type }},
+            {} as {{ body_type }},
+            {} as {{ body_type }}
+        ];
+        
+        // Extract required parameters from message metadata
+        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        const {{ placeholder }} = 'test-{{ placeholder }}';
+        {%- endfor %}
+        {%- endfor %}
+        
+        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
+        {%- if attribute.required %}
+        const {{ attrname }} = 'test-{{ attrname }}';
         {%- endif %}
-        {%- endif %}
-        {%- endif %}
+        {%- endfor %}
+        
+        // Send the batch
+        await producer.send{{ messagename }}Batch(testDataArray{%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}, {{ placeholder }}{%- endfor %}{%- endfor %}{%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] and attribute.required %}, {{ attrname }}{%- endfor %});
+        
+        // Verify the HTTP call was made
+        expect(scope.isDone()).toBe(true);
     });
     {%- endfor %}
 });
