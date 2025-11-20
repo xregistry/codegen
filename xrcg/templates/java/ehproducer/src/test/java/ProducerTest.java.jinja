@@ -10,6 +10,10 @@ package {{ package_name }};
 
 import com.azure.messaging.eventhubs.EventHubProducerClient;
 import com.azure.messaging.eventhubs.EventHubClientBuilder;
+import com.azure.messaging.eventhubs.EventHubConsumerAsyncClient;
+import com.azure.messaging.eventhubs.EventHubConsumerClient;
+import com.azure.messaging.eventhubs.models.EventPosition;
+import com.azure.messaging.eventhubs.models.PartitionEvent;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
@@ -26,6 +30,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set groupname = messagegroupid | pascal | strip_namespace %}
@@ -172,29 +178,132 @@ public class ProducerTest {
 
     {%- for messagegroupid, messagegroup in messagegroups.items() %}
     {%- set groupname = messagegroupid | pascal | strip_namespace %}
+    {%- set group_package = (package_name ~ "." ~ messagegroupid) | lower | replace('-', '_') %}
+    
+    {%- for messageid, message in messagegroup.messages.items() %}
+    {%- set messagename = messageid | pascal | strip_namespace %}
+    {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
     
     @Test
-    @DisplayName("Test {{ groupname }}Producer with Event Hubs Emulator")
-    public void test{{ groupname }}ProducerWithEmulator() {
-        logger.info("Testing {{ groupname }}Producer with Event Hubs emulator");
+    @DisplayName("Test {{ messagename }} message production")
+    public void test{{ messagename }}Message() throws Exception {
+        logger.info("Starting test{{ messagename }}Message");
         
-        EventHubProducerClient client = new EventHubClientBuilder()
+        // Create producer
+        EventHubProducerClient producerClient = new EventHubClientBuilder()
             .connectionString(eventHubConnectionString)
             .buildProducerClient();
         
-        {{ groupname }}Producer producer = new {{ groupname }}Producer(client);
-        assertNotNull(producer, "Producer should be created successfully");
-        
-        logger.info("{{ groupname }}Producer created successfully with emulator");
-        
-        // TODO: Add message sending tests here when message types are available
+        {{ group_package }}.{{ groupname }}Producer producer = new {{ group_package }}.{{ groupname }}Producer(producerClient);
         
         try {
+            // Create test data
+            {%- if message_body_type == "byte[]" %}
+            {{ message_body_type }} testData = new byte[0];
+            {%- else %}
+            {{ message_body_type }} testData = new {{ message_body_type }}();
+            {%- endif %}
+            {%- set schemaObj = schema_object(root, message.get('dataschemauri') or message.get('dataschema')) %}
+            {%- if schemaObj %}
+                {#- Get the actual schema from the versions structure -#}
+                {%- if schemaObj.versions %}
+                    {%- set version_key = schemaObj.defaultversionid if schemaObj.defaultversionid else (schemaObj.versions.keys() | list | last) %}
+                    {%- set avroSchema = schemaObj.versions[version_key].schema %}
+                {%- elif schemaObj.schema %}
+                    {%- set avroSchema = schemaObj.schema %}
+                {%- else %}
+                    {%- set avroSchema = schemaObj %}
+                {%- endif %}
+                {#- Now process the Avro schema fields -#}
+                {%- if avroSchema and avroSchema.type == "record" and avroSchema.fields %}
+                    {%- for field in avroSchema.fields %}
+                        {%- set fieldtype = field.type if field.type is string else field.type.type if field.type is mapping and field.type.type is defined else "unknown" %}
+                        {%- if fieldtype == "string" %}
+            testData.set{{ field.name | pascal }}("test-{{ field.name }}");
+                        {%- elif fieldtype == "int" or fieldtype == "integer" %}
+            testData.set{{ field.name | pascal }}(42);
+                        {%- elif fieldtype == "long" %}
+            testData.set{{ field.name | pascal }}(42L);
+                        {%- elif fieldtype == "boolean" %}
+            testData.set{{ field.name | pascal }}(true);
+                        {%- elif fieldtype == "double" %}
+            testData.set{{ field.name | pascal }}(42.0);
+                        {%- elif fieldtype == "float" %}
+            testData.set{{ field.name | pascal }}(42.0f);
+                        {%- elif fieldtype == "enum" %}
+                            {%- set enum_namespace = field.type.namespace if field.type.namespace else avroSchema.namespace %}
+                            {%- set normalized_namespace = (data_project_name | lower | replace('-', '_')) + '.' + (enum_namespace | lower | replace('.', '.') if enum_namespace else '') %}
+            testData.set{{ field.name | pascal }}({{ normalized_namespace }}.{{ field.type.name }}.{{ field.type.symbols[0] | upper }});
+                        {%- endif %}
+                    {%- endfor %}
+                {%- endif %}
+            {%- endif %}
+            
+            // Send 5 messages to test proper message handling
+            for (int i = 0; i < 5; i++) {
+                producer.send{{ messagename }}(testData).get();
+            }
+            producer.flush();
+            
+            logger.info("5 messages sent, waiting for consumption");
+            
+            // Create consumer to verify messages
+            EventHubConsumerClient consumerClient = new EventHubClientBuilder()
+                .connectionString(eventHubConnectionString)
+                .consumerGroup("$Default")
+                .buildConsumerClient();
+            
+            try {
+                List<PartitionEvent> receivedEvents = new ArrayList<>();
+                int attempts = 0;
+                int maxAttempts = 15;
+                
+                // Get all partition IDs
+                String[] partitionIds = consumerClient.getPartitionIds().stream().toArray(String[]::new);
+                
+                // Try to receive messages from all partitions
+                while (receivedEvents.size() < 5 && attempts < maxAttempts) {
+                    for (String partitionId : partitionIds) {
+                        Iterable<PartitionEvent> events = consumerClient.receiveFromPartition(
+                            partitionId, 
+                            10, 
+                            EventPosition.earliest(), 
+                            Duration.ofSeconds(2)
+                        );
+                        
+                        for (PartitionEvent event : events) {
+                            logger.info("Received message {} from partition {} offset {}", 
+                                receivedEvents.size(), event.getPartitionContext().getPartitionId(), 
+                                event.getData().getOffset());
+                            
+                            assertNotNull(event.getData(), "Event data should not be null");
+                            assertNotNull(event.getData().getBody(), "Message body should not be null");
+                            assertTrue(event.getData().getBody().length > 0, "Message should have content");
+                            receivedEvents.add(event);
+                            
+                            if (receivedEvents.size() >= 5) {
+                                break;
+                            }
+                        }
+                        
+                        if (receivedEvents.size() >= 5) {
+                            break;
+                        }
+                    }
+                    attempts++;
+                }
+                
+                assertEquals(5, receivedEvents.size(), "Should receive all 5 {{ messagename }} messages");
+                logger.info("All 5 {{ messagename }} messages test completed successfully");
+                
+            } finally {
+                consumerClient.close();
+            }
+        } finally {
             producer.close();
-        } catch (Exception e) {
-            logger.error("Error closing producer", e);
-            fail("Failed to close producer: " + e.getMessage());
         }
     }
-    {%- endfor %}
+    
+    {% endfor %}
+    {% endfor %}
 }
