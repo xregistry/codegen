@@ -94,12 +94,19 @@ describe('{{ project_name | strip_dots | pascal }} Service Bus Producer Tests', 
                 target: '/ServiceBus_Emulator/ConfigFiles/Config.json',
                 mode: 'ro'
             }])
+            .withExposedPorts(5672)
             .withEnvironment({
                 'SQL_SERVER': 'sqledge',
                 'MSSQL_SA_PASSWORD': 'StrongPassword!1',
                 'ACCEPT_EULA': 'Y'
             })
             .withStartupTimeout(240000)  // Increased to 4 minutes
+            .withWaitStrategy({
+                async waitUntilReady(): Promise<void> {
+                    // Custom wait strategy that just waits a fixed time
+                    await new Promise(resolve => setTimeout(resolve, 60000));
+                }
+            })
             .start();
         
         console.log('Service Bus emulator container started');
