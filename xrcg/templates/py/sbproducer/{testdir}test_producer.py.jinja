@@ -34,7 +34,7 @@ from {{main_project_name}}.producer import {{class_name}}
 {{ import_statement }}
 {%- endif %}
 {%- set test_class_name = "Test_" + (type_name | pascal | strip_namespace) %}
-{%- set test_module_name = "test_" + (type_name | dotunderscore | lower) %}
+{%- set test_module_name = "test_" + (type_name | strip_namespace | dotunderscore | lower) %}
 {%- set test_import_statement = "from " + test_module_name + " import " + test_class_name %}
 {%- if test_import_statement not in test_imports %}
 {%- set _ = test_imports.append(test_import_statement) %}
