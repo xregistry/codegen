@@ -14,6 +14,8 @@ pytestmark = pytest.mark.skip(reason="EventHub emulator has environment-specific
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../{{data_project_name}}/src')))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../{{data_project_name}}/tests')))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../{{main_project_name}}/src')))
+sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), '../src'.replace('/', os.sep))))
+sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), '../../{{ data_project_name | dotunderscore | lower }}/tests'.replace('/', os.sep))))
 
 import tempfile
 import pytest
@@ -39,11 +41,20 @@ from {{main_project_name}}.producer import {{class_name}}
 {{ import_statement }}
 {%- endif %}
 {%- set test_class_name = "Test_" + (type_name | pascal | strip_namespace) %}
-{%- set test_module_name = "test_" + (type_name | dotunderscore | lower) %}
+{%- set _tmod = (type_name | dotunderscore | lower) %}
+{%- set test_module_name = _tmod if _tmod.startswith('test_') else ('test_' + _tmod) %}
 {%- set test_import_statement = "from " + test_module_name + " import " + test_class_name %}
-{%- if test_import_statement not in test_imports %}
+{%- set alt_module_name = test_module_name[5:] if test_module_name.startswith('test_') else ('test_' + test_module_name) %}
+{%- set alt_import_statement = "from " + alt_module_name + " import " + test_class_name %}
+{%- if test_import_statement not in test_imports and alt_import_statement not in test_imports %}
 {%- set _ = test_imports.append(test_import_statement) %}
-{{ test_import_statement }}
+try:
+    {{ test_import_statement }}
+except Exception:
+    try:
+        {{ alt_import_statement }}
+    except Exception:
+        raise
 {%- endif %}
 {%- endif %}
 {%- endfor %}

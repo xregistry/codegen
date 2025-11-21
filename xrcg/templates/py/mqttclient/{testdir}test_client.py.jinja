@@ -8,7 +8,12 @@ import time
 import paho.mqtt.client as mqtt
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
+import os
+import sys
 import {{ data_project_name | dotunderscore | lower }}
+# Ensure generated data test helper modules are importable (tests are in sibling project)
+sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), '../src'.replace('/', os.sep))))
+sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), '../../{{ data_project_name | dotunderscore | lower }}/tests'.replace('/', os.sep))))
 {%- set messagegroups = root.messagegroups %}
 {%- set imports = [] %}
 {%- set test_imports = [] %}
@@ -23,11 +28,21 @@ import {{ data_project_name | dotunderscore | lower }}
 {{ import_statement }}
 {%- endif %}
 {%- set test_class_name = "Test_" + (type_name | pascal | strip_namespace) %}
-{%- set test_module_name = "test_" + (type_name | dotunderscore | lower) %}
+{%- set _tmod = (type_name | dotunderscore | lower) %}
+{%- set test_module_name = 'test_' + _tmod %}
 {%- set test_import_statement = "from " + test_module_name + " import " + test_class_name %}
-{%- if test_import_statement not in test_imports %}
+{%- set alt_module_name = test_module_name[5:] if test_module_name.startswith('test_') else ('test_' + test_module_name) %}
+{%- set alt_import_statement = "from " + alt_module_name + " import " + test_class_name %}
+{%- if test_import_statement not in test_imports and alt_import_statement not in test_imports %}
 {%- set _ = test_imports.append(test_import_statement) %}
-{{ test_import_statement }}
+try:
+    {{ test_import_statement }}
+except Exception:
+    try:
+        {{ alt_import_statement }}
+    except Exception:
+        # both import attempts failed; raise ImportError at runtime
+        raise
 {%- endif %}
 {%- endif %}
 {%- endfor %}

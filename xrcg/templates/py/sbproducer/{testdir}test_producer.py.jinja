@@ -34,11 +34,20 @@ from {{main_project_name}}.producer import {{class_name}}
 {{ import_statement }}
 {%- endif %}
 {%- set test_class_name = "Test_" + (type_name | pascal | strip_namespace) %}
-{%- set test_module_name = "test_" + (type_name | dotunderscore | lower) %}
+{%- set _tmod = (type_name | dotunderscore | lower) %}
+{%- set test_module_name = _tmod if _tmod.startswith('test_') else ('test_' + _tmod) %}
 {%- set test_import_statement = "from " + test_module_name + " import " + test_class_name %}
-{%- if test_import_statement not in test_imports %}
+{%- set alt_module_name = test_module_name[5:] if test_module_name.startswith('test_') else ('test_' + test_module_name) %}
+{%- set alt_import_statement = "from " + alt_module_name + " import " + test_class_name %}
+{%- if test_import_statement not in test_imports and alt_import_statement not in test_imports %}
 {%- set _ = test_imports.append(test_import_statement) %}
-{{ test_import_statement }}
+try:
+    {{ test_import_statement }}
+except Exception:
+    try:
+        {{ alt_import_statement }}
+    except Exception:
+        raise
 {%- endif %}
 {%- endif %}
 {%- endfor %}
@@ -191,13 +200,16 @@ async def {{ test_function_name | dotunderscore }}(service_bus_emulator):
                 # For structured mode, CloudEvents are in the JSON body
                 # For binary mode, CloudEvents are in application_properties
                 import json
-                # Try structured mode first (body contains CloudEvents)
-                try:
-                    body_data = json.loads(str(msg))
-                    if "type" in body_data:
-                        # Structured mode
-                        assert body_data["type"] == "{{ messageid }}"
-                    else:
+            import pytest
+            import pytest_asyncio
+            from azure.servicebus.aio import ServiceBusClient
+            from azure.servicebus import ServiceBusReceivedMessage
+            from testcontainers.core.container import DockerContainer
+            from testcontainers.core.network import Network
+            from testcontainers.core.waiting_utils import wait_for_logs
+            # Ensure generated data test helper modules are importable
+            sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), '../src'.replace('/', os.sep))))
+            sys.path.append(os.path.realpath(os.path.join(os.path.dirname(__file__), '../../{{ data_project_name | dotunderscore | lower }}/tests'.replace('/', os.sep))))
                         # Binary mode - check application_properties
                         app_props = msg.application_properties or {}
                         assert "cloudEvents:type" in app_props or "cloudEvents_type" in app_props, f"CloudEvents type not found in application_properties: {app_props}"
