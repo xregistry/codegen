@@ -43,7 +43,7 @@ from {{main_project_name}}.dispatcher import {{class_name}}
 {{ import_statement }}
 {%- endif %}
 {%- set test_class_name = "Test_" + (type_name | pascal | strip_namespace) %}
-{%- set test_module_name = "test_" + (type_name | dotunderscore | lower) %}
+{%- set test_module_name = "test_" + (type_name | lstrip("test_") | lstrip("test.") | lstrip("Test.") | lstrip("Test_") | dotunderscore | lower) %}
 {%- set test_import_statement = "from " + test_module_name + " import " + test_class_name %}
 {%- if test_import_statement not in test_imports %}
 {%- set _ = test_imports.append(test_import_statement) %}
