@@ -26,8 +26,9 @@ const QUEUE_NAME = 'myqueue';
 jest.setTimeout(300000);
 
 // Skip Service Bus emulator tests in CI due to port binding timeout issues
-// The Service Bus emulator requires 60-90s to bind port 5672, which exceeds
-// testcontainers default timeout. Set ENABLE_SERVICEBUS_TESTS=true to run locally.
+// The Service Bus emulator requires 60-120+ seconds to bind port 5672, which exceeds
+// testcontainers default timeout even with extended startupTimeout settings.
+// Set ENABLE_SERVICEBUS_TESTS=true to run locally with adequate resources.
 const SKIP_SERVICEBUS_TESTS = process.env.CI === 'true' && process.env.ENABLE_SERVICEBUS_TESTS !== 'true';
 const describeTest = SKIP_SERVICEBUS_TESTS ? describe.skip : describe;
 
@@ -106,6 +107,7 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
                 'MSSQL_SA_PASSWORD': 'StrongPassword!1',
                 'ACCEPT_EULA': 'Y'
             })
+            .withStartupTimeout(120000)  // 120 seconds (2 minutes) for Service Bus emulator initialization
             .start();
         
         console.log('Service Bus emulator container started');
