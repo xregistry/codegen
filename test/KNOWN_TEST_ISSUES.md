@@ -33,11 +33,15 @@ This document tracks tests that are temporarily skipped due to known issues.
 - `test/ts/test_typescript.py::test_sbproducer_inkjet_ts`
 - `test/ts/test_typescript.py::test_sbproducer_lightbulb_ts`
 
-**Root Cause:** The Azure Service Bus emulator requires 60-90+ seconds to fully initialize and bind port 5672. The testcontainers library applies a default `HostPortWaitStrategy` when `.withExposedPorts()` is used, which has a 60 second timeout. In resource-constrained CI environments (GitHub Actions), the emulator consistently times out with "Port 5672 not bound after 60000ms".
+**Root Cause:** The Azure Service Bus emulator requires 150-240+ seconds to fully initialize and bind port 5672. The testcontainers library applies a default `HostPortWaitStrategy` when `.withExposedPorts()` is used. In resource-constrained environments (GitHub Actions, Windows development), the emulator consistently times out even with extended timeouts of 240 seconds (4 minutes).
 
 **Attempted Fixes:**
 1. ✅ Removed explicit wait strategies - timeout persists
-2. ✅ Increased post-startup delays to 90s - timeout occurs before reaching delay
+2. ✅ Increased post-startup delays to 120s - timeout occurs before reaching delay
+3. ✅ Increased withStartupTimeout to 240s (4 minutes) - still times out
+4. ❌ Wait.forLogMessage for "Emulator Service is Successfully Up!" - timeout occurs before message appears
+5. ❌ Custom wait strategy implementation - API incompatibility
+6. ❌ Removing `.withExposedPorts()` - breaks host connectivity
 3. ❌ Custom wait strategy implementation - API incompatibility
 4. ❌ Removing `.withExposedPorts()` - breaks host connectivity
 
