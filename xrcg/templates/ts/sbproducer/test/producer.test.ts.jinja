@@ -26,9 +26,10 @@ const QUEUE_NAME = 'myqueue';
 jest.setTimeout(300000);
 
 // Skip Service Bus emulator tests in CI due to port binding timeout issues
-// The Service Bus emulator requires 60-120+ seconds to bind port 5672, which exceeds
-// testcontainers default timeout even with extended startupTimeout settings.
-// Set ENABLE_SERVICEBUS_TESTS=true to run locally with adequate resources.
+// The Service Bus emulator requires 150-240+ seconds to bind port 5672, which causes
+// testcontainers HostPortWaitStrategy to timeout even with extended startupTimeout settings.
+// This is environment-specific - tests work locally with adequate CPU/memory resources.
+// Set ENABLE_SERVICEBUS_TESTS=true in CI to run tests with extended timeouts if needed.
 const SKIP_SERVICEBUS_TESTS = process.env.CI === 'true' && process.env.ENABLE_SERVICEBUS_TESTS !== 'true';
 const describeTest = SKIP_SERVICEBUS_TESTS ? describe.skip : describe;
 
@@ -91,8 +92,8 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
         await new Promise(resolve => setTimeout(resolve, 15000));
         
         console.log('Starting Service Bus emulator container...');
-        // Start Service Bus emulator container without explicit wait strategy
-        // The container will start and we'll wait with setTimeout instead
+        // Start Service Bus emulator container with extended timeout
+        // The emulator takes 150-180+ seconds to fully initialize and bind port 5672
         serviceBusEmulatorContainer = await new GenericContainer('mcr.microsoft.com/azure-messaging/servicebus-emulator:latest')
             .withNetwork(network)
             .withNetworkAliases('sb-emulator')
@@ -107,14 +108,16 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
                 'MSSQL_SA_PASSWORD': 'StrongPassword!1',
                 'ACCEPT_EULA': 'Y'
             })
-            .withStartupTimeout(120000)  // 120 seconds (2 minutes) for Service Bus emulator initialization
+            .withStartupTimeout(240000)  // 4 minutes for port binding
             .start();
         
         console.log('Service Bus emulator container started');
         
-        // Extended wait for Service Bus emulator to fully initialize
-        // The emulator takes significant time to be ready for connections
-        await new Promise(resolve => setTimeout(resolve, 90000));  // 90 seconds total wait
+        // Extended wait for Service Bus emulator to fully initialize after port binding
+        // Even after port 5672 is bound, the emulator needs additional time to be ready for connections
+        await new Promise(resolve => setTimeout(resolve, 120000));  // 2 minutes additional wait
+        
+        console.log('Service Bus emulator should be ready');
         
         serviceBusConnectionString = 'Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;';
         
@@ -200,6 +203,13 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
                 } finally {
                     await receiver.close();
                 }
+            } catch (error) {
+                console.error(`{{ messagename }} test error:`, error);
+                if (error instanceof Error) {
+                    console.error(`Error message: ${error.message}`);
+                    console.error(`Error stack: ${error.stack}`);
+                }
+                throw error;
             } finally {
                 await producer.close();
                 await serviceBusClient.close();
