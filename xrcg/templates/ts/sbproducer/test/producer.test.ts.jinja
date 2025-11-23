@@ -5,7 +5,7 @@
 // Changes to this file may cause incorrect behavior and will be lost if the code is regenerated.
 
 import { ServiceBusClient, ServiceBusReceiver } from '@azure/service-bus';
-import { GenericContainer, StartedTestContainer, Network } from 'testcontainers';
+import { GenericContainer, StartedTestContainer, Network, Wait } from 'testcontainers';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -23,14 +23,12 @@ import * as {{ data_module_name }} from '../../{{ data_project_name }}/dist/inde
 const QUEUE_NAME = 'myqueue';
 
 // Increased timeout for container startup and tests
-jest.setTimeout(300000);
+jest.setTimeout(360000); // 6 minutes
 
-// Skip Service Bus emulator tests in CI due to port binding timeout issues
-// The Service Bus emulator requires 150-240+ seconds to bind port 5672, which causes
-// testcontainers HostPortWaitStrategy to timeout even with extended startupTimeout settings.
-// This is environment-specific - tests work locally with adequate CPU/memory resources.
-// Set ENABLE_SERVICEBUS_TESTS=true in CI to run tests with extended timeouts if needed.
-const SKIP_SERVICEBUS_TESTS = process.env.CI === 'true' && process.env.ENABLE_SERVICEBUS_TESTS !== 'true';
+// Service Bus emulator tests use log-based wait strategy to detect when the emulator
+// outputs "Service Bus emulator container started and ready" instead of relying on port binding.
+// This should work reliably in CI environments. Set SKIP_SERVICEBUS_TESTS=true to skip if needed.
+const SKIP_SERVICEBUS_TESTS = process.env.SKIP_SERVICEBUS_TESTS === 'true';
 const describeTest = SKIP_SERVICEBUS_TESTS ? describe.skip : describe;
 
 describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Tests', () => {
@@ -92,8 +90,8 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
         await new Promise(resolve => setTimeout(resolve, 15000));
         
         console.log('Starting Service Bus emulator container...');
-        // Start Service Bus emulator container with extended timeout
-        // The emulator takes 150-180+ seconds to fully initialize and bind port 5672
+        // Start Service Bus emulator container using log-based wait strategy
+        // Wait for the specific log message indicating the emulator is ready
         serviceBusEmulatorContainer = await new GenericContainer('mcr.microsoft.com/azure-messaging/servicebus-emulator:latest')
             .withNetwork(network)
             .withNetworkAliases('sb-emulator')
@@ -108,14 +106,14 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
                 'MSSQL_SA_PASSWORD': 'StrongPassword!1',
                 'ACCEPT_EULA': 'Y'
             })
-            .withStartupTimeout(240000)  // 4 minutes for port binding
+            .withWaitStrategy(Wait.forLogMessage(/Service Bus emulator container started and ready/))
+            .withStartupTimeout(300000)  // 5 minutes for full initialization
             .start();
         
         console.log('Service Bus emulator container started');
         
-        // Extended wait for Service Bus emulator to fully initialize after port binding
-        // Even after port 5672 is bound, the emulator needs additional time to be ready for connections
-        await new Promise(resolve => setTimeout(resolve, 120000));  // 2 minutes additional wait
+        // Brief pause to ensure emulator is fully accepting connections
+        await new Promise(resolve => setTimeout(resolve, 5000));
         
         console.log('Service Bus emulator should be ready');
         
