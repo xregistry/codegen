@@ -5,7 +5,7 @@
 // Changes to this file may cause incorrect behavior and will be lost if the code is regenerated.
 
 import { ServiceBusClient, ServiceBusReceiver } from '@azure/service-bus';
-import { GenericContainer, StartedTestContainer, Network, Wait } from 'testcontainers';
+import { GenericContainer, StartedTestContainer, Network, StartedNetwork, Wait } from 'testcontainers';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -26,7 +26,7 @@ const QUEUE_NAME = 'myqueue';
 jest.setTimeout(360000); // 6 minutes
 
 // Service Bus emulator tests use log-based wait strategy to detect when the emulator
-// outputs "Service Bus emulator container started and ready" instead of relying on port binding.
+// outputs "Emulator Service is Successfully Up!" instead of relying on port binding.
 // This should work reliably in CI environments. Set SKIP_SERVICEBUS_TESTS=true to skip if needed.
 const SKIP_SERVICEBUS_TESTS = process.env.SKIP_SERVICEBUS_TESTS === 'true';
 const describeTest = SKIP_SERVICEBUS_TESTS ? describe.skip : describe;
@@ -34,7 +34,7 @@ const describeTest = SKIP_SERVICEBUS_TESTS ? describe.skip : describe;
 describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Tests', () => {
     let sqlEdgeContainer: StartedTestContainer;
     let serviceBusEmulatorContainer: StartedTestContainer;
-    let network: Network;
+    let network: StartedNetwork;
     let serviceBusConnectionString: string;
     let configFilePath: string;
     
@@ -106,21 +106,21 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
                 'MSSQL_SA_PASSWORD': 'StrongPassword!1',
                 'ACCEPT_EULA': 'Y'
             })
-            .withWaitStrategy(Wait.forLogMessage(/Service Bus emulator container started and ready/))
+            .withWaitStrategy(Wait.forLogMessage(/.*Emulator Service is Successfully Up!.*/))
             .withStartupTimeout(300000)  // 5 minutes for full initialization
             .start();
         
         console.log('Service Bus emulator container started');
         
-        // Brief pause to ensure emulator is fully accepting connections
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Brief pause to ensure emulator is fully accepting connections after log message
+        await new Promise(resolve => setTimeout(resolve, 15000));
         
         console.log('Service Bus emulator should be ready');
         
         serviceBusConnectionString = 'Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;';
         
         console.log('Test environment ready');
-    }, 300000);
+    }, 360000);  // 6 minutes - must be longer than container startup timeout
     
     afterAll(async () => {
         console.log('Cleaning up test environment...');
@@ -169,7 +169,14 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
                 
                 // Send 5 messages to test proper message handling
                 for (let i = 0; i < 5; i++) {
-                    await producer.send{{ messagename }}(testData);
+                    await producer.send{{ messagename }}(
+                        testData
+                        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+                        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %},
+                        `test_{{ placeholder }}_${i}`
+                        {%- endfor %}
+                        {%- endfor %}
+                    );
                 }
                 
                 console.log('{{ messagename }}: 5 messages sent successfully');
