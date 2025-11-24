@@ -102,6 +102,7 @@ export class ServiceBusProcessor {
             this.receiver = null;
         }
         
-        await this.client.close();
+        // Note: Don't close the client here as it may be shared across multiple processors
+        // The client should be closed by the caller when all processing is complete
     }
 }

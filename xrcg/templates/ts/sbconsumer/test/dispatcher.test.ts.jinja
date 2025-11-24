@@ -107,7 +107,7 @@ describeTest('{{ test_class_name }}', () => {
             .start();
 
         // Get the mapped port for Service Bus
-        const sbPort = serviceBusEmulatorContainer.getMappedPort(5672);
+        const sbPort = sbEmulatorContainer.getMappedPort(5672);
 
         // Additional delay for emulator to fully initialize
         // Tests show emulator needs extra time after log message before accepting connections
