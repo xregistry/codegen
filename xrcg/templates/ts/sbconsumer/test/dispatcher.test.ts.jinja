@@ -181,7 +181,7 @@ describeTest('{{ test_class_name }}', () => {
         const httpMessage = HTTP.binary(testEvent);
         const sbMessage = {
             body: httpMessage.body,
-            contentType: 'application/cloudevents+json',
+            contentType: httpMessage.headers['content-type'] || 'application/json',
             applicationProperties: httpMessage.headers
         };
         

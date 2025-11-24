@@ -16,7 +16,7 @@ import { CloudEvent, HTTP } from 'cloudevents';
 import * as {{ data_module_name }} from '../../{{ data_project_name }}/dist/index.js';
 
 {% for messagegroupid, messagegroup in messagegroups.items() -%}
-{%- set uses_cloudevents_message = cloudEvents.usesCloudEvents(messagegroup) %}
+{%- set uses_cloudevents_message = (messagegroup | exists("envelope","CloudEvents")) %}
 {%- set messagegroupname = messagegroupid | pascal -%}
 {%- set class_name = (messagegroupname | strip_namespace) + "EventDispatcher" %}
 
@@ -66,10 +66,12 @@ export class {{ class_name }} {
             return true;
         }
         
-        // Check for binary mode CloudEvent
-        if (message.applicationProperties && 
-            message.applicationProperties['cloudEvents:specversion']) {
-            return true;
+        // Check for binary mode CloudEvent (supports both ce_ and cloudEvents: prefixes)
+        if (message.applicationProperties) {
+            const props = message.applicationProperties;
+            if (props['ce_specversion'] || props['cloudEvents:specversion'] || props['cloudEvents_specversion']) {
+                return true;
+            }
         }
         
         return false;
@@ -85,25 +87,29 @@ export class {{ class_name }} {
         if (contentType && contentType.startsWith('application/cloudevents+json')) {
             const body = message.body;
             if (typeof body === 'string') {
-                return HTTP.toEvent({ body, headers: {} });
+                return HTTP.toEvent({ body, headers: {} }) as CloudEvent;
             } else if (Buffer.isBuffer(body)) {
-                return HTTP.toEvent({ body: body.toString(), headers: {} });
+                return HTTP.toEvent({ body: body.toString(), headers: {} }) as CloudEvent;
             } else if (typeof body === 'object') {
                 return new CloudEvent(body);
             }
         }
         
-        // Binary mode
+        // Binary mode (supports ce_ and cloudEvents: prefixes)
         const props = message.applicationProperties || {};
-        return new CloudEvent({
-            specversion: (props['cloudEvents:specversion'] || props['cloudEvents_specversion']) as string,
-            type: (props['cloudEvents:type'] || props['cloudEvents_type']) as string,
-            source: (props['cloudEvents:source'] || props['cloudEvents_source']) as string,
-            id: (props['cloudEvents:id'] || props['cloudEvents_id']) as string,
-            time: props['cloudEvents:time'] || props['cloudEvents_time'],
+        const timeValue = props['ce_time'] || props['cloudEvents:time'] || props['cloudEvents_time'];
+        const ceData: any = {
+            specversion: (props['ce_specversion'] || props['cloudEvents:specversion'] || props['cloudEvents_specversion']) as string,
+            type: (props['ce_type'] || props['cloudEvents:type'] || props['cloudEvents_type']) as string,
+            source: (props['ce_source'] || props['cloudEvents:source'] || props['cloudEvents_source']) as string,
+            id: (props['ce_id'] || props['cloudEvents:id'] || props['cloudEvents_id']) as string,
             datacontenttype: message.contentType || 'application/json',
             data: message.body
-        });
+        };
+        if (timeValue) {
+            ceData.time = String(timeValue);
+        }
+        return new CloudEvent(ceData);
     }
     
     /**
