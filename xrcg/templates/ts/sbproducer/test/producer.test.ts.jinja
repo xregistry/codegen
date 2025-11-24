@@ -165,7 +165,7 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
             console.log('Testing {{ messagename }} message...');
             
             const serviceBusClient = new ServiceBusClient(serviceBusConnectionString);
-            const producer = new {{ class_name }}(serviceBusClient, QUEUE_NAME);
+            const producer = new {{ class_name }}(serviceBusClient, QUEUE_NAME, 'binary');
             
             try {
                 // Create test data
