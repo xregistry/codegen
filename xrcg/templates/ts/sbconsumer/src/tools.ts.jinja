@@ -36,7 +36,13 @@ export class ServiceBusProcessor {
      */
     async startQueue(queueName: string): Promise<void> {
         this.receiver = this.client.createReceiver(queueName);
-        await this.startProcessing();
+        // Start processing in background (don't await)
+        this.startProcessing().catch(err => {
+            console.error('Processing loop error:', err);
+            if (this.processError) {
+                this.processError(err);
+            }
+        });
     }
     
     /**
@@ -46,7 +52,13 @@ export class ServiceBusProcessor {
      */
     async startSubscription(topicName: string, subscriptionName: string): Promise<void> {
         this.receiver = this.client.createReceiver(topicName, subscriptionName);
-        await this.startProcessing();
+        // Start processing in background (don't await)
+        this.startProcessing().catch(err => {
+            console.error('Processing loop error:', err);
+            if (this.processError) {
+                this.processError(err);
+            }
+        });
     }
     
     /**
@@ -102,6 +114,7 @@ export class ServiceBusProcessor {
             this.receiver = null;
         }
         
-        await this.client.close();
+        // Note: Don't close the client here as it may be shared across multiple processors
+        // The client should be closed by the caller when all processing is complete
     }
 }

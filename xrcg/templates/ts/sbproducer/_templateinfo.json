@@ -1,5 +1,6 @@
 {
   "description": "TypeScript Azure Service Bus Producer",
   "template_kind": "producer",
-  "main_project_name": "{project_name}ServiceBusProducer"
+  "main_project_name": "{project_name}ServiceBusProducer",
+  "data_project_name": "{project_name}Data"
 }
