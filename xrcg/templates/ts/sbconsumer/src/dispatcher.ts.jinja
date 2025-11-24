@@ -42,7 +42,7 @@ export class {{ class_name }} {
      * Process a Service Bus message
      * @param message The Service Bus received message
      */
-    async processMessage(message: ServiceBusReceivedMessage): Promise<void> {
+    public async processMessage(message: ServiceBusReceivedMessage): Promise<void> {
         {%- if uses_cloudevents_message %}
         if (this.isCloudEvent(message)) {
             const cloudEvent = this.cloudEventFromServiceBusMessage(message);
@@ -66,10 +66,10 @@ export class {{ class_name }} {
             return true;
         }
         
-        // Check for binary mode CloudEvent (supports both ce_ and cloudEvents: prefixes)
+        // Check for binary mode CloudEvent (supports ce-, ce_, cloudEvents:, and cloudEvents_ prefixes)
         if (message.applicationProperties) {
             const props = message.applicationProperties;
-            if (props['ce_specversion'] || props['cloudEvents:specversion'] || props['cloudEvents_specversion']) {
+            if (props['ce-specversion'] || props['ce_specversion'] || props['cloudEvents:specversion'] || props['cloudEvents_specversion']) {
                 return true;
             }
         }
@@ -95,14 +95,14 @@ export class {{ class_name }} {
             }
         }
         
-        // Binary mode (supports ce_ and cloudEvents: prefixes)
+        // Binary mode (supports ce-, ce_, cloudEvents:, and cloudEvents_ prefixes)
         const props = message.applicationProperties || {};
-        const timeValue = props['ce_time'] || props['cloudEvents:time'] || props['cloudEvents_time'];
+        const timeValue = props['ce-time'] || props['ce_time'] || props['cloudEvents:time'] || props['cloudEvents_time'];
         const ceData: any = {
-            specversion: (props['ce_specversion'] || props['cloudEvents:specversion'] || props['cloudEvents_specversion']) as string,
-            type: (props['ce_type'] || props['cloudEvents:type'] || props['cloudEvents_type']) as string,
-            source: (props['ce_source'] || props['cloudEvents:source'] || props['cloudEvents_source']) as string,
-            id: (props['ce_id'] || props['cloudEvents:id'] || props['cloudEvents_id']) as string,
+            specversion: (props['ce-specversion'] || props['ce_specversion'] || props['cloudEvents:specversion'] || props['cloudEvents_specversion']) as string,
+            type: (props['ce-type'] || props['ce_type'] || props['cloudEvents:type'] || props['cloudEvents_type']) as string,
+            source: (props['ce-source'] || props['ce_source'] || props['cloudEvents:source'] || props['cloudEvents_source']) as string,
+            id: (props['ce-id'] || props['ce_id'] || props['cloudEvents:id'] || props['cloudEvents_id']) as string,
             datacontenttype: message.contentType || 'application/json',
             data: message.body
         };
