@@ -106,11 +106,14 @@ describeTest('{{ test_class_name }}', () => {
             .withStartupTimeout(300000)
             .start();
 
+        // Get the mapped port for Service Bus
+        const sbPort = serviceBusEmulatorContainer.getMappedPort(5672);
+
         // Additional delay for emulator to fully initialize
         // Tests show emulator needs extra time after log message before accepting connections
         await new Promise(resolve => setTimeout(resolve, 15000));
 
-        const connectionString = 'Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;';
+        const connectionString = `Endpoint=sb://localhost:${sbPort};SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;`;
         client = new ServiceBusClient(connectionString);
         sender = client.createSender(QUEUE_NAME);
     }, 360000); // 6 minutes for full container startup

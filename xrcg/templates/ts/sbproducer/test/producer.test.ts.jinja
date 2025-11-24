@@ -112,12 +112,16 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
         
         console.log('Service Bus emulator container started');
         
+        // Get the mapped port for Service Bus
+        const sbPort = serviceBusEmulatorContainer.getMappedPort(5672);
+        console.log(`Service Bus emulator mapped to port ${sbPort}`);
+        
         // Brief pause to ensure emulator is fully accepting connections after log message
         await new Promise(resolve => setTimeout(resolve, 15000));
         
         console.log('Service Bus emulator should be ready');
         
-        serviceBusConnectionString = 'Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;';
+        serviceBusConnectionString = `Endpoint=sb://localhost:${sbPort};SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;`;
         
         console.log('Test environment ready');
     }, 360000);  // 6 minutes - must be longer than container startup timeout
