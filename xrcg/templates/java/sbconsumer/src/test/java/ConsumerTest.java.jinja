@@ -11,12 +11,14 @@ package {{ package_name }};
 import com.azure.messaging.servicebus.ServiceBusClientBuilder;
 import com.azure.messaging.servicebus.ServiceBusProcessorClient;
 import com.azure.messaging.servicebus.ServiceBusReceivedMessageContext;
-import com.azure.messaging.servicebus.ServiceBusClient;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import com.azure.messaging.servicebus.ServiceBusMessage;
 import org.junit.jupiter.api.*;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
+import com.github.dockerjava.api.model.PortBinding;
+import com.github.dockerjava.api.model.Ports;
+import com.github.dockerjava.api.model.ExposedPort;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -123,12 +125,17 @@ public class ConsumerTest {
         sqlEdgeContainer.start();
         logger.info("SQL Edge started");
         
-        // Start Service Bus emulator container
+        // Start Service Bus emulator container with fixed port binding
         serviceBusEmulatorContainer = new GenericContainer<>("mcr.microsoft.com/azure-messaging/servicebus-emulator:latest")
             .withCopyFileToContainer(MountableFile.forHostPath(emulatorConfigPath), "/ServiceBus_Emulator/ConfigFiles/Config.json")
             .withNetwork(network)
             .withNetworkAliases("sb-emulator")
             .withExposedPorts(5672)
+            .withCreateContainerCmdModifier(cmd -> cmd.withHostConfig(
+                cmd.getHostConfig().withPortBindings(
+                    new PortBinding(Ports.Binding.bindPort(5672), new ExposedPort(5672))
+                )
+            ))
             .withEnv("SQL_SERVER", "sqledge")
             .withEnv("MSSQL_SA_PASSWORD", "StrongPassword!1")
             .withEnv("ACCEPT_EULA", "Y")
@@ -137,14 +144,14 @@ public class ConsumerTest {
         
         serviceBusEmulatorContainer.start();
         
-        // Build Service Bus connection string (Java SDK doesn't support UseDevelopmentEmulator parameter)
-        serviceBusConnectionString = "Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;";
+        // Build Service Bus connection string with UseDevelopmentEmulator=true
+        serviceBusConnectionString = "Endpoint=sb://127.0.0.1;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;";
         
         logger.info("Service Bus emulator started successfully");
         
-        // Wait a bit for the emulator to settle
+        // Wait for the emulator to fully settle (matches C# implementation timing)
         try {
-            Thread.sleep(5000);
+            Thread.sleep(45000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -238,11 +245,11 @@ public class ConsumerTest {
             Thread.sleep(2000);
             
             // Create sender client to send test messages
-            ServiceBusClient client = new ServiceBusClientBuilder()
+            ServiceBusSenderClient sender = new ServiceBusClientBuilder()
                 .connectionString(serviceBusConnectionString)
+                .sender()
+                .queueName("myqueue")
                 .buildClient();
-            
-            ServiceBusSenderClient sender = client.createSender("myqueue");
             
             try {
                 // Create test data
@@ -281,7 +288,7 @@ public class ConsumerTest {
                             {%- elif fieldtype == "enum" %}
                                 {%- set enum_namespace = field.type.namespace if field.type.namespace else avroSchema.namespace %}
                                 {%- set normalized_namespace = (data_project_name | lower | replace('-', '_')) + '.' + (enum_namespace | lower | replace('.', '.') if enum_namespace else '') %}
-                testData.set{{ field.name | pascal }}({{ normalized_namespace }}.{{ field.type.name }}.{{ field.type.symbols[0] | upper }});
+                testData.set{{ field.name | pascal }}({{ normalized_namespace }}.{{ field.type.name }}.{{ field.type.symbols[0] }});
                             {%- endif %}
                         {%- endfor %}
                     {%- endif %}
@@ -306,7 +313,6 @@ public class ConsumerTest {
                 
             } finally {
                 sender.close();
-                client.close();
             }
             
             // Wait for all messages to be processed (max 30 seconds)

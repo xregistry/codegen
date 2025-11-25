@@ -425,6 +425,52 @@ def test_mqttclient_lightbulb_java():
     )
 
 
+# Service Bus Consumer Tests
+
+def test_sbconsumer_contoso_erp_java():
+    """Test the Service Bus consumer for Contoso ERP."""
+    tmpdirname = tempfile.mkdtemp()
+    run_java_test(
+        os.path.join(project_root, "test/xreg/contoso-erp.xreg.json"),
+        tmpdirname,
+        "TestProject",
+        "sbconsumer"
+    )
+
+
+def test_sbconsumer_fabrikam_motorsports_java():
+    """Test the Service Bus consumer for Fabrikam Motorsports."""
+    tmpdirname = tempfile.mkdtemp()
+    run_java_test(
+        os.path.join(project_root, "test/xreg/fabrikam-motorsports.xreg.json"),
+        tmpdirname,
+        "TestProject",
+        "sbconsumer"
+    )
+
+
+def test_sbconsumer_inkjet_java():
+    """Test the Service Bus consumer for Inkjet."""
+    tmpdirname = tempfile.mkdtemp()
+    run_java_test(
+        os.path.join(project_root, "test/xreg/inkjet.xreg.json"),
+        tmpdirname,
+        "TestProject",
+        "sbconsumer"
+    )
+
+
+def test_sbconsumer_lightbulb_java():
+    """Test the Service Bus consumer for Lightbulb."""
+    tmpdirname = tempfile.mkdtemp()
+    run_java_test(
+        os.path.join(project_root, "test/xreg/lightbulb.xreg.json"),
+        tmpdirname,
+        "TestProject",
+        "sbconsumer"
+    )
+
+
 if __name__ == "__main__":
     # Allow running individual tests from command line
     pytest.main([__file__, "-v"])
