@@ -72,10 +72,46 @@ jobs:
       working-directory: ./xrcg_vscode
       run: npm install
 
+    - name: Validate package.json for duplicates
+      working-directory: ./xrcg_vscode
+      run: |
+        python3 -c "
+import json
+import sys
+
+with open('package.json', 'r') as f:
+    data = json.load(f)
+
+commands = data.get('contributes', {}).get('commands', [])
+command_ids = [c.get('command') for c in commands]
+duplicates = set([x for x in command_ids if command_ids.count(x) > 1])
+
+if duplicates:
+    print(f'ERROR: Duplicate command IDs found: {duplicates}', file=sys.stderr)
+    sys.exit(1)
+
+titles = [c.get('title') for c in commands]
+dup_titles = set([x for x in titles if titles.count(x) > 1])
+
+if dup_titles:
+    print(f'ERROR: Duplicate command titles found: {dup_titles}', file=sys.stderr)
+    sys.exit(1)
+
+menus = data.get('contributes', {}).get('menus', {})
+for menu_name, items in menus.items():
+    menu_cmds = [i.get('command') for i in items if 'command' in i]
+    dup_menu = set([x for x in menu_cmds if menu_cmds.count(x) > 1])
+    if dup_menu:
+        print(f'ERROR: Duplicate menu commands in {menu_name}: {dup_menu}', file=sys.stderr)
+        sys.exit(1)
+
+print(f'✓ Validated {len(commands)} commands with no duplicates')
+"
+
     - name: Build extension
       working-directory: ./xrcg_vscode
       run: |
-        npm run compile
+        npm run esbuild
         vsce package
 
     - name: Display extension information

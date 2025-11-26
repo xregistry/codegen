@@ -114,3 +114,8 @@ typings/
 # You can create a local .gitignore file to override the global one.
 # See https://help.github.com/articles/ignoring-files/#create-a-local-git
 
+# VS Code extension packages
+*.vsix
+
+# Build output
+dist/
