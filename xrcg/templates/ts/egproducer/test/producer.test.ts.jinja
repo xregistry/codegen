@@ -4,8 +4,9 @@
 // Changes to this file may cause incorrect behavior and will be lost if the code is regenerated.
 
 {%- set messagegroups = root.messagegroups %}
+{%- set data_module_name = data_project_name | strip_invalid_identifier_characters %}
 
-import * as {{ data_project_name }} from '../../{{ data_project_name }}/dist/index.js';
+import * as {{ data_module_name }} from '../../{{ data_project_name }}/dist/index.js';
 import { {% for messagegroupid, messagegroup in messagegroups.items() -%}{%- set class_name = (messagegroupid | pascal | strip_namespace) + "EventGridProducer" %}{{ class_name }}{% if not loop.last %}, {% endif %}{% endfor %} } from '../src';
 import nock from 'nock';
 
@@ -41,18 +42,29 @@ describe('{{ test_class_name }}', () => {
     {%- for messageid, message in message_list[:3] %}
     {%- set messagename = messageid | strip_namespace | pascal %}
     {%- set body_type = util.body_type(data_project_name, root, message) %}
+    {%- set ce_type = message.envelopemetadata.type.value if message.envelopemetadata.type is defined and message.envelopemetadata.type.value is defined else "" %}
     
-    test('should send {{ messagename }} message successfully', async () => {
-        // Mock Event Grid API endpoint to accept CloudEvents
+    test('should send {{ messagename }} message with valid CloudEvents structure', async () => {
+        // Capture the request body for validation
+        let capturedBody: any = null;
+        
+        // Mock Event Grid API endpoint to accept CloudEvents and capture the request body
         const scope = nock(baseUrl)
-            .post(endpointPath)
+            .post(endpointPath, (body: any) => {
+                capturedBody = body;
+                return true; // Accept any body
+            })
             .query(true)  // Accept any query parameters
             .reply(200, { value: [] });
         
         const producer = new {{ class_name }}(EVENT_GRID_ENDPOINT, EVENT_GRID_ACCESS_KEY);
         
-        // Create test data with minimal valid structure
-        const testData = {} as {{ body_type }};
+        // Create test data - using object literal with test values
+        // The producer will serialize this as the CloudEvent data payload
+        const testData: {{ body_type }} = {
+            testField: 'test-value',
+            timestamp: new Date().toISOString()
+        } as {{ body_type }};
         
         // Extract required parameters from message metadata
         {%- set has_uri_template_params = false %}
@@ -76,23 +88,55 @@ describe('{{ test_class_name }}', () => {
         
         // Verify the HTTP call was made
         expect(scope.isDone()).toBe(true);
+        
+        // Validate the CloudEvents structure
+        expect(capturedBody).toBeDefined();
+        expect(Array.isArray(capturedBody)).toBe(true);
+        expect(capturedBody.length).toBe(1);
+        
+        const cloudEvent = capturedBody[0];
+        
+        // Verify required CloudEvents attributes
+        expect(cloudEvent.specversion).toBe('1.0');
+        expect(cloudEvent.id).toBeDefined();
+        expect(typeof cloudEvent.id).toBe('string');
+        expect(cloudEvent.id.length).toBeGreaterThan(0);
+        {%- if ce_type %}
+        expect(cloudEvent.type).toBe('{{ ce_type }}');
+        {%- else %}
+        expect(cloudEvent.type).toBeDefined();
+        {%- endif %}
+        expect(cloudEvent.source).toBeDefined();
+        expect(cloudEvent.datacontenttype).toBe('application/json');
+        
+        // Verify the data payload is included and contains our test data
+        expect(cloudEvent.data).toBeDefined();
+        expect(typeof cloudEvent.data).toBe('object');
+        expect(cloudEvent.data.testField).toBe('test-value');
     });
     
-    test('should send {{ messagename }} batch successfully', async () => {
-        // Mock Event Grid API endpoint to accept CloudEvents
+    test('should send {{ messagename }} batch with valid CloudEvents structure', async () => {
+        // Capture the request body for validation
+        let capturedBody: any = null;
+        const batchSize = 3;
+        
+        // Mock Event Grid API endpoint to accept CloudEvents and capture the request body
         const scope = nock(baseUrl)
-            .post(endpointPath)
+            .post(endpointPath, (body: any) => {
+                capturedBody = body;
+                return true; // Accept any body
+            })
             .query(true)  // Accept any query parameters
             .reply(200, { value: [] });
         
         const producer = new {{ class_name }}(EVENT_GRID_ENDPOINT, EVENT_GRID_ACCESS_KEY);
         
-        // Create test data array with minimal valid structure
-        const testDataArray = [
-            {} as {{ body_type }},
-            {} as {{ body_type }},
-            {} as {{ body_type }}
-        ];
+        // Create test data array with test values
+        const testDataArray: {{ body_type }}[] = Array.from({ length: batchSize }, (_, i) => ({
+            testField: `test-value-${i}`,
+            batchIndex: i,
+            timestamp: new Date().toISOString()
+        } as {{ body_type }}));
         
         // Extract required parameters from message metadata
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
@@ -112,6 +156,40 @@ describe('{{ test_class_name }}', () => {
         
         // Verify the HTTP call was made
         expect(scope.isDone()).toBe(true);
+        
+        // Validate the CloudEvents batch structure
+        expect(capturedBody).toBeDefined();
+        expect(Array.isArray(capturedBody)).toBe(true);
+        expect(capturedBody.length).toBe(batchSize);
+        
+        // Verify each CloudEvent in the batch
+        for (let i = 0; i < batchSize; i++) {
+            const cloudEvent = capturedBody[i];
+            
+            // Verify required CloudEvents attributes
+            expect(cloudEvent.specversion).toBe('1.0');
+            expect(cloudEvent.id).toBeDefined();
+            expect(typeof cloudEvent.id).toBe('string');
+            expect(cloudEvent.id.length).toBeGreaterThan(0);
+            {%- if ce_type %}
+            expect(cloudEvent.type).toBe('{{ ce_type }}');
+            {%- else %}
+            expect(cloudEvent.type).toBeDefined();
+            {%- endif %}
+            expect(cloudEvent.source).toBeDefined();
+            expect(cloudEvent.datacontenttype).toBe('application/json');
+            
+            // Verify the data payload is included and contains our test data
+            expect(cloudEvent.data).toBeDefined();
+            expect(typeof cloudEvent.data).toBe('object');
+            expect(cloudEvent.data.testField).toBe(`test-value-${i}`);
+            expect(cloudEvent.data.batchIndex).toBe(i);
+        }
+        
+        // Verify all events have unique IDs
+        const ids = capturedBody.map((e: any) => e.id);
+        const uniqueIds = new Set(ids);
+        expect(uniqueIds.size).toBe(batchSize);
     });
     {%- endfor %}
 });
