@@ -14,6 +14,7 @@ Exit code 1 indicates failure (duplicates found).
 import json
 import sys
 import argparse
+from collections import Counter
 from pathlib import Path
 
 
@@ -31,7 +32,7 @@ def validate_package_json(package_json_path: Path) -> bool:
     # Check for duplicate command IDs
     commands = data.get('contributes', {}).get('commands', [])
     command_ids = [c.get('command') for c in commands]
-    duplicates = set([x for x in command_ids if command_ids.count(x) > 1])
+    duplicates = [item for item, count in Counter(command_ids).items() if count > 1]
     
     if duplicates:
         print(f'ERROR: Duplicate command IDs found: {duplicates}', file=sys.stderr)
@@ -39,7 +40,7 @@ def validate_package_json(package_json_path: Path) -> bool:
     
     # Check for duplicate titles
     titles = [c.get('title') for c in commands]
-    dup_titles = set([x for x in titles if titles.count(x) > 1])
+    dup_titles = [item for item, count in Counter(titles).items() if count > 1]
     
     if dup_titles:
         print(f'ERROR: Duplicate command titles found: {dup_titles}', file=sys.stderr)
@@ -49,7 +50,7 @@ def validate_package_json(package_json_path: Path) -> bool:
     menus = data.get('contributes', {}).get('menus', {})
     for menu_name, items in menus.items():
         menu_cmds = [i.get('command') for i in items if 'command' in i]
-        dup_menu = set([x for x in menu_cmds if menu_cmds.count(x) > 1])
+        dup_menu = [item for item, count in Counter(menu_cmds).items() if count > 1]
         if dup_menu:
             print(f'ERROR: Duplicate menu commands in {menu_name}: {dup_menu}', file=sys.stderr)
             has_errors = True
