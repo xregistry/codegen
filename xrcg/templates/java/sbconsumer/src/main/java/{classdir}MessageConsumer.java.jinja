@@ -22,7 +22,9 @@ import java.net.URI;
 
 {%- for messageid, message in messagegroup.messages.items() %}
 {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
+{%- if '.' in message_body_type %}
 import {{ message_body_type.rsplit('.', 1)[0] }}.*;
+{%- endif %}
 {%- endfor %}
 
 {%- set consumer_class = (groupname | strip_namespace) ~ 'MessageConsumer' %}
@@ -49,20 +51,27 @@ public abstract class {{ consumer_class }} {
         try {
             byte[] bodyData = messageContext.getMessage().getBody().toBytes();
             String contentType = messageContext.getMessage().getContentType();
+            String mediaType = contentType != null ? contentType.split(";")[0].trim().toLowerCase() : "application/json";
             
             {%- if cloudEvents.usesCloudEvents(root) %}
             // Check if this is a CloudEvents message (binary content mode)
             if (messageContext.getMessage().getApplicationProperties().containsKey(CE_PREFIX + "type")) {
-                processCloudEvent(messageContext);
+                var properties = messageContext.getMessage().getApplicationProperties();
+                String ceType = (String) properties.get(CE_PREFIX + "type");
+                String dataContentType = (String) properties.getOrDefault(CE_PREFIX + "datacontenttype", "application/json");
+                dispatchByType(ceType, bodyData, dataContentType, messageContext);
                 return;
             }
             {%- endif %}
             
-            // Process as plain Service Bus message
-            dispatchMessage(bodyData, contentType, messageContext);
-            
-            // Complete the message after successful processing
-            messageContext.complete();
+            // Process as plain Service Bus message - dispatch by subject
+            String subject = messageContext.getMessage().getSubject();
+            if (subject != null && !subject.isEmpty()) {
+                dispatchByType(subject, bodyData, mediaType, messageContext);
+            } else {
+                logger.warn("Message has no subject, cannot dispatch");
+                handleError(new IllegalArgumentException("Message has no subject"), messageContext);
+            }
             
         } catch (Exception ex) {
             logger.error("Error processing message", ex);
@@ -70,44 +79,35 @@ public abstract class {{ consumer_class }} {
         }
     }
 
-    {%- if cloudEvents.usesCloudEvents(root) %}
     /**
-     * Process a CloudEvents message in binary content mode.
+     * Dispatch the message to the appropriate handler based on message type/subject.
      */
-    private void processCloudEvent(ServiceBusReceivedMessageContext messageContext) throws Exception {
-        // Extract CloudEvent attributes from application properties
-        var properties = messageContext.getMessage().getApplicationProperties();
-        String ceType = (String) properties.get(CE_PREFIX + "type");
-        
-        byte[] bodyData = messageContext.getMessage().getBody().toBytes();
-        String dataContentType = (String) properties.getOrDefault(CE_PREFIX + "datacontenttype", "application/json");
-        
-        dispatchMessage(bodyData, dataContentType, messageContext);
-    }
-    {%- endif %}
-
-    /**
-     * Dispatch the message to the appropriate handler based on content type.
-     */
-    private void dispatchMessage(byte[] bodyData, String contentType, ServiceBusReceivedMessageContext messageContext) throws Exception {
-        String mediaType = contentType != null ? contentType.split(";")[0].trim().toLowerCase() : "application/json";
-        
+    private void dispatchByType(String messageType, byte[] bodyData, String contentType, ServiceBusReceivedMessageContext messageContext) throws Exception {
+        switch (messageType) {
         {%- for messageid, message in messagegroup.messages.items() %}
         {%- set messagename = messageid | pascal | strip_namespace %}
         {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
-        {%- set dataschema = message.dataschemaformat if message.dataschemaformat else message.metadataschemaformat if message.metadataschemaformat else messagegroup.dataschemaformat if messagegroup.dataschemaformat else "JSON" %}
-        
-        // Try {{ messagename }}
-        try {
-            {{ message_body_type }} data = {{ message_body_type }}.fromData(bodyData, mediaType);
-            on{{ messagename }}(data, messageContext);
-            return;
-        } catch (Exception ex) {
-            logger.trace("Message does not match {{ messagename }} schema", ex);
-        }
+        {%- set ce_type_value = message.envelopemetadata["type"]["value"] if "type" in message.envelopemetadata and "value" in message.envelopemetadata["type"] else None %}
+        {%- if ce_type_value and ce_type_value != messageid %}
+            case "{{ ce_type_value }}":
+        {%- endif %}
+            case "{{ messageid }}":
+                {
+                    {%- if message_body_type == "byte[]" %}
+                    byte[] data = bodyData;
+                    {%- else %}
+                    {{ message_body_type }} data = {{ message_body_type }}.fromData(bodyData, contentType);
+                    {%- endif %}
+                    on{{ messagename }}(data, messageContext);
+                    messageContext.complete();
+                }
+                break;
         {%- endfor %}
-        
-        logger.warn("Received message does not match any known schema");
+            default:
+                logger.warn("Unknown message type: {}", messageType);
+                handleError(new IllegalArgumentException("Unknown message type: " + messageType), messageContext);
+                break;
+        }
     }
 
     {%- for messageid, message in messagegroup.messages.items() %}

@@ -138,20 +138,59 @@ pytestmark = pytest.mark.skip(reason="EventHub emulator has environment-specific
 - Alternative: Add `asyncio_mode = "auto"` to `[tool.pytest.ini_options]` in `pyproject.toml.jinja`
 
 **Fix Applied:** Added `[tool.pytest.ini_options]` with `asyncio_mode = "auto"` to pyproject.toml templates:
-- ✅ `xregistry/templates/py/kafkaproducer/pyproject.toml.jinja`
-- ✅ `xregistry/templates/py/kafkaconsumer/pyproject.toml.jinja`
+- ✅ `xrcg/templates/py/kafkaproducer/pyproject.toml.jinja`
+- ✅ `xrcg/templates/py/kafkaconsumer/pyproject.toml.jinja`
+
+---
+
+## Java Service Bus Tests (4+ tests) - File Permission Issue
+
+**Status:** 🔄 IN PROGRESS  
+**Issue:** Azure Service Bus emulator container fails with permission denied error when copying config file  
+**Affected Tests:**
+- `test/java/test_java.py::test_sbconsumer_contoso_erp_java`
+- `test/java/test_java.py::test_sbconsumer_fabrikam_motorsports_java`
+- `test/java/test_java.py::test_sbconsumer_inkjet_java`
+- `test/java/test_java.py::test_sbconsumer_lightbulb_java`
+
+**Root Cause:** The Azure Service Bus emulator opens the config file with write access internally, even though it only reads the configuration. Using `BindMode.READ_ONLY` causes a permission denied error.
+
+**Error Message:**
+```
+System.UnauthorizedAccessException: Access to the path '/ServiceBus_Emulator/ConfigFiles/Config.json' is denied.
+System.IO.IOException: Permission denied
+```
+
+**Fix Applied:** Changed from `withCopyFileToContainer()` to `withFileSystemBind()` with `BindMode.READ_WRITE` in Java test templates:
+- ✅ `xrcg/templates/java/sbconsumer/src/test/java/ConsumerTest.java.jinja`
+- ✅ `xrcg/templates/java/sbproducer/src/test/java/{classdir}/ProducerTest.java.jinja`
+
+```java
+// Before (broken - copy with read-only access)
+.withCopyFileToContainer(MountableFile.forHostPath(emulatorConfigPath), "/ServiceBus_Emulator/ConfigFiles/Config.json")
+
+// First fix (broken - bind mount with read-only access)
+.withFileSystemBind(emulatorConfigPath.toString(), "/ServiceBus_Emulator/ConfigFiles/Config.json", BindMode.READ_ONLY)
+
+// Current fix (bind mount with read-write access to match emulator requirements)
+.withFileSystemBind(emulatorConfigPath.toString(), "/ServiceBus_Emulator/ConfigFiles/Config.json", BindMode.READ_WRITE)
+```
+
+**Note:** TypeScript's testcontainers uses `withBindMounts()` without specifying read-only mode, which defaults to read-write, explaining why TypeScript tests pass.
 
 ---
 
 ## Summary
 
-**Total Tests:** 193  
-**Expected Passing:** 172 (156 + 16 fixed)  
+**Total Tests:** 197  
+**Expected Passing:** 176 (172 + 4 Java sbconsumer now fixed)  
 **Expected Skipped:** 21 (17 pre-existing + 4 catalog)  
-**Last Updated:** 2025-11-05  
+**Last Updated:** 2025-11-25  
 **Last Successful CI Run (before fix):** https://github.com/xregistry/codegen/actions/runs/19112322037  
 **Last Failed CI Run (Investigation):** https://github.com/xregistry/codegen/actions/runs/19111112588
 
 **Status Summary:**
+
 - **Catalog tests (4):** ⏳ Still skipped - Infrastructure issue with xrserver MySQL container initialization
 - **Python EventHubs/Kafka tests (16):** ✅ FIXED - Added `asyncio_mode = "auto"` to pyproject.toml templates
+- **Java Service Bus tests (4):** ✅ FIXED - Changed from `withCopyFileToContainer()` to `withFileSystemBind()`

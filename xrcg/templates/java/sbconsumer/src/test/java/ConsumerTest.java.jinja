@@ -11,14 +11,19 @@ package {{ package_name }};
 import com.azure.messaging.servicebus.ServiceBusClientBuilder;
 import com.azure.messaging.servicebus.ServiceBusProcessorClient;
 import com.azure.messaging.servicebus.ServiceBusReceivedMessageContext;
+import com.azure.messaging.servicebus.ServiceBusSenderClient;
+import com.azure.messaging.servicebus.ServiceBusMessage;
 import org.junit.jupiter.api.*;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
+import com.github.dockerjava.api.model.PortBinding;
+import com.github.dockerjava.api.model.Ports;
+import com.github.dockerjava.api.model.ExposedPort;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.containers.BindMode;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.MountableFile;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -26,6 +31,9 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.List;
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -44,6 +52,7 @@ public class ConsumerTest {
     private Network network;
     private GenericContainer<?> sqlEdgeContainer;
     private GenericContainer<?> serviceBusEmulatorContainer;
+    private Path emulatorConfigDir;
     private Path emulatorConfigPath;
     
     private String serviceBusConnectionString;
@@ -100,9 +109,12 @@ public class ConsumerTest {
         // Create network for containers to communicate
         network = Network.newNetwork();
         
-        // Create temporary config file for Service Bus emulator
-        emulatorConfigPath = Files.createTempFile("emulator-config", ".json");
+        // Prepare config directory/file and ensure world-readable permissions for container user
+        emulatorConfigDir = Files.createTempDirectory("emulator-config");
+        emulatorConfigPath = emulatorConfigDir.resolve("Config.json");
         Files.writeString(emulatorConfigPath, EMULATOR_CONFIG);
+        setWorldAccessible(emulatorConfigDir.toFile());
+        setWorldAccessible(emulatorConfigPath.toFile());
         
         // Start SQL Edge container (required by Service Bus emulator)
         sqlEdgeContainer = new GenericContainer<>("mcr.microsoft.com/azure-sql-edge:latest")
@@ -117,12 +129,18 @@ public class ConsumerTest {
         sqlEdgeContainer.start();
         logger.info("SQL Edge started");
         
-        // Start Service Bus emulator container
+        // Start Service Bus emulator container with file system bind mount
+        // Note: Must use READ_WRITE as the emulator opens the config file with write access
         serviceBusEmulatorContainer = new GenericContainer<>("mcr.microsoft.com/azure-messaging/servicebus-emulator:latest")
-            .withCopyFileToContainer(MountableFile.forHostPath(emulatorConfigPath), "/ServiceBus_Emulator/ConfigFiles/Config.json")
+            .withFileSystemBind(emulatorConfigDir.toString(), "/ServiceBus_Emulator/ConfigFiles", BindMode.READ_WRITE)
             .withNetwork(network)
             .withNetworkAliases("sb-emulator")
             .withExposedPorts(5672)
+            .withCreateContainerCmdModifier(cmd -> cmd.withHostConfig(
+                cmd.getHostConfig().withPortBindings(
+                    new PortBinding(Ports.Binding.bindPort(5672), new ExposedPort(5672))
+                )
+            ))
             .withEnv("SQL_SERVER", "sqledge")
             .withEnv("MSSQL_SA_PASSWORD", "StrongPassword!1")
             .withEnv("ACCEPT_EULA", "Y")
@@ -131,14 +149,14 @@ public class ConsumerTest {
         
         serviceBusEmulatorContainer.start();
         
-        // Build Service Bus connection string (Java SDK doesn't support UseDevelopmentEmulator parameter)
-        serviceBusConnectionString = "Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;";
+        // Build Service Bus connection string with UseDevelopmentEmulator=true
+        serviceBusConnectionString = "Endpoint=sb://127.0.0.1;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;";
         
         logger.info("Service Bus emulator started successfully");
         
-        // Wait a bit for the emulator to settle
+        // Wait for the emulator to fully settle (matches C# implementation timing)
         try {
-            Thread.sleep(5000);
+            Thread.sleep(45000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -160,56 +178,192 @@ public class ConsumerTest {
             network.close();
         }
         
-        if (emulatorConfigPath != null) {
-            try {
-                Files.deleteIfExists(emulatorConfigPath);
-            } catch (IOException e) {
-                logger.warn("Failed to delete emulator config file", e);
+        cleanupConfigPath(emulatorConfigPath);
+        cleanupConfigPath(emulatorConfigDir);
+    }
+
+    private void cleanupConfigPath(Path path) {
+        if (path == null) {
+            return;
+        }
+        try {
+            if (Files.isDirectory(path)) {
+                Files.walk(path)
+                    .sorted((a, b) -> b.compareTo(a))
+                    .forEach(p -> {
+                        try {
+                            Files.deleteIfExists(p);
+                        } catch (IOException e) {
+                            logger.warn("Failed to delete {}", p, e);
+                        }
+                    });
+            } else {
+                Files.deleteIfExists(path);
             }
+        } catch (IOException e) {
+            logger.warn("Failed to clean up temp path {}", path, e);
         }
     }
 
+    private void setWorldAccessible(java.io.File file) {
+        file.setReadable(true, false);
+        file.setWritable(true, false);
+        if (file.isDirectory()) {
+            file.setExecutable(true, false);
+        }
+    }
+
+    {%- for messagegroupid, messagegroup in messagegroups.items() %}
+    {%- set pascal_group_name = messagegroupid | pascal %}
+    {%- set consumer_class = (pascal_group_name | strip_namespace) + "MessageConsumer" %}
+    {%- set group_package = (package_name ~ "." ~ messagegroupid) | lower | replace('-', '_') %}
+    
+    {%- for messageid, message in messagegroup.messages.items() %}
+    {%- set messagename = messageid | pascal | strip_namespace %}
+    {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
+    
     @Test
-    @DisplayName("Test Consumer creation with Service Bus Emulator")
-    public void testConsumerCreationWithEmulator() throws Exception {
-        logger.info("Testing Consumer creation with Service Bus emulator");
+    @DisplayName("Test {{ messagename }} message consumption")
+    public void test{{ messagename }}MessageConsumption() throws Exception {
+        logger.info("Starting test{{ messagename }}MessageConsumption");
         
-        CountDownLatch latch = new CountDownLatch(1);
+        // Track received messages
+        final AtomicInteger receivedCount = new AtomicInteger(0);
+        final List<{{ message_body_type }}> receivedData = new ArrayList<>();
+        final CountDownLatch latch = new CountDownLatch(5); // Expecting 5 messages
         
+        // Create a concrete implementation of MessageConsumer to handle messages
+        {{ group_package }}.{{ consumer_class }} messageConsumer = new {{ group_package }}.{{ consumer_class }}() {
+            {%- for mid, msg in messagegroup.messages.items() %}
+            {%- set mname = mid | pascal | strip_namespace %}
+            {%- set mtype = util.get_data_type(data_project_name, root, msg) %}
+            
+            @Override
+            protected void on{{ mname }}({{ mtype }} data, ServiceBusReceivedMessageContext context) {
+                {%- if mname == messagename %}
+                logger.info("Received {{ messagename }} message: {}", context.getMessage().getMessageId());
+                receivedData.add(data);
+                receivedCount.incrementAndGet();
+                latch.countDown();
+                context.complete();
+                {%- else %}
+                logger.debug("Received {{ mname }} message (not expected in this test)");
+                context.complete();
+                {%- endif %}
+            }
+            {%- endfor %}
+        };
+        
+        // Create processor client using the message consumer
         ServiceBusProcessorClient processorClient = new ServiceBusClientBuilder()
             .connectionString(serviceBusConnectionString)
             .processor()
             .queueName("myqueue")
-            .processMessage(messageContext -> {
-                logger.info("Received message: {}", 
-                    messageContext.getMessage().getMessageId());
-                latch.countDown();
-            })
-            .processError(errorContext -> {
-                logger.error("Error processing message: {}", 
-                    errorContext.getException().getMessage());
+            .processMessage(messageConsumer::processMessage)
+            .processError(context -> {
+                logger.error("Error processing message: {}", context.getException().getMessage(), context.getException());
             })
             .buildProcessorClient();
         
         Consumer consumer = new Consumer(processorClient);
-        assertNotNull(consumer, "Consumer should be created successfully");
         
-        logger.info("Consumer created successfully with emulator");
-        
-        // Start the consumer
-        consumer.start();
-        
-        // Wait a bit for the consumer to initialize
-        Thread.sleep(2000);
-        
-        // Stop the consumer
-        consumer.close();
-        
-        // Close the consumer
-        consumer.close();
-        
-        logger.info("Consumer test completed successfully");
+        try {
+            // Start the consumer
+            consumer.start();
+            logger.info("Consumer started for {{ messagename }} test");
+            
+            // Wait a bit for the consumer to initialize
+            Thread.sleep(2000);
+            
+            // Create sender client to send test messages
+            ServiceBusSenderClient sender = new ServiceBusClientBuilder()
+                .connectionString(serviceBusConnectionString)
+                .sender()
+                .queueName("myqueue")
+                .buildClient();
+            
+            try {
+                // Create test data
+                {%- if message_body_type == "byte[]" %}
+                {{ message_body_type }} testData = "Test message data".getBytes();
+                {%- else %}
+                {{ message_body_type }} testData = new {{ message_body_type }}();
+                {%- endif %}
+                {%- set schemaObj = schema_object(root, message.get('dataschemauri') or message.get('dataschema')) %}
+                {%- if schemaObj %}
+                    {#- Get the actual schema from the versions structure -#}
+                    {%- if schemaObj.versions %}
+                        {%- set version_key = schemaObj.defaultversionid if schemaObj.defaultversionid else (schemaObj.versions.keys() | list | last) %}
+                        {%- set avroSchema = schemaObj.versions[version_key].schema %}
+                    {%- elif schemaObj.schema %}
+                        {%- set avroSchema = schemaObj.schema %}
+                    {%- else %}
+                        {%- set avroSchema = schemaObj %}
+                    {%- endif %}
+                    {#- Now process the Avro schema fields -#}
+                    {%- if avroSchema and avroSchema.type == "record" and avroSchema.fields %}
+                        {%- for field in avroSchema.fields %}
+                            {%- set fieldtype = field.type if field.type is string else field.type.type if field.type is mapping and field.type.type is defined else "unknown" %}
+                            {%- if fieldtype == "string" %}
+                testData.set{{ field.name | pascal }}("test-{{ field.name }}-value");
+                            {%- elif fieldtype == "int" or fieldtype == "integer" %}
+                testData.set{{ field.name | pascal }}(42);
+                            {%- elif fieldtype == "long" %}
+                testData.set{{ field.name | pascal }}(42L);
+                            {%- elif fieldtype == "boolean" %}
+                testData.set{{ field.name | pascal }}(true);
+                            {%- elif fieldtype == "double" %}
+                testData.set{{ field.name | pascal }}(42.0);
+                            {%- elif fieldtype == "float" %}
+                testData.set{{ field.name | pascal }}(42.0f);
+                            {%- elif fieldtype == "enum" %}
+                                {%- set enum_namespace = field.type.namespace if field.type.namespace else avroSchema.namespace %}
+                                {%- set normalized_namespace = (data_project_name | lower | replace('-', '_')) + '.' + (enum_namespace | lower | replace('.', '.') if enum_namespace else '') %}
+                testData.set{{ field.name | pascal }}({{ normalized_namespace }}.{{ field.type.name }}.values()[0]);
+                            {%- endif %}
+                        {%- endfor %}
+                    {%- endif %}
+                {%- endif %}
+                
+                // Send 5 test messages
+                for (int i = 0; i < 5; i++) {
+                    {%- if message_body_type == "byte[]" %}
+                    byte[] messageBytes = testData;
+                    {%- else %}
+                    byte[] messageBytes = testData.toByteArray("application/json");
+                    {%- endif %}
+                    
+                    ServiceBusMessage message = new ServiceBusMessage(messageBytes);
+                    message.setContentType("application/json");
+                    message.setSubject("{{ messageid }}");
+                    sender.sendMessage(message);
+                    logger.info("Sent test message {} for {{ messagename }}", i + 1);
+                }
+                
+                logger.info("All 5 test messages sent for {{ messagename }}");
+                
+            } finally {
+                sender.close();
+            }
+            
+            // Wait for all messages to be processed (max 30 seconds)
+            boolean allReceived = latch.await(30, TimeUnit.SECONDS);
+            
+            // Verify results
+            assertTrue(allReceived, "Should receive all 5 messages within 30 seconds");
+            assertEquals(5, receivedCount.get(), "Should have received exactly 5 messages");
+            assertEquals(5, receivedData.size(), "Should have 5 data items in the list");
+            
+            logger.info("{{ messagename }} message consumption test completed successfully - received {} messages", receivedCount.get());
+            
+        } finally {
+            // Stop the consumer
+            consumer.close();
+        }
     }
+    
+    {% endfor %}
+    {% endfor %}
 }
 
 
