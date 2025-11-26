@@ -1,7 +1,7 @@
 # xRegistry Code Generation CLI
 
-[![Python Test](https://github.com/xregistry/codegen/actions/workflows/test.yml/badge.svg)](https://github.com/xregistry/codegen/actions/workflows/test.yml)
-[![Python Release](https://github.com/xregistry/codegen/actions/workflows/build.yml/badge.svg)](https://github.com/xregistry/codegen/actions/workflows/build.yml)
+[![Python Test](https://github.com/xregistry/codegen/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/xregistry/codegen/actions/workflows/test.yml)
+[![Python Release](https://github.com/xregistry/codegen/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/xregistry/codegen/actions/workflows/build.yml)
 
 A command-line tool for working with xRegistry documents and APIs, with powerful code generation capabilities for building messaging and eventing applications.
 
