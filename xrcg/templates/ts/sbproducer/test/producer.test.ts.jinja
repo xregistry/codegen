@@ -230,7 +230,7 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
             
             try {
                 // Create test data using schema-aware helper
-                const testData = createTestInstance<{{ body_type }}>({{ body_type | replace(data_module_name + ".", data_module_name + ".") }});
+                const testData = createTestInstance<{{ body_type }}>({{ body_type }});
                 
                 // Send 5 messages to test proper message handling
                 for (let i = 0; i < 5; i++) {

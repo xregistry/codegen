@@ -114,7 +114,7 @@ describe('{{ test_class_name }}', () => {
         const producer = new {{ class_name }}(EVENT_GRID_ENDPOINT, EVENT_GRID_ACCESS_KEY);
         
         // Create test data using schema-aware helper
-        const testData = createTestInstance<{{ body_type }}>({{ body_type | replace(data_module_name + ".", data_module_name + ".") }});
+        const testData = createTestInstance<{{ body_type }}>({{ body_type }});
         
         // Extract required parameters from message metadata
         {%- set has_uri_template_params = false %}
@@ -151,9 +151,9 @@ describe('{{ test_class_name }}', () => {
         
         // Create test data array using schema-aware helper
         const testDataArray = [
-            createTestInstance<{{ body_type }}>({{ body_type | replace(data_module_name + ".", data_module_name + ".") }}),
-            createTestInstance<{{ body_type }}>({{ body_type | replace(data_module_name + ".", data_module_name + ".") }}),
-            createTestInstance<{{ body_type }}>({{ body_type | replace(data_module_name + ".", data_module_name + ".") }})
+            createTestInstance<{{ body_type }}>({{ body_type }}),
+            createTestInstance<{{ body_type }}>({{ body_type }}),
+            createTestInstance<{{ body_type }}>({{ body_type }})
         ];
         
         // Extract required parameters from message metadata
