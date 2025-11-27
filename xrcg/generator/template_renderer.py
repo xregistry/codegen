@@ -683,13 +683,16 @@ class TemplateRenderer:
                 __file__), f'../dependencies/cs/{runtime_version}/dependencies.csproj')
         elif language == 'py':
             master_project_path = os.path.join(os.path.dirname(
-                __file__), f'../dependencies/python/{runtime_version}/pyproject.toml')
+                __file__), f'../dependencies/python/{runtime_version}/requirements.txt')
         elif language == 'ts':
             master_project_path = os.path.join(os.path.dirname(
                 __file__), f'../dependencies/typescript/{runtime_version}/package.json')
         elif language == 'java':
             master_project_path = os.path.join(os.path.dirname(
                 __file__), f'../dependencies/java/{runtime_version}/pom.xml')
+        elif language == 'go':
+            master_project_path = os.path.join(os.path.dirname(
+                __file__), f'../dependencies/go/{runtime_version}/go.mod')
         else:
             raise ValueError(f"Unsupported language: {language}")
 
@@ -714,17 +717,22 @@ class TemplateRenderer:
                         f"Dependency '{dependency_name}' not found in runtime version '{runtime_version}' for language '{language}'.")
 
         elif language == 'py':
-            # Parse the pyproject.toml file
+            # Parse the requirements.txt file
             with open(master_project_path, 'r', encoding='utf-8') as file:
-                pyproject_data = toml.load(file)
+                content = file.read()
 
-            # Find the desired dependency
-            dependencies = pyproject_data.get('tool', {}).get(
-                'poetry', {}).get('dependencies', {})
-            if dependency_name in dependencies:
-                version = dependencies[dependency_name]
-                dependency_str = f"{dependency_name} = \"{version}\""
-                return dependency_str
+            # Parse requirements.txt format: package_name>=version or package_name==version
+            for line in content.split('\n'):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                # Match package name with version specifier
+                match = re.match(r'^([a-zA-Z0-9_-]+)\s*([>=<!=]+.*)$', line)
+                if match:
+                    pkg_name = match.group(1)
+                    version_spec = match.group(2)
+                    if pkg_name == dependency_name:
+                        return f"{pkg_name} = \"{version_spec}\""
 
             # If the dependency is not found, raise an error
             raise ValueError(
@@ -732,13 +740,18 @@ class TemplateRenderer:
 
         elif language == 'ts':
             # Parse the package.json file
-            with open(master_project_path, 'r') as file:
+            with open(master_project_path, 'r', encoding='utf-8') as file:
                 package_data = json.load(file)
 
-            # Find the desired dependency
+            # Find the desired dependency in dependencies or devDependencies
             dependencies = package_data.get('dependencies', {})
+            dev_dependencies = package_data.get('devDependencies', {})
             if dependency_name in dependencies:
                 version = dependencies[dependency_name]
+                dependency_str = f"\"{dependency_name}\": \"{version}\""
+                return dependency_str
+            if dependency_name in dev_dependencies:
+                version = dev_dependencies[dependency_name]
                 dependency_str = f"\"{dependency_name}\": \"{version}\""
                 return dependency_str
 
@@ -771,6 +784,32 @@ class TemplateRenderer:
                     dependency_str = ET.tostring(
                         dependency, encoding='unicode')
                     return dependency_str
+
+            # If the dependency is not found, raise an error
+            raise ValueError(
+                f"Dependency '{dependency_name}' not found in runtime version '{runtime_version}' for language '{language}'.")
+
+        elif language == 'go':
+            # Parse the go.mod file
+            with open(master_project_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+
+            # Parse require block for dependencies
+            # Format: module_path version
+            require_pattern = re.compile(r'require\s*\(\s*([\s\S]*?)\s*\)', re.MULTILINE)
+            require_match = require_pattern.search(content)
+            if require_match:
+                require_block = require_match.group(1)
+                for line in require_block.strip().split('\n'):
+                    line = line.strip()
+                    if not line or line.startswith('//'):
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        module_path = parts[0]
+                        version = parts[1]
+                        if module_path == dependency_name:
+                            return f"\t{module_path} {version}"
 
             # If the dependency is not found, raise an error
             raise ValueError(

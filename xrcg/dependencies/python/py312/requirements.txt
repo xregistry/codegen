@@ -1,0 +1,21 @@
+# Central dependency versions for xRegistry Python code generation templates
+# This file is monitored by Dependabot and read by the dependency() function in templates
+
+# Runtime dependencies
+azure-eventhub>=5.12.1
+azure-eventhub-checkpointstoreblob-aio>=1.1.4
+azure-identity>=1.17.0
+azure-servicebus>=7.12.0
+azure-storage-blob>=12.20.0
+cloudevents>=1.10.1
+confluent-kafka>=2.4.0
+paho-mqtt>=2.1.0
+python-qpid-proton>=0.39.0
+
+# Development dependencies
+flake8>=7.1.0
+mypy>=1.10.0
+pylint>=3.2.3
+pytest>=8.2.2
+pytest-asyncio>=0.23.7
+testcontainers>=4.5.1
