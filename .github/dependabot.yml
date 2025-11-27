@@ -1,0 +1,71 @@
+# Dependabot configuration for xRegistry Code Generation CLI
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # Python dependencies (main project)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "python"
+    open-pull-requests-limit: 5
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # Java dependencies (.NET 9.0 central dependency file)
+  - package-ecosystem: "nuget"
+    directory: "/xrcg/dependencies/cs/net90"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "csharp"
+      - "net90"
+    open-pull-requests-limit: 5
+
+  # C# dependencies (.NET 8.0 central dependency file)
+  - package-ecosystem: "nuget"
+    directory: "/xrcg/dependencies/cs/net80"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "csharp"
+      - "net80"
+    open-pull-requests-limit: 5
+
+  # Java dependencies (JDK 21 central dependency file)
+  - package-ecosystem: "maven"
+    directory: "/xrcg/dependencies/java/jdk21"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "java"
+      - "jdk21"
+    open-pull-requests-limit: 5
