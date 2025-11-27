@@ -40,7 +40,7 @@ The `_common` directory may include files for template macros that are shared ac
 
 The `_common` directory is optional. If you don't need to share macros across styles, you don't need to provide any templates in the `_common` directory.
 
-The full set of templates for the C# language is [here](../xregistry/templates/cs).
+The full set of templates for the C# language is in the [xrcg/templates/cs](../xrcg/templates/cs) directory.
 
 ## Template Info
 
@@ -204,89 +204,130 @@ If you prefix a file with an underscore, it will be processed after all regular 
 
 ## Template File Names
 
-Template file names determine the output file names and can include special macros for dynamic naming and multi-file generation.
+Template file names determine output file names and can include special macros for dynamic naming and multi-file generation. The built-in templates demonstrate all these patterns.
 
 ### Basic File Naming
 
-The simplest approach is to use a static file name. The template engine will use the name as-is (minus the `.jinja` extension).
+The simplest approach is a static file name. The template engine uses it as-is (minus the `.jinja` extension).
 
-**Example:** A template file named `README.md.jinja` generates an output file named `README.md`.
+**Examples from built-in templates:**
+
+| Template File | Output File | Used In |
+|--------------|-------------|---------|
+| `package.json.jinja` | `package.json` | TypeScript Kafka producer |
+| `pyproject.toml.jinja` | `pyproject.toml` | Python Kafka producer |
+| `pom.xml.jinja` | `pom.xml` | Java Kafka producer |
+| `.gitignore.jinja` | `.gitignore` | TypeScript templates |
 
 ### File Name Expansion Macros
 
-Expansion macros in file names enable generating multiple files from a single template or dynamically naming files based on project or class information.
+The generator supports several macros in file names that expand dynamically.
 
-#### `{projectname}` Macro
+#### `{projectname}` — Project Name
 
-Expands to the name provided with the `--projectname` argument.
+Expands to the `--projectname` argument value.
 
-**Example:** `{projectname}.csproj.jinja` → `MyProject.csproj` (when `--projectname MyProject`)
+**Real example:** The AsyncAPI template uses `{projectname}.yml.jinja` which generates `ContosoEvents.yml` when `--projectname ContosoEvents`.
 
-#### `{classname}` Macro
+#### `{mainprojectname}` — Main Project Name
 
-Expands to the name of the generated class, inferred from the schema or definition document. When this macro is used:
+Expands to the main project name (may differ from `projectname` if `_templateinfo.json` defines `main_project_name`).
 
-- The generator calls the template once for each type/class
-- The input document is scoped down to the specific definition or schema type
-- Only the class name (without namespace/package) is used
+**Real example:** The C# Kafka producer uses `{mainprojectname}.csproj.jinja` in `src/` to generate the project file with the correct name.
 
-**Example:** `{classname}.cs.jinja` → `Order.cs`, `Customer.cs`, etc. (one file per class)
+#### `{rootdir}` — Output Root Directory
 
-#### `{classdir}` Macro
+Places the file at the output root, regardless of the template's subdirectory location.
 
-Works like `{classname}` but also creates subdirectories reflecting the package/namespace structure. This is particularly useful for Java conventions where package structure maps to directory structure.
+**Rationale:** Templates often live in `src/` or `test/` subdirectories but need to emit files like `README.md` or `.sln` at the project root.
 
-**Example:** `{classdir}.java.jinja` with class `com.example.Order`:
+**Real examples from C# Kafka producer:**
 
-- Creates directory: `com/example/`
-- Generates file: `com/example/Order.java`
+| Template Location | Template Name | Output |
+|------------------|---------------|--------|
+| `kafkaproducer/` | `{rootdir}README.md.jinja` | `README.md` (at root) |
+| `kafkaproducer/` | `{rootdir}{mainprojectname}.sln.jinja` | `ContosoEvents.sln` |
 
-### Advanced File Name Templates
+#### `{testdir}` — Test Directory
 
-File names support the same template variable syntax as `_templateinfo.json` properties, with access to a richer set of variables:
+Expands to the test directory path (`tests/` or `../tests/` depending on context).
 
-**Available Variables:**
+**Real example:** The Python Kafka producer uses `{testdir}test_producer.py.jinja` to place tests in the correct location.
 
-- `projectname` - the code project name
-- `mainprojectname` - the main project name
-- `dataprojectname` - the data project name
-- `mainprojectdir` - main project as path (dots→slashes)
-- `dataprojectdir` - data project as path (dots→slashes)
-- `projectdir` - project as path (dots→slashes)
-- `projectsrc` - project source path (prefixed with `src/`)
-- `testdir` - test directory (`tests/` or `../tests/`)
-- `rootdir` - root directory marker
-- `classname` - class name only
-- `classfull` - fully qualified class name
-- `classpackage` - package/namespace name
-- `classdir` - class formatted for directories
+#### `{classdir}` — Package Directory Structure
 
-**Available Filters:**
+Creates subdirectories reflecting the package/namespace structure. The template is invoked once per message group or type, with `root` scoped to that item.
 
-Same filters as in `_templateinfo.json` templates: `lower`, `upper`, `pascal`, `camel`, `snake`, `dotdash`, `dashdot`, `dotunderscore`, `underscoredot`
+**Rationale:** Java requires source files in directories matching their package structure. This macro handles that automatically.
 
-**Examples:**
+**Real example:** The Java Kafka producer uses:
 
 ```text
-{mainprojectdir}Program.cs.jinja → MyProject/Program.cs
-{dataprojectdir}Models/BaseModel.cs.jinja → MyProjectData/Models/BaseModel.cs
-{testdir}{projectname}Tests.cs.jinja → tests/MyProjectTests.cs
-{rootdir}README.md.jinja → README.md (at output root)
+src/main/java/{classdir}Producer.java.jinja
+src/main/java/{classdir}EventFactory.java.jinja
+```
+
+For a message group `com.contoso.orders`, this generates:
+
+```text
+src/main/java/com/contoso/orders/Producer.java
+src/main/java/com/contoso/orders/EventFactory.java
+```
+
+### Filename Filters with `!` Syntax
+
+Filters can be applied in filenames using `!` as the separator (since `|` isn't valid in filenames).
+
+**Real example:** The Python Kafka producer uses:
+
+```text
+src/{mainprojectdir!dotunderscore!lower}producer.py.jinja
+src/{mainprojectdir!dotunderscore!lower}__init__.py.jinja
+```
+
+This chain:
+
+1. Takes `mainprojectdir` (e.g., `Contoso.Events`)
+2. Applies `dotunderscore` → `Contoso_Events`
+3. Applies `lower` → `contoso_events`
+
+Result: `src/contoso_events/producer.py`
+
+**Rationale:** Python modules must be lowercase with underscores, while project names often use dots or PascalCase.
+
+### Path Segments with `~` Syntax
+
+The `~` operator appends path segments.
+
+**Real example:** The Python Kafka producer uses:
+
+```text
+{rootdir~samples}sample.py.jinja
+{rootdir~scripts}build.py.jinja
+```
+
+This generates:
+
+```text
+samples/sample.py
+scripts/build.py
 ```
 
 ### Scoped Document Context
 
-When using `{classname}` or `{classdir}` macros, the template receives a modified `root` variable that contains only the relevant message group or schema:
+When using `{classdir}` or `{classname}` macros, the template receives a modified `root` variable scoped to the current item:
 
-- The template is invoked once per class/type
+- The template is invoked once per message group (or type)
 - `root.messagegroups` contains only the single message group being processed
-- `root.schemagroups` and `root.endpoints` remain available for reference
+- `root.schemagroups` and `root.endpoints` remain available for cross-references
+
+This allows a single template to generate multiple files, one per message group, with each invocation seeing only its relevant data.
 
 ## Template variables
 
-The input document, which is either a CloudEvents Discovery document or a schema document, is passed to the template as a variable named `root`. The `root` variable's structure reflects the respective input document.
+The input document, which is either an xRegistry document or a schema document, is passed to the template as a variable named `root`. The `root` variable's structure reflects the respective input document.
 
-- For code generators for message payload schemas, the `root` variable is the root of the CloudEvents Discovery document, corresponding to the CloudEvent Discovery schema type `document`. Underneath `root` are three collections:
+- For code generators for message payload schemas, the `root` variable is the root of the xRegistry document, corresponding to the xRegistry schema type `document`. Underneath `root` are three collections:
   - `messagegroups` - a dictionary of message definition groups, keyed by the message group's ID.
   - `schemagroups` - a dictionary of schema definition groups, keyed by the message group's ID.
   - `endpoints` - a dictionary of endpoints, keyed by the endpoint's ID.
@@ -295,11 +336,11 @@ As discussed above, the `{classdir}` and `{classfile}` filename expansion macros
 
 Otherwise, the template always gets the full input document.
 
-If the `--definitions` argument points to a URL or file name that returns/contains a fragment of a CloudEvents discovery document, such as a single `schemagroup` or `messagegroup`, the generator will synthesize a full discovery document around the fragment and pass it to the template.
+If the `--definitions` argument points to a URL or file name that returns/contains a fragment of an xRegistry document, such as a single `schemagroup` or `messagegroup`, the generator will synthesize a full xRegistry document around the fragment and pass it to the template.
 
 ### Filters
 
-In addition to the many filters [built into Jinja](https://jinja.palletsprojects.com/en/3.0.x/templates/#filters), the following extra filters are available for use in templates:
+In addition to the many filters [built into Jinja](https://jinja.palletsprojects.com/en/3.0.x/templates/#filters), the following extra filters are available for use in templates. Examples are drawn from actual built-in templates.
 
 #### Case Conversion Filters
 
@@ -307,16 +348,22 @@ In addition to the many filters [built into Jinja](https://jinja.palletsprojects
 
 Converts a string (including those in camelCase and snake_case) to PascalCase. Handles namespace separators (`.` and `::`).
 
-Example:
+**Used in:** All language templates for class names, method names, and type references.
+
+**Real example from C# Kafka producer:**
 
 ```jinja
-{{ "foo_bar" | pascal }} -> FooBar
-{{ "com.example.foo" | pascal }} -> Com.Example.Foo
+{%- set groupname = messagegroupid | pascal -%}
+{%- set class_name = (groupname | strip_namespace) + "Producer" %}
 ```
+
+With `messagegroupid = "contoso.orders"`, this produces class name `ContosoOrdersProducer`.
 
 ##### `camel`
 
 Converts a string (including those in snake_case and PascalCase) to camelCase. Handles namespace separators (`.` and `::`).
+
+**Used in:** TypeScript and Java templates for variable and method names.
 
 Example:
 
@@ -329,6 +376,14 @@ Example:
 
 Converts a string (including those in camelCase and PascalCase) to snake_case. Handles namespace separators (`.` and `::`).
 
+**Used in:** Python templates for module and variable names.
+
+**Real example from Java Kafka producer:**
+
+```jinja
+{%- set package_name = project_name | lower | replace('-', '_') %}
+```
+
 Example:
 
 ```jinja
@@ -340,7 +395,7 @@ Example:
 
 ##### `dotdash`
 
-Replaces dots with dashes in a string.
+Replaces dots with dashes in a string. Useful for package names in URLs or file paths.
 
 Example:
 
@@ -362,11 +417,15 @@ Example:
 
 Replaces dots with underscores in a string.
 
-Example:
+**Used in:** Python templates for converting project names to valid module names.
+
+**Real example from Python Kafka producer:**
 
 ```jinja
-{{ "com.example.Foo" | dotunderscore }} -> com_example_Foo
+{%- set import_statement = "from " + (data_project_name | dotunderscore | lower) + " import " + class_name %}
 ```
+
+With `data_project_name = "Contoso.Events.Data"`, this produces `from contoso_events_data import OrderData`.
 
 ##### `underscoredot`
 
@@ -403,12 +462,14 @@ Example:
 
 Strips invalid characters from an identifier. This is useful for converting strings to identifiers in languages that have stricter rules for identifiers. All unsupported characters are replaced with an underscore.
 
-Example:
+**Real example from TypeScript Kafka producer:**
 
 ```jinja
-{{ "foo-bar" | strip_invalid_identifier_characters }} -> foo_bar
-{{ "@foobar" | strip_invalid_identifier_characters }} -> _foobar
+{%- set data_module_name = data_project_name | strip_invalid_identifier_characters %}
+import * as {{ data_module_name }} from '../../{{ data_project_name }}/dist/index.js';
 ```
+
+With `data_project_name = "Contoso-Events.Data"`, produces import alias `Contoso_Events_Data`.
 
 #### Namespace Manipulation Filters
 
@@ -416,11 +477,15 @@ Example:
 
 Strips the namespace/package portion off an expression, leaving only the class name.
 
-Example:
+**Used in:** C# and Java templates for extracting class names from fully-qualified type references.
+
+**Real example from C# Kafka producer:**
 
 ```jinja
-{{ "com.example.Foo" | strip_namespace }} -> Foo
+{%- set class_name = (groupname | strip_namespace) + "Producer" %}
 ```
+
+With `groupname = "Contoso.Orders"`, this produces `OrdersProducer`.
 
 ##### `namespace(namespace_prefix="")`
 
@@ -487,19 +552,35 @@ Example:
 {{ proto_text | proto }}
 ```
 
+##### `go_type`
+
+Converts a type name to a Go type. Handles primitive types, package prefixes, and PascalCase conversion for Go conventions.
+
+Example:
+
+```jinja
+{{ "string" | go_type }} -> string
+{{ "projectData.OrderInfo" | go_type }} -> project_data.OrderInfo
+```
+
 #### Search and Pattern Matching Filters
 
 ##### `exists(prop, value)`
 
 Recursively checks whether the given property exists anywhere in the given object scope with the value prefixed with the given string (case-insensitive).
 
-Example:
+**Used in:** Common include files for conditional protocol handling.
+
+**Real example from Java CloudEvents include:**
 
 ```jinja
-{% if root | exists("format", "amqp") %}
-    // do something
-{% endif %}
+{%- if root | exists("envelope","CloudEvents/1.0") %}
+import io.cloudevents.CloudEvent;
+import io.cloudevents.core.builder.CloudEventBuilder;
+{%- endif %}
 ```
+
+**Rationale:** Templates often need to conditionally include imports or code blocks based on what envelope formats or protocols are used in the message definitions.
 
 ##### `existswithout(prop, value, propother, valueother)`
 
@@ -540,6 +621,17 @@ Example:
 ##### `schema_type(project_name, root, schema_format)`
 
 Returns the type name for a schema reference, considering the schema format and project context.
+
+**Used in:** All language templates for generating typed method signatures and data class references.
+
+**Real example from C# Kafka producer:**
+
+```jinja
+{%- set data_type = message.dataschemauri | schema_type(data_project_name, root, message.dataschemaformat) | pascal %}
+public async Task Send{{ message.messageid | pascal }}Async({{ data_type }} data)
+```
+
+**Rationale:** The `schema_type` filter resolves a schema URI reference (like `/schemagroups/devices/schemas/temperature`) to the actual generated class name (like `TemperatureData`), taking into account the data project name prefix and schema format.
 
 Example:
 
@@ -592,11 +684,13 @@ Example:
 {{ "#/schemas/myschema" | mark_handled }}
 ```
 
-##### `is_handled`
+##### `is_handled` _(Note: Not currently registered as a template filter)_
 
 Checks if a resource reference has been marked as handled.
 
-Example:
+**Important:** This filter is defined in code but not currently exposed to templates. Use `mark_handled` to track resources and check handling status in code.
+
+Example (conceptual):
 
 ```jinja
 {% if "#/schemas/myschema" | is_handled %}

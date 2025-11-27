@@ -1,6 +1,6 @@
 # Protocol-Specific Message Definition Samples
 
-This directory contains exemplary CloudEvents Discovery documents that can be
+This directory contains exemplary xRegistry documents that can be
 used to experiment with the code generator.
 
 * [amqp-consumer-endpoint.json](amqp-consumer-endpoint.json) is an AMQP consumer endpoint.  

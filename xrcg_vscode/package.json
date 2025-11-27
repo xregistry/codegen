@@ -297,7 +297,7 @@
       {
         "id": "json",
         "aliases": [
-          "CloudEvents Discovery"
+          "xRegistry"
         ],
         "extensions": [
           ".json",
