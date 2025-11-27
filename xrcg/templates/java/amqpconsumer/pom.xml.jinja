@@ -24,7 +24,7 @@
     <maven.compiler.target>21</maven.compiler.target>
   </properties>
   
-  {%- if uses_cloudevents %}
+  {%- if uses_cloudevents or uses_avro %}
   <!-- Jackson BOM to enforce consistent versions across all transitive dependencies -->
   <dependencyManagement>
     <dependencies>

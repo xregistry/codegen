@@ -128,12 +128,13 @@
             <version>4.0.1</version>
         </dependency>
 
-        <!-- Jackson -->
+        <!-- Jackson BOM - use import scope for dependencyManagement -->
         <dependency>
             <groupId>com.fasterxml.jackson</groupId>
             <artifactId>jackson-bom</artifactId>
             <version>2.18.2</version>
             <type>pom</type>
+            <scope>import</scope>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>

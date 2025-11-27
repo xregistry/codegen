@@ -1,6 +1,7 @@
 {%- import "cloudevents.jinja.include" as cloudEvents -%}
 {%- import "mqtt.jinja.include" as mqtt -%}
 {%- set uses_cloudevents = cloudEvents.usesCloudEvents(root) -%}
+{%- set uses_avro = (root | exists("dataschemaformat", "Avro")) -%}
 {%- macro dep(name) -%}{{ dependency('java', 'jdk21', name) }}{%- endmacro -%}
 <project xmlns="http://maven.apache.org/POM/4.0.0" 
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -21,7 +22,7 @@
     <maven.compiler.target>21</maven.compiler.target>
   </properties>
   
-  {%- if uses_cloudevents %}
+  {%- if uses_cloudevents or uses_avro %}
   <!-- Jackson BOM to enforce consistent versions across all transitive dependencies -->
   <dependencyManagement>
     <dependencies>
