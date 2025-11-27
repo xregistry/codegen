@@ -20,7 +20,25 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        {%- if cloudEvents.usesCloudEvents(root) %}
+        <jackson.version>2.18.2</jackson.version>
+        {%- endif %}
     </properties>
+
+    {%- if cloudEvents.usesCloudEvents(root) %}
+    <!-- Jackson BOM to enforce consistent versions across all transitive dependencies -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+    {%- endif %}
 
     <dependencies>
         <!-- Azure Service Bus SDK -->
