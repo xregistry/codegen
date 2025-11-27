@@ -1,545 +1,308 @@
 # xRegistry Code Generation CLI
 
-[![Python Test](https://github.com/xregistry/codegen/actions/workflows/test.yml/badge.svg)](https://github.com/xregistry/codegen/actions/workflows/test.yml)
-[![Python Release](https://github.com/xregistry/codegen/actions/workflows/build.yml/badge.svg)](https://github.com/xregistry/codegen/actions/workflows/build.yml)
+[![Python Test](https://github.com/xregistry/codegen/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/xregistry/codegen/actions/workflows/test.yml)
+[![Python Release](https://github.com/xregistry/codegen/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/xregistry/codegen/actions/workflows/build.yml)
 
-A command-line tool for working with xRegistry documents and APIs, with powerful code generation capabilities for building messaging and eventing applications.
+Generate production-ready, type-safe messaging SDKs from [xRegistry](https://xregistry.io/) message catalog definitions. One command gives you compile-ready producer/consumer code with tests, dependency management, and protocol-specific bindings.
 
-## Why xRegistry Code Generation CLI?
+## Quick Start
 
-### Production-Ready Code, Not Just Snippets
+**1. Install** (Docker or pip):
 
-Unlike typical code generators that dump a single file and leave you to figure out the rest, xRegistry Code Generation CLI generates complete, **SDK-like projects** with:
+```bash
+# Docker (recommended - no Python needed)
+docker pull ghcr.io/xregistry/codegen/xrcg:latest
 
-- ✅ **Working integration tests** out of the box (using Docker/Testcontainers)
-- ✅ **Type-safe producer and consumer clients** for multiple platforms
-- ✅ **Compile-ready projects** with proper dependency management
-- ✅ **Best-practice code structure** following language conventions
-- ✅ **Robust schema handling** via [Avrotize](https://github.com/clemensv/avrotize)
+# Or via pip
+pip install git+https://github.com/xregistry/codegen.git
+```
 
-### Broad Platform Support
+**2. Generate a Kafka producer** from a sample definition:
 
-Generate type-safe clients for Java, C#, Python, and TypeScript across multiple messaging systems:
+```bash
+# Using Docker (Linux/macOS)
+docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xrcg:latest \
+  generate --projectname PrinterEvents --language py --style kafkaproducer \
+  --definitions https://raw.githubusercontent.com/xregistry/codegen/main/samples/message-definitions/inkjet.xreg.json \
+  --output ./generated
+```
 
-- Generic clients: MQTT, AMQP, Apache Kafka
-- Azure-specific: Event Hubs, Service Bus, Event Grid
-- Protocol conversions: AsyncAPI and OpenAPI documents
+```powershell
+# Using Docker (Windows PowerShell)
+docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xrcg:latest `
+  generate --projectname PrinterEvents --language py --style kafkaproducer `
+  --definitions https://raw.githubusercontent.com/xregistry/codegen/main/samples/message-definitions/inkjet.xreg.json `
+  --output ./generated
+```
 
-### Flexible Workflows
+```bash
+# Or with pip install (any platform)
+xrcg generate --projectname PrinterEvents --language py --style kafkaproducer \
+  --definitions https://raw.githubusercontent.com/xregistry/codegen/main/samples/message-definitions/inkjet.xreg.json \
+  --output ./generated
+```
 
-Work with xRegistry definitions using:
+This produces a complete Python project with:
 
-- **Local files** (manifest mode) for offline development
-- **Remote registries** (catalog mode) for team collaboration
-- **Custom templates** for organization-specific code generation
+- Type-safe producer classes for each message type
+- Strongly-typed data classes generated from Avro schema
+- Integration tests using Testcontainers
+- Ready to use: `cd generated && pip install -e . && pytest`
 
-## Table of Contents
+**3. Or generate for a different platform** — same definition, different target:
 
-- [What is xRegistry?](#what-is-xregistry)
-- [xRegistry Message Catalogs](#xregistry-message-catalogs)
+```bash
+xrcg generate --projectname ContosoEvents --language cs --style ehproducer \
+  --definitions ./contoso-erp.xreg.json --output ./generated   # C# Event Hubs
 
-## What is xRegistry?
+xrcg generate --projectname ContosoEvents --language ts --style mqttclient \
+  --definitions ./contoso-erp.xreg.json --output ./generated   # TypeScript MQTT
 
-The [xRegistry project](https://xregistry.io/) run by the CNCF Serverless WG
-defines a generic, extensible, and interoperable registry for metadata and
-metadata documents. In particular, it is designed to support registries that aid
-with the discovery and description of messaging and eventing endpoints and
-therefore has three built-in registries for (payload-)schemas, message
-definitions, and endpoints.
+xrcg generate --projectname ContosoEvents --language py --style kafkaconsumer \
+  --definitions ./contoso-erp.xreg.json --output ./generated   # Python Kafka
+```
 
-xRegistry defines both an API and a document format for managing metadata and
-one of its key characteristics is that the REST API and the document model are
-symmetrical. An HTTP endpoint path in the API corresponds to a JSON pointer path
-in the document model.
+## What You Get
 
-All metadata resources are organized in groups, and each group can contain
-multiple resources. Some resources allow for maintaining multiple versions, as
-it is the case for schemas.
+Unlike snippet generators, this tool produces **complete SDK-like projects**:
 
-The xRegistry API and document model is defined in the
-[xRegistry API specification](https://github.com/xregistry/spec).
+| Feature | What's Generated |
+|---------|------------------|
+| **Type-safe clients** | Producer/consumer classes with strongly-typed methods per message |
+| **Data classes** | Schema-derived classes via [Avrotize](https://github.com/clemensv/avrotize) (JSON Schema, Avro, Protobuf) |
+| **Build files** | `pom.xml`, `.csproj`, `package.json`, `pyproject.toml` with correct dependencies |
+| **Integration tests** | Docker-based tests using Testcontainers for Kafka, MQTT, AMQP brokers |
+| **Project structure** | Language-idiomatic layout ready for IDE import |
 
-## License and Governance rules
+**Supported Languages:** Java 21+, C# (.NET 6+), Python 3.9+, TypeScript/JavaScript
 
-This project is part of the CNCF xRegistry project and subject to the
-governance rules laid out in the [project governance document](https://github.com/xregistry/spec/blob/main/docs/GOVERNANCE.md)
+**Supported Protocols:** Apache Kafka, MQTT 5.0, AMQP 1.0, Azure Event Hubs, Azure Service Bus, Azure Event Grid, HTTP/CloudEvents
 
-## xRegistry Message Catalogs
+## Generating Code
 
-xRegistry Message Catalogs are a set of registries that are built on top of
-xRegistry and are designed to support the discovery and description of messaging
-and eventing endpoints. The following catalogs are defined:
+For complete command documentation, see [Command Reference](docs/commands/README.md).
 
-- **Schema Catalog**: A registry for schemas that can be used to validate
-    messages.
-- **Message Catalog**: A registry for message definitions that describe the
-    structure of messages. Messages can be defined as abstract, transport
-    neutral envelopes based on [CloudEvents](https://cloudevents.io) or as concrete
-    messages that are bound to a specific transport protocol, whereby AMQP, HTTP, MQTT,
-    and Apache Kafka are directly supported. Each message definition can associated
-    with a schema from the schema catalog for describing the message payload.
-- **Endpoint Catalog**: A registry for endpoints that can be used to send or
-    receive messages. Each endpoint can be associated with one or more groups of
-    message definitions from the message catalog.
+### The Generate Command
 
-The three catalogs are designed to be used together, with the endpoint catalog
-referring to message definition groups and message definitions referring to schemas.
+```bash
+xrcg generate --projectname <name> --language <lang> --style <style> \
+  --definitions <file-or-url> --output <dir>
+```
 
-You can study some examples of xRegistry Message Catalog documents in the
-samples directory of this repository:
+| Option | Description |
+|--------|-------------|
+| `--projectname` | Project/namespace name for generated code |
+| `--language` | Target language: `java`, `cs`, `py`, `ts`, `asyncapi`, `openapi` |
+| `--style` | Protocol binding: `kafkaproducer`, `ehconsumer`, `mqttclient`, etc. |
+| `--definitions` | Path or URL to xRegistry JSON/YAML definition |
+| `--output` | Output directory (will be created/overwritten) |
+| `--templates` | Custom template directory (optional) |
+| `--template-args` | Extra args as `key=value` (optional) |
 
-- [**Contoso ERP**](samples/message-definitions/contoso-erp.xreg.json): A
-    simple example of a message catalog for a fictional ERP system.
-- [**Inkjet Printer**](samples/message-definitions/inkjet.xreg.json): A
-    fictitious group of events as they may be raised by an inkhet printer.
-- [**Fabrikam Motorsports**](samples/message-definitions/fabrikam-motorsports.xreg.json):
-    An example for an event stream as it may be used in a motorsports telemetry
-    scenario.
-- [**Vacuum Cleaner**](samples/message-definitions/vacuumcleaner.xreg.json):
-    A fictitious group of events as they may be raised by a vacuum cleaner.
+### Available Templates
 
-## Installation
+Run `xrcg list` to see all available language/style combinations:
 
-### Option 1: Docker (Recommended)
+```text
+├── java: Java 21+
+│   ├── kafkaproducer, kafkaconsumer     # Apache Kafka
+│   ├── ehproducer, ehconsumer           # Azure Event Hubs  
+│   ├── sbproducer, sbconsumer           # Azure Service Bus
+│   ├── amqpproducer, amqpconsumer       # AMQP 1.0 (RabbitMQ 4+, Artemis, Qpid)
+│   └── mqttclient                       # MQTT 5.0
+├── cs: C# / .NET 6.0+
+│   ├── kafkaproducer, kafkaconsumer
+│   ├── ehproducer, ehconsumer, ehazfn   # Event Hubs + Azure Functions
+│   ├── sbproducer, sbconsumer, sbazfn
+│   ├── egproducer, egazfn               # Event Grid
+│   ├── amqpproducer, amqpconsumer
+│   └── mqttclient
+├── py: Python 3.9+
+│   ├── kafkaproducer, kafkaconsumer
+│   ├── ehproducer, ehconsumer
+│   └── mqttclient
+├── ts: TypeScript
+│   ├── kafkaproducer, kafkaconsumer
+│   ├── ehproducer, ehconsumer
+│   ├── sbproducer, sbconsumer
+│   ├── egproducer, amqpproducer, amqpconsumer
+│   └── mqttclient
+├── asyncapi: AsyncAPI 3.0 definitions
+└── openapi: OpenAPI 3.0 definitions
+```
 
-The easiest way to use the tool is via the pre-built Docker image. No Python installation required!
+### Protocol-Specific Examples
 
-**Pull the image:**
+<details>
+<summary><strong>AMQP 1.0 (RabbitMQ, Artemis, Qpid)</strong></summary>
+
+```bash
+# Generate Java producer
+xrcg generate --language java --style amqpproducer \
+  --projectname MyProducer --definitions ./catalog.json --output ./out
+
+# Generate C# consumer  
+xrcg generate --language cs --style amqpconsumer \
+  --projectname MyConsumer --definitions ./catalog.json --output ./out
+```
+
+See [RabbitMQ AMQP 1.0 Setup Guide](docs/rabbitmq_amqp_setup.md) for broker configuration.
+
+</details>
+
+<details>
+<summary><strong>AsyncAPI / OpenAPI Generation</strong></summary>
+
+```bash
+# Generate AsyncAPI producer definition
+xrcg generate --language asyncapi --style producer \
+  --projectname MyAPI --definitions ./catalog.json --output ./out
+
+# With binary CloudEvents mode
+xrcg generate --language asyncapi --style producer \
+  --projectname MyAPI --definitions ./catalog.json --output ./out \
+  --template-args ce_content_mode=binary
+
+# Generate OpenAPI for HTTP producer
+xrcg generate --language openapi --style producer \
+  --projectname MyAPI --definitions ./catalog.json --output ./out
+```
+
+</details>
+
+### Custom Templates
+
+Override built-in templates or add new language/style combinations:
+
+```bash
+xrcg generate --templates ./my-templates --language java --style myproducer ...
+```
+
+Template directory structure mirrors the built-in templates. See [Authoring Templates](docs/authoring_templates.md).
+
+## Installation Details
+
+### Docker (Recommended)
 
 ```bash
 docker pull ghcr.io/xregistry/codegen/xrcg:latest
 ```
 
-**Usage with folder mapping:**
-
-The container uses `/work` as its working directory, which you should map to your local project directory:
-
-> **Note:** Due to the volume mapping, file paths in Docker commands must be relative paths within or below your current directory (e.g., `./definitions.json`, `./output`). Absolute paths or paths outside the mounted directory won't be accessible to the container.
-
-<details>
-<summary><strong>Linux / macOS</strong></summary>
+Create a shell alias for convenience:
 
 ```bash
-# Validate a definition file
-docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xrcg:latest \
-  validate --definitions ./my-catalog.json
-
-# Generate code
-docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xrcg:latest \
-  generate --projectname MyProject --language cs --style amqpproducer \
-  --definitions ./my-catalog.json --output ./generated
-
-# List available templates
-docker run --rm ghcr.io/xregistry/codegen/xrcg:latest list
-```
-
-</details>
-
-<details>
-<summary><strong>Windows (PowerShell)</strong></summary>
-
-```powershell
-# Validate a definition file
-docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xrcg:latest `
-  validate --definitions ./my-catalog.json
-
-# Generate code
-docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xrcg:latest `
-  generate --projectname MyProject --language cs --style amqpproducer `
-  --definitions ./my-catalog.json --output ./generated
-
-# List available templates
-docker run --rm ghcr.io/xregistry/codegen/xrcg:latest list
-```
-
-</details>
-
-<details>
-<summary><strong>Windows (Command Prompt)</strong></summary>
-
-```cmd
-REM Validate a definition file
-docker run --rm -v %cd%:/work ghcr.io/xregistry/codegen/xrcg:latest ^
-  validate --definitions ./my-catalog.json
-
-REM Generate code
-docker run --rm -v %cd%:/work ghcr.io/xregistry/codegen/xrcg:latest ^
-  generate --projectname MyProject --language cs --style amqpproducer ^
-  --definitions ./my-catalog.json --output ./generated
-
-REM List available templates
-docker run --rm ghcr.io/xregistry/codegen/xrcg:latest list
-```
-
-</details>
-
-**Convenience alias (optional):**
-
-For easier use, create an alias in your shell:
-
-```bash
-# Linux / macOS (.bashrc or .zshrc)
+# Linux/macOS (.bashrc or .zshrc)
 alias xrcg='docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xrcg:latest'
 
-# Windows (PowerShell profile)
+# Windows PowerShell (profile)
 function xrcg { docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xrcg:latest $args }
 ```
 
-Then use it like a native command:
+> **Note:** File paths must be relative to your current directory due to Docker volume mapping.
 
-```bash
-xrcg validate --definitions ./my-catalog.json
-xrcg generate --projectname MyProject --language py --style kafkaproducer --definitions ./my-catalog.json --output ./out
-```
+### Python Package
 
-### Option 2: Python Package
-
-The tool requires Python 3.10 or later. Install directly from GitHub:
+Requires Python 3.10+:
 
 ```bash
 pip install git+https://github.com/xregistry/codegen.git
 ```
 
-This installs the `xrcg` package with a command-line tool:
+For development setup, see [Development Environment](docs/development_environment.md).
 
-- `xrcg` - Command-line tool
+## Working with xRegistry Definitions
 
-For local development and testing, see [Development Environment](docs/development_environment.md).
+The generator consumes [xRegistry](https://xregistry.io/) message catalog documents—JSON/YAML files that describe schemas, messages, and endpoints. You can:
 
-## Usage
+- Use existing definition files (see [samples/message-definitions/](samples/message-definitions/))
+- Create definitions manually following the [xRegistry spec](https://github.com/xregistry/spec)
+- Manage definitions using the CLI's `manifest` or `catalog` commands
 
-The tool is invoked as `xrcg` and supports the following subcommands:
+### Sample Definitions
 
-- `xrcg generate`: Generate code from xRegistry definitions
-- `xrcg validate`: Validate xRegistry definition files
-- `xrcg list`: List available code generation templates
-- `xrcg config`: Manage tool configuration (defaults, registry URLs, auth)
-- `xrcg manifest`: Work with local xRegistry files (offline mode)
-- `xrcg catalog`: Interact with remote xRegistry services (online mode)
+| Sample | Description |
+|--------|-------------|
+| [contoso-erp.xreg.json](samples/message-definitions/contoso-erp.xreg.json) | ERP system events (orders, payments, inventory) |
+| [fabrikam-motorsports.xreg.json](samples/message-definitions/fabrikam-motorsports.xreg.json) | Motorsports telemetry stream |
+| [inkjet.xreg.json](samples/message-definitions/inkjet.xreg.json) | IoT printer events |
 
-### Working with xRegistry Data: Manifest vs Catalog
+### Managing Definitions with CLI
 
-xRegistry CLI supports two modes for managing registry data:
+<details>
+<summary><strong>Manifest Mode (Local Files)</strong></summary>
 
-#### Manifest Mode (Local Files)
-
-Use `xrcg manifest` commands to work with **local JSON files** containing xRegistry definitions:
+Work with local JSON files for version-controlled, offline workflows:
 
 ```bash
-# Create/update local manifest file
-xrcg manifest messagegroup add --manifest=./my-registry.json --id=orders ...
+# Create a message group
+xrcg manifest messagegroup add --manifest=./catalog.json --id=orders --envelope=CloudEvents/1.0
 
-# Add messages to the local file
-xrcg manifest message add --manifest=./my-registry.json --messagegroupid=orders ...
+# Add a message definition
+xrcg manifest message add --manifest=./catalog.json --messagegroupid=orders \
+  --id=OrderPlaced --description="Order was placed"
+
+# Validate the file
+xrcg validate --definitions ./catalog.json
 ```
 
-**When to use manifest mode:**
+</details>
 
-- Offline development and testing
-- Version-controlled registry definitions (Git)
-- Local-first workflows
-- No network dependency
+<details>
+<summary><strong>Catalog Mode (Remote Registry)</strong></summary>
 
-#### Catalog Mode (Remote Service)
-
-Use `xrcg catalog` commands to interact with a **remote xRegistry HTTP API**:
+Interact with a remote xRegistry HTTP API for team collaboration:
 
 ```bash
-# Set up registry connection
+# Configure registry connection
 xrcg config set registry.base_url https://registry.example.com
 xrcg config set registry.auth_token <token>
 
 # Work with remote registry
 xrcg catalog messagegroup add --id=orders ...
-xrcg catalog message add --messagegroupid=orders ...
+xrcg catalog message list --messagegroupid=orders
 ```
 
-**When to use catalog mode:**
+Currently supports [xrserver](https://github.com/xregistry/xrserver/) registry.
 
-- Team collaboration with shared registry
-- Central governance and discovery
-- Integration with CI/CD pipelines
-- Live registry queries
+</details>
 
-**Note:** Currently supports [xreg-github](https://github.com/duglin/xreg-github/) registry implementation.
+### Validate Command
 
-Run `xrcg manifest --help` or `xrcg catalog --help` to see all available operations (add, get, update, delete, list) for endpoints, message groups, messages, and schemas.
-
-### Config Command
-
-Manage persistent configuration to avoid repeating common arguments:
+Check definition files for errors:
 
 ```bash
-# View all configuration
-xrcg config list
+xrcg validate --definitions ./catalog.json
+xrcg validate --definitions https://example.com/catalog.json
+```
 
-# Set default values
-xrcg config set defaults.project_name MyProject
-xrcg config set defaults.language cs
-xrcg config set defaults.style producer
+### Configuration
+
+Store defaults to avoid repetition:
+
+```bash
+xrcg config set defaults.language java
 xrcg config set defaults.output_dir ./generated
-
-# Set registry connection
-xrcg config set registry.base_url https://registry.example.com
-xrcg config set registry.auth_token <your-token>
-
-# Set custom model URL
-xrcg config set model.url https://example.com/custom-model.json
-
-# Get specific value
-xrcg config get defaults.language
-
-# Clear a value
-xrcg config unset defaults.language
-
-# Reset all to defaults
-xrcg config reset
-
-# Export as JSON
-xrcg config list --format json
+xrcg config list
 ```
 
-Configuration is stored in a platform-specific location:
+Config location: `~/.config/xrcg/config.json` (Linux), `%APPDATA%\xrcg\config.json` (Windows)
 
-- **Windows:** `%APPDATA%\xrcg\config.json`
-- **macOS:** `~/Library/Application Support/xrcg/config.json`
-- **Linux:** `~/.config/xrcg/config.json`
+## What is xRegistry?
 
-**Available configuration keys:**
+[xRegistry](https://xregistry.io/) is a CNCF project defining a standard format for describing messaging and eventing infrastructure. A message catalog document contains:
 
-| Key | Description |
-|-----|-------------|
-| `defaults.project_name` | Default project name for code generation |
-| `defaults.language` | Default language (cs, java, py, ts, etc.) |
-| `defaults.style` | Default style (producer, consumer, etc.) |
-| `defaults.output_dir` | Default output directory |
-| `registry.base_url` | Base URL for remote xRegistry catalog |
-| `registry.auth_token` | Authentication token for catalog access |
-| `registry.timeout` | HTTP timeout for catalog requests (seconds) |
-| `model.url` | Custom model.json URL (overrides built-in) |
-| `model.cache_timeout` | Cache duration for model downloads (seconds) |
+- **Schema groups** — Payload schemas (JSON Schema, Avro, Protobuf)
+- **Message groups** — Message definitions with [CloudEvents](https://cloudevents.io) envelope metadata
+- **Endpoints** — Protocol bindings (Kafka topics, AMQP queues, HTTP endpoints)
 
-### Generate
+The code generator follows references between these elements to produce cohesive, type-safe SDKs.
 
-The `generate` subcommand generates code from a definition file. The tool
-includes a set of built-in language/style template sets that can be enumerated
-with the [List](#list) command.
+## Community
 
-The `generate` command takes the following options:
-
-| Option             | Description                                                                                                                                                                        |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--projectname`    | **Required** The project name (namespace name) for the generated code.                                                                                                             |
-| `--language`       | **Required** The shorthand code of the language to use for the generated code, for instance "cs" for C# or "ts" for TypeScript/JavaScript. See [Languages](#languages-and-styles). |
-| `--style`          | The code style. This selects one of the template sets available for the given language, for instance "producer". See [Styles](#languages-and-styles)                               |
-| `--output`         | The directory where the generated code will be saved. The generator will overwrite existing files in this directory.                                                               |
-| `--definitions`    | The path to a local file or a URL to a file containing CloudEvents Registry definitions.                                                                                           |
-| `--requestheaders` | Extra HTTP headers for HTTP requests to the given URL in the format `key=value`.                                                                                                   |
-| `--templates`      | Paths of extra directories containing custom templates See [Custom Templates].                                                                                                     |
-| `--template-args`  | Extra template arguments to pass to the code generator in the form `key=value`.                                                                                                    |
-
-#### Languages and Styles
-
-The tool supports the following languages and styles (as emitted by the `list` command):
-
-```text
---languages options:
-styles: 
-├── asaql: Azure Stream Analytics
-│   ├── dispatch: Azure Stream Analytics Query Dispatch
-│   └── dispatchpayload: Azure Stream Analytics Query Dispatch with Payload
-├── py: Python 3.9+
-│   ├── mqttclient:
-│   ├── ehconsumer: Python Azure Event Hubs Consumer
-│   ├── ehproducer: Python Azure Event Hubs Producer
-│   ├── kafkaconsumer: Python Apache Kafka Consumer
-│   ├── kafkaproducer: Python Apache Kafka Producer
-│   └── producer: Python Generic Producer
-├── ts: JavaScript/TypeScript
-│   ├── amqpconsumer: TypeScript AMQP 1.0 Consumer
-│   ├── amqpproducer: TypeScript AMQP 1.0 Producer
-│   ├── egproducer: TypeScript Azure Event Grid Producer
-│   ├── ehproducer: TypeScript Azure Event Hubs Producer
-│   ├── mqttclient: TypeScript MQTT 5.0 Client
-│   ├── producerhttp: TypeScript HTTP Producer
-│   ├── sbconsumer: TypeScript Azure Service Bus Consumer
-│   ├── sbproducer: TypeScript Azure Service Bus Producer
-│   ├── dashboard: TypeScript Dashboard
-│   ├── ehconsumer: TypeScript Azure Event Hubs Consumer
-│   ├── kafkaconsumer: TypeScript Apache Kafka Consumer
-│   └── kafkaproducer: TypeScript Apache Kafka Producer
-├── asyncapi: Async API 3.0
-│   ├── consumer: AsyncAPI Consumer Definition
-│   └── producer: AsyncAPI Producer Definition
-├── openapi: Open API 3.0
-│   ├── producer: OpenAPI Producer Definition
-│   └── subscriber: OpenAPI Subscriber Definition
-├── java: Java 21+
-│   ├── amqpconsumer: Java AMQP 1.0 Consumer
-│   ├── amqpjmsproducer: Java AMQP JMS Producer
-│   ├── amqpproducer: Java AMQP 1.0 Producer
-│   ├── ehconsumer: Java Azure Event Hubs Consumer
-│   ├── ehproducer: Java Azure Event Hubs Producer
-│   ├── kafkaconsumer: Java Apache Kafka Consumer
-│   ├── kafkaproducer: Java Apache Kafka Producer
-│   ├── mqttclient: Java MQTT 5.0 Client
-│   ├── sbconsumer: Java Azure Service Bus Consumer
-│   ├── sbproducer: Java Azure Service Bus Producer
-│   ├── consumer: Java Generic Consumer
-│   ├── producer: Java Generic Producer
-│   ├── xconsumer: Java Generic Consumer (Extended)
-│   └── xproducer: Java Generic Producer (Extended)
-└── cs: C# / .NET 6.0+
-    ├── egazfn: C# Azure Event Grid Azure Function
-    ├── ehazfn: C# Azure Event Hubs Azure Function
-    ├── sbazfn: C# Azure Service Bus Azure Function
-    ├── amqpconsumer: C# AMQP 1.0 Consumer
-    ├── amqpproducer: C# AMQP 1.0 Producer
-    ├── egproducer: C# Azure Event Grid Producer
-    ├── ehconsumer: C# Azure Event Hubs Consumer
-    ├── ehproducer: C# Azure Event Hubs Producer
-    ├── kafkaconsumer: C# Apache Kafka Consumer
-    ├── kafkaproducer: C# Apache Kafka Producer
-    ├── mqttclient: C# MQTT 5.0 Client
-    ├── sbconsumer: C# Azure Service Bus Consumer
-    └── sbproducer: C# Azure Service Bus Producer
-```
-
-There is a test suite that validates all templates.
-
-##### OpenAPI
-
-The tool can generate OpenAPI definitions for producer endpoints with:
-
-```shell
-xrcg generate --language=openapi --style=producer --projectname=MyProjectProducer --definitions=definitions.json --output=MyProjectProducer
-```
-
-This will yield a `MyProjectProducer/MyProjectProducer.yml' file that can be used to generate a
-producer client for the given endpoint.
-
-Similarly, the tool can generate OpenAPI definitions for subscriber endpoints with:
-
-```shell
-xrcg generate --language=openapi --style=subscriber --projectname=MyProjectSubscriber --definitions=definitions.json --output=MyProjectSubscriber
-```
-
-This will yield a `MyProjectSubscriber/MyProjectSubcriber.yml' file that can be
-used to generate a subscriber server for the given endpoint, which is compatible
-with the CloudEvents Subscription API.
-
-##### AsyncAPI
-
-The tool can generate AsyncAPI definitions with:
-
-```shell
-xrcg generate --language=asyncapi --style=producer --projectname=MyProjectProducer --definitions=definitions.json --output=MyProjectProducer
-```
-
-For AsyncAPI, the tool support an extension parameter ce_content_mode that can be used to control the CloudEvents content mode of the generated AsyncAPI definition. The default is "structured" and the other supported value is "binary". The AsyncAPI template supports HTTP, MQTT, and AMQP 1.0 endpoints and injects the appropriate headers for the selected content mode for each protocol.
-
-Use it like this:
-
-```shell
-xrcg generate --language=asyncapi --style=producer --projectname=MyProjectProducer --definitions=definitions.json --output=MyProjectProducer --template-args ce_content_mode=binary
-```
-
-##### AMQP 1.0
-
-The tool can generate AMQP 1.0 producer and consumer code for multiple languages (Java, C#, Python, TypeScript). The generated code works with any AMQP 1.0 compliant broker:
-
-**Supported Brokers:**
-- Apache ActiveMQ Artemis (native AMQP 1.0)
-- Apache Qpid (native AMQP 1.0)
-- Azure Service Bus (native AMQP 1.0)
-- **RabbitMQ 4.0+** (native AMQP 1.0)
-- **RabbitMQ 3.x** (via AMQP 1.0 plugin - requires plugin enablement)
-
-**Using RabbitMQ:**
-
-- **RabbitMQ 4.0+**: Native AMQP 1.0 support (no plugin required)
-- **RabbitMQ 3.x**: Requires the AMQP 1.0 plugin to be enabled
-
-For detailed setup instructions, including Docker deployment, connection configuration, and production best practices, see:
-
-📖 **[RabbitMQ AMQP 1.0 Setup Guide](docs/rabbitmq_amqp_setup.md)**
-
-Quick start with Docker:
-
-**RabbitMQ 4.0+ (Recommended)**:
-```bash
-docker run -d --name rabbitmq-amqp \
-  -p 5672:5672 -p 15672:15672 \
-  rabbitmq:4-management
-```
-
-**RabbitMQ 3.x** (requires plugin):
-```bash
-docker run -d --name rabbitmq-amqp \
-  -p 5672:5672 -p 15672:15672 \
-  -e RABBITMQ_PLUGINS=rabbitmq_amqp1_0 \
-  rabbitmq:3-management
-```
-
-Generate AMQP 1.0 clients:
-```bash
-# Java AMQP producer
-xrcg generate --language=java --style=amqpproducer --projectname=MyProducer --definitions=definitions.json --output=./output
-
-# C# AMQP consumer
-xrcg generate --language=cs --style=amqpconsumer --projectname=MyConsumer --definitions=definitions.json --output=./output
-
-# Python AMQP producer
-xrcg generate --language=py --style=amqpproducer --projectname=MyProducer --definitions=definitions.json --output=./output
-
-# TypeScript AMQP consumer
-xrcg generate --language=ts --style=amqpconsumer --projectname=MyConsumer --definitions=definitions.json --output=./output
-```
-
-The generated code includes integration tests that work with ActiveMQ Artemis and both RabbitMQ 3.x (with plugin) and RabbitMQ 4.0+ (native support).
-
-#### Custom Templates
-
-The tool supports custom templates. Custom templates reside in a directory and are organized in subdirectories for each language and style. The directory structure is the same as the built-in templates. The tool will look for custom templates in the directories specified with the `--templates` option. Custom templates take precedence over built-in templates.
-
-For more information on how to write custom templates, see [authoring templates](docs/authoring_templates.md).
-
-If you are building a custom template that might be generally useful, submit a PR for includion into the built-in template set.
-
-### Validate
-
-The `validate` subcommand validates a definition file. The tool will report any errors in the definition file.
-
-The `validate` command takes the following options:
-
-| Option             | Description                                                                              |
-| ------------------ | ---------------------------------------------------------------------------------------- |
-| `--definitions`    | The path to a local file or a URL to a file containing xRegistry definitions. |
-| `--requestheaders` | Extra HTTP headers for HTTP requests to the given URL in the format `key=value`.         |
-
-### List
-
-The `list` subcommand lists the available language/style template sets.
-
-## Community and Docs
-
-Learn more about the people and organizations who are creating a dynamic cloud
-native ecosystem by making our systems interoperable with CloudEvents.
-
-- Our [Governance](https://github.com/xregistry/spec/docs/GOVERNANCE.md) documentation.
-- [Contributing](https://github.com/xregistry/spec/docs/CONTRIBUTING.md) guidance.
-- [Code of Conduct](https://github.com/cncf/foundation/blob/master/code-of-conduct.md)
-
-### Communications
-
-The main mailing list for e-mail communications:
-
-- Send emails to: [cncf-cloudevents](mailto:cncf-cloudevents@lists.cncf.io)
-- To subscribe see: <https://lists.cncf.io/g/cncf-cloudevents>
-- Archives are at: <https://lists.cncf.io/g/cncf-cloudevents/topics>
-
-And a #cloudevents Slack channel under
-[CNCF's Slack workspace](http://slack.cncf.io/).
+- **Slack:** [#cloudevents on CNCF Slack](http://slack.cncf.io/)
+- **Mailing list:** [cncf-cloudevents@lists.cncf.io](https://lists.cncf.io/g/cncf-cloudevents)
+- **Governance:** [GOVERNANCE.md](https://github.com/xregistry/spec/blob/main/docs/GOVERNANCE.md)
+- **Contributing:** [CONTRIBUTING.md](https://github.com/xregistry/spec/blob/main/docs/CONTRIBUTING.md)
 
 ## License
 

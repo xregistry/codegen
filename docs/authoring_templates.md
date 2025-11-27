@@ -40,7 +40,7 @@ The `_common` directory may include files for template macros that are shared ac
 
 The `_common` directory is optional. If you don't need to share macros across styles, you don't need to provide any templates in the `_common` directory.
 
-The full set of templates for the C# language is [here](../xregistry/templates/cs).
+The full set of templates for the C# language is [here](../xrcg/templates/cs).
 
 ## Template Info
 
@@ -487,6 +487,17 @@ Example:
 {{ proto_text | proto }}
 ```
 
+##### `go_type`
+
+Converts a type name to a Go type. Handles primitive types, package prefixes, and PascalCase conversion for Go conventions.
+
+Example:
+
+```jinja
+{{ "string" | go_type }} -> string
+{{ "projectData.OrderInfo" | go_type }} -> project_data.OrderInfo
+```
+
 #### Search and Pattern Matching Filters
 
 ##### `exists(prop, value)`
@@ -592,11 +603,13 @@ Example:
 {{ "#/schemas/myschema" | mark_handled }}
 ```
 
-##### `is_handled`
+##### `is_handled` _(Note: Not currently registered as a template filter)_
 
 Checks if a resource reference has been marked as handled.
 
-Example:
+**Important:** This filter is defined in code but not currently exposed to templates. Use `mark_handled` to track resources and check handling status in code.
+
+Example (conceptual):
 
 ```jinja
 {% if "#/schemas/myschema" | is_handled %}
