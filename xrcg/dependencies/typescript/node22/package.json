@@ -8,7 +8,7 @@
     "@azure/eventgrid": "^5.0.0",
     "@azure/identity": "^4.0.0",
     "@azure/service-bus": "^7.9.0",
-    "cloudevents": "^8.0.2",
+    "cloudevents": "^10.0.0",
     "kafkajs": "^2.2.4",
     "mqtt": "^5.0.0",
     "rhea": "^3.0.0",
