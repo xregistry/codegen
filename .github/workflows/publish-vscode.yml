@@ -72,10 +72,18 @@ jobs:
       working-directory: ./xrcg_vscode
       run: npm install
 
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Validate package.json for duplicates
+      run: python tools/validate_vscode_package.py --package-json xrcg_vscode/package.json
+
     - name: Build extension
       working-directory: ./xrcg_vscode
       run: |
-        npm run compile
+        npm run esbuild
         vsce package
 
     - name: Display extension information

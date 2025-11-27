@@ -32,6 +32,8 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '20'
+    - name: Validate VSCode extension for duplicate commands
+      run: python tools/validate_vscode_package.py --package-json xrcg_vscode/package.json
     - name: Build VSCode extension
       run: |
         npm install -g @vscode/vsce
