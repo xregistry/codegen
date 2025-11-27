@@ -751,10 +751,22 @@ class TemplateRenderer:
             tree = ET.parse(master_project_path)
             root = tree.getroot()
 
+            # Support groupId:artifactId syntax for disambiguation
+            if ':' in dependency_name:
+                target_group_id, target_artifact_id = dependency_name.split(':', 1)
+            else:
+                target_group_id = None
+                target_artifact_id = dependency_name
+
             # Find the desired dependency
             for dependency in root.findall(".//dependency"):
                 artifact_id = dependency.find('artifactId')
-                if artifact_id is not None and artifact_id.text == dependency_name:
+                group_id = dependency.find('groupId')
+                if artifact_id is not None and artifact_id.text == target_artifact_id:
+                    # If groupId was specified, verify it matches
+                    if target_group_id is not None:
+                        if group_id is None or group_id.text != target_group_id:
+                            continue
                     # Convert the XML element back to string including its children
                     dependency_str = ET.tostring(
                         dependency, encoding='unicode')
