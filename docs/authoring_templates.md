@@ -325,9 +325,9 @@ This allows a single template to generate multiple files, one per message group,
 
 ## Template variables
 
-The input document, which is either a CloudEvents Discovery document or a schema document, is passed to the template as a variable named `root`. The `root` variable's structure reflects the respective input document.
+The input document, which is either an xRegistry document or a schema document, is passed to the template as a variable named `root`. The `root` variable's structure reflects the respective input document.
 
-- For code generators for message payload schemas, the `root` variable is the root of the CloudEvents Discovery document, corresponding to the CloudEvent Discovery schema type `document`. Underneath `root` are three collections:
+- For code generators for message payload schemas, the `root` variable is the root of the xRegistry document, corresponding to the xRegistry schema type `document`. Underneath `root` are three collections:
   - `messagegroups` - a dictionary of message definition groups, keyed by the message group's ID.
   - `schemagroups` - a dictionary of schema definition groups, keyed by the message group's ID.
   - `endpoints` - a dictionary of endpoints, keyed by the endpoint's ID.
@@ -336,7 +336,7 @@ As discussed above, the `{classdir}` and `{classfile}` filename expansion macros
 
 Otherwise, the template always gets the full input document.
 
-If the `--definitions` argument points to a URL or file name that returns/contains a fragment of a CloudEvents discovery document, such as a single `schemagroup` or `messagegroup`, the generator will synthesize a full discovery document around the fragment and pass it to the template.
+If the `--definitions` argument points to a URL or file name that returns/contains a fragment of an xRegistry document, such as a single `schemagroup` or `messagegroup`, the generator will synthesize a full xRegistry document around the fragment and pass it to the template.
 
 ### Filters
 

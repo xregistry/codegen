@@ -1,5 +1,5 @@
 {
-  "description": "This is the Eclipse Sparkplug B v1.0 CloudEvents Discovery Declaration (which isn't using CloudEvents itself, at all)",
+  "description": "This is the Eclipse Sparkplug B v1.0 xRegistry Declaration (which isn't using CloudEvents itself, at all)",
   "endpoints": {
     "Eclipse.SparkplugBv10EdgeNodeProducer": {
       "description": "This declaration is for the endpoint to which an Sparkplug B v1.0 edge node produces messages",
