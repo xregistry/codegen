@@ -15,7 +15,7 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@jest/globals": "^29.7.0",
+    "@jest/globals": "^30.2.0",
     "@stylistic/eslint-plugin": "^2.9.0",
     "@testcontainers/kafka": "^11.7.2",
     "@types/jest": "^29.5.12",
