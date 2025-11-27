@@ -3,7 +3,7 @@
         <TargetFramework>net8.0</TargetFramework>
     </PropertyGroup>
     <ItemGroup>
-      <PackageReference Include="AMQPNetLite" Version="2.4.11" />
+      <PackageReference Include="AMQPNetLite" Version="2.5.1" />
       <PackageReference Include="Apache.Avro" Version="1.12.0" />
       <PackageReference Include="Azure.Core" Version="1.44.1" />
       <PackageReference Include="Azure.Core.Amqp" Version="1.3.1" />
