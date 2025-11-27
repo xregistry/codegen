@@ -18,7 +18,7 @@
       <PackageReference Include="CloudNative.CloudEvents.Avro" Version="2.8.0" />
       <PackageReference Include="CloudNative.CloudEvents.Protobuf" Version="2.8.0" />
       <PackageReference Include="CloudNative.CloudEvents.SystemTextJson" Version="2.8.0" />
-      <PackageReference Include="Confluent.Kafka" Version="2.6.1" />
+      <PackageReference Include="Confluent.Kafka" Version="2.12.0" />
       <PackageReference Include="Google.Protobuf" Version="3.27.1" />
       <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.0.0" />
       <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.2.0" />
