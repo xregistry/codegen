@@ -1,29 +1,30 @@
 # Development environment
 
-This project requires Python 3.10+ and several runtimes for testing generated
-code.
+This project requires Python 3.10+ and several runtimes for testing generated code.
 
-For running the Python code you will need a working Python 3.10+ installation.
-The prerequisites for the Python code are listed in the `requirements.txt` file.
-You can install them with `pip`:
+## Python Setup
+
+Install Python 3.10 or later. The prerequisites are listed in `requirements.txt`:
 
 ```shell
 pip install -r requirements.txt
 ```
 
-You need to install the following runtimes/SDKs separately:
+## Required Runtimes/SDKs
 
-* .NET SDK 6.0 or later
-* OpenJDK 17 or later
-* Node.js 14 or later
+Install the following runtimes separately:
 
-For running the (PyTest) tests you will need a working Docker installation for
-hosting the Eclipse Mosquitto and ActiveMQ Artemis brokers during test runs, and
-a set further tools for validating code generation ouptut:
+| Runtime | Version | Purpose |
+|---------|---------|---------|
+| [.NET SDK](https://dotnet.microsoft.com/en-us/download) | 6.0+ | C# code generation |
+| [OpenJDK](https://learn.microsoft.com/en-us/java/openjdk/download) | 21+ | Java code generation |
+| [Node.js](https://nodejs.org/en/download/) | 14+ | TypeScript code generation |
+| [Go](https://go.dev/dl/) | 1.21+ | Go code generation |
+| [Docker](https://www.docker.com/get-started) | Latest | Test containers (brokers) |
 
-- Azure Functions Core tools
-- Async API CLI
-- OpenAPI Generator CLI
+## Validation Tools
+
+For running tests that validate generated output, install these CLI tools:
 
 ```shell
 npm install -g azure-functions-core-tools@4 --unsafe-perm true
@@ -31,45 +32,45 @@ npm install -g @asyncapi/cli
 npm install -g @openapitools/openapi-generator-cli
 ```
 
-## Running the tests
+## Running the Tests
 
-The tests are written using PyTest. You can run them with:
+Tests use PyTest with Docker-based testcontainers for message brokers (Kafka, MQTT, AMQP).
 
-```shell    
+```shell
+# Run all tests (30+ minutes)
 pytest
+
+# Run targeted tests (recommended)
+pytest test/py/test_python.py::test_kafkaproducer_contoso_erp_py
+
+# Always redirect output to preserve error details
+pytest test/cs/test_csharp.py > tmp/test_output.txt 2>&1
 ```
 
-## C# code generation dependencies
+**Important:** Full test runs take 30+ minutes. Target specific tests when validating changes.
 
-The generated code depends on the [.NET 6.0 SDK](https://dotnet.microsoft.com/en-us/download)
+## C# Code Generation Dependencies
 
-The generated C# code depends on an experimental extension to the C# CloudEvents SDK.
+The generated C# code depends on an experimental extension to the C# CloudEvents SDK that is not yet available from NuGet.
 
-The extension is not yet available from NuGet, so you will need to build it yourself.
+**Setup steps:**
 
-1. Create a new, local directory for the extension packages somewhere on
-your local machine, then create an environment variable in your user profile
-named `CEDISCO_NUGET_LOCAL_FEED` that points to this directory. 
+1. Create a local directory for extension packages and set the environment variable `CEDISCO_NUGET_LOCAL_FEED` to point to it.
 
-1. Clone the repository: [https://github.com/clemensv/CloudNative.CloudEvents.Endpoints/](https://github.com/clemensv/CloudNative.CloudEvents.Endpoints/)
+2. Clone the repository: [CloudNative.CloudEvents.Endpoints](https://github.com/clemensv/CloudNative.CloudEvents.Endpoints/)
 
-2. Build the project in the `source` directory with `dotnet build` and copy the resulting
-packages from the `source/packages` directory into the directory you created in step 1.
+3. Build the project in the `source` directory with `dotnet build` and copy the resulting packages from `source/packages` to your local feed directory.
 
-## Java code generation dependencies
+## Java Code Generation Dependencies
 
-The generated code depends on [OpenJDK 17](https://learn.microsoft.com/en-us/java/openjdk/download)
+The generated Java code depends on an experimental extension to the Java CloudEvents SDK that is not yet available from Maven Central.
 
-The generated Java code depends on an experimental extension to the Java
-CloudEvents SDK. Mind that the extension is not yet available from Maven
-Central, so you will need to build it yourself. The implementation is also not
-yet complete and several protocols are stubbed out, in part due to lack of
-coverage by the CloudEvents Java SDK.
+**Setup steps:**
 
-1. Clone the repository: [https://github.com/clemensv/io.cloudevents.experimental.endpoints](https://github.com/clemensv/io.cloudevents.experimental.endpoints)
+1. Clone the repository: [io.cloudevents.experimental.endpoints](https://github.com/clemensv/io.cloudevents.experimental.endpoints)
 
-2. Build the project with `mvn install` which will install the packages into your local Maven repository.
+2. Build with `mvn install` to install packages into your local Maven repository.
 
-## TypeScript code generation dependencies
+## TypeScript Code Generation Dependencies
 
-The generated code depends on [Node.js 14](https://nodejs.org/en/download/)
+TypeScript templates require Node.js 14+ (already listed in Required Runtimes above). No additional dependencies are needed beyond the npm packages installed during project generation.
