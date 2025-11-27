@@ -719,14 +719,53 @@ Example:
 {{ geturlport("https://example.com:8080/path") }} -> 8080
 ```
 
-#### `dependency(language, dependency_name, runtime_version)`
+#### `dependency(language, runtime_version, dependency_name)`
 
-Retrieves dependency information for a specific language runtime. Returns the dependency configuration as a string (e.g., XML for Maven dependencies).
+Retrieves dependency information for a specific language runtime from the central dependencies file. Returns the dependency configuration as a string (e.g., XML for Maven dependencies, PackageReference for NuGet).
 
-Example:
+Central dependency files are located at:
+- C#: `xrcg/dependencies/cs/{runtime_version}/dependencies.csproj`
+- Java: `xrcg/dependencies/java/{runtime_version}/pom.xml`
+- Python: `xrcg/dependencies/python/{runtime_version}/pyproject.toml`
+- TypeScript: `xrcg/dependencies/typescript/{runtime_version}/package.json`
+
+**Parameters:**
+- `language`: The language identifier (`cs`, `java`, `py`, `ts`)
+- `runtime_version`: The runtime version identifier (e.g., `net90`, `jdk21`)
+- `dependency_name`: The dependency identifier (artifact ID for Java, package name for others)
+
+**Java: GroupId:ArtifactId Syntax**
+
+For Java dependencies, you can use `groupId:artifactId` syntax to disambiguate dependencies with the same artifact ID from different groups:
 
 ```jinja
-{{ dependency("java", "azure-messaging-eventhubs", "1.11.0") }}
+{{ dependency("java", "jdk21", "org.junit.jupiter:junit-jupiter") }}
+{{ dependency("java", "jdk21", "org.testcontainers:junit-jupiter") }}
+```
+
+**Example usage with a macro:**
+
+```jinja
+{# Define a convenience macro at the top of the template #}
+{%- macro dep(name) -%}{{ dependency('java', 'jdk21', name) }}{%- endmacro -%}
+
+{# Use the macro in the template #}
+<dependencies>
+    {{ dep('kafka-clients') }}
+    {{ dep('cloudevents-core') }}
+    {{ dep('org.testcontainers:testcontainers') }}
+</dependencies>
+```
+
+**C# Example:**
+
+```jinja
+{%- macro dep(name) -%}{{ dependency('cs', 'net90', name) }}{%- endmacro -%}
+
+<ItemGroup>
+    {{ dep('CloudNative.CloudEvents') }}
+    {{ dep('Azure.Messaging.ServiceBus') }}
+</ItemGroup>
 ```
 
 ### Tags
