@@ -4,7 +4,7 @@
   "private": true,
   "description": "Central dependency versions for xRegistry TypeScript code generation templates",
   "dependencies": {
-    "@azure/event-hubs": "^5.11.0",
+    "@azure/event-hubs": "^6.0.0",
     "@azure/eventgrid": "^5.0.0",
     "@azure/identity": "^4.0.0",
     "@azure/service-bus": "^7.9.0",
