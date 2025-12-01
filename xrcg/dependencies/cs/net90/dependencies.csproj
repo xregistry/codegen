@@ -20,7 +20,7 @@
       <PackageReference Include="CloudNative.CloudEvents.SystemTextJson" Version="2.8.0" />
       <PackageReference Include="Confluent.Kafka" Version="2.12.0" />
       <PackageReference Include="Google.Protobuf" Version="3.33.1" />
-      <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.1.0" />
+      <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
       <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.3.0" />
       <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.ServiceBus" Version="5.24.0" />
       <PackageReference Include="Microsoft.Azure.Messaging.EventGrid.CloudNativeCloudEvents" Version="1.0.0" />
