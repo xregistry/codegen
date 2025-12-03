@@ -211,27 +211,39 @@
         handles.treeOutput.classList.toggle('disabled', disabled);
       }
       
-      // Reset flex values for uncollapsed panels
-      if (!panels.source.style.flex || sourceCollapsed) {
-        panels.source.style.flex = sourceCollapsed ? '' : '1 1 auto';
+      // Only reset flex values for panels that were just expanded (no flex set) or are collapsed
+      // Don't reset if they already have a pixel-based flex value
+      if (sourceCollapsed) {
+        panels.source.style.flex = '';
       }
-      if (!panels.tree.style.flex || treeCollapsed) {
-        panels.tree.style.flex = treeCollapsed ? '' : '0 0 280px';
+      if (treeCollapsed) {
+        panels.tree.style.flex = '';
       }
-      if (!panels.output.style.flex || outputCollapsed) {
-        panels.output.style.flex = outputCollapsed ? '' : '1 1 auto';
+      if (outputCollapsed) {
+        panels.output.style.flex = '';
       }
       
-      // Handle different collapsed combinations
+      // Handle different collapsed combinations - set flex for remaining panels
       if (sourceCollapsed && !treeCollapsed && !outputCollapsed) {
-        panels.tree.style.flex = '0 0 280px';
-        panels.output.style.flex = '1 1 auto';
+        if (!panels.tree.style.flex || !panels.tree.style.flex.includes('px')) {
+          panels.tree.style.flex = '0 0 280px';
+        }
+        if (!panels.output.style.flex || !panels.output.style.flex.includes('px')) {
+          panels.output.style.flex = '1 1 auto';
+        }
       } else if (treeCollapsed && !sourceCollapsed && !outputCollapsed) {
-        panels.source.style.flex = '1 1 50%';
-        panels.output.style.flex = '1 1 50%';
+        // When tree is collapsed, source and output should share space
+        if (!panels.source.style.flex.includes('px') || !panels.output.style.flex.includes('px')) {
+          panels.source.style.flex = '1 1 50%';
+          panels.output.style.flex = '1 1 50%';
+        }
       } else if (outputCollapsed && !sourceCollapsed && !treeCollapsed) {
-        panels.source.style.flex = '1 1 auto';
-        panels.tree.style.flex = '0 0 280px';
+        if (!panels.source.style.flex || !panels.source.style.flex.includes('px')) {
+          panels.source.style.flex = '1 1 auto';
+        }
+        if (!panels.tree.style.flex || !panels.tree.style.flex.includes('px')) {
+          panels.tree.style.flex = '0 0 280px';
+        }
       } else if (sourceCollapsed && treeCollapsed) {
         panels.output.style.flex = '1 1 auto';
       } else if (sourceCollapsed && outputCollapsed) {
@@ -362,14 +374,46 @@
               collapsedCount++;
             }
           });
+          // Restore saved widths
+          if (state.widths) {
+            if (state.widths.source && panels.source && !isCollapsed('source')) {
+              panels.source.style.flex = state.widths.source;
+            }
+            if (state.widths.tree && panels.tree && !isCollapsed('tree')) {
+              panels.tree.style.flex = state.widths.tree;
+            }
+            if (state.widths.output && panels.output && !isCollapsed('output')) {
+              panels.output.style.flex = state.widths.output;
+            }
+          }
           updateLayout();
         }
       } catch (e) {}
     }
     
+    // Lock panel widths to pixels after initial layout to prevent content-based resizing
+    function lockPanelWidths() {
+      if (!isCollapsed('source') && !panels.source.style.flex.includes('px')) {
+        panels.source.style.flex = `0 0 ${panels.source.offsetWidth}px`;
+      }
+      if (!isCollapsed('tree') && !panels.tree.style.flex.includes('px')) {
+        panels.tree.style.flex = `0 0 ${panels.tree.offsetWidth}px`;
+      }
+      if (!isCollapsed('output') && !panels.output.style.flex.includes('px')) {
+        panels.output.style.flex = `0 0 ${panels.output.offsetWidth}px`;
+      }
+      saveState();
+    }
+    
     // Initialize panel state
     loadState();
     updateLayout();
+    // Lock widths after a short delay to allow CSS to compute initial sizes
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        lockPanelWidths();
+      });
+    });
   })();
   </script>
 
