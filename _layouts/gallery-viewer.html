@@ -216,17 +216,17 @@
     const fileTree = document.getElementById('file-tree');
     
     fileTree.addEventListener('click', function(e) {
-      const treeItem = e.target.closest('.tree-item');
+      const treeItem = e.target.closest('.file-tree-item');
       if (!treeItem) return;
       
       const filePath = treeItem.dataset.path;
       
       // Handle folder toggle
       if (treeItem.classList.contains('folder')) {
-        const folderChildren = treeItem.nextElementSibling;
+        const folderContents = treeItem.parentElement.querySelector('.folder-contents');
         const toggleIcon = treeItem.querySelector('.folder-toggle');
-        if (folderChildren && folderChildren.classList.contains('folder-children')) {
-          folderChildren.classList.toggle('collapsed');
+        if (folderContents) {
+          folderContents.classList.toggle('collapsed');
           if (toggleIcon) {
             toggleIcon.classList.toggle('collapsed');
           }
@@ -237,7 +237,7 @@
       // Handle file selection
       if (filePath) {
         // Update active state
-        fileTree.querySelectorAll('.tree-item').forEach(item => item.classList.remove('active'));
+        fileTree.querySelectorAll('.file-tree-item').forEach(item => item.classList.remove('active'));
         treeItem.classList.add('active');
         
         // Find file content
@@ -300,7 +300,7 @@
     }
     
     // Auto-select first file
-    const firstFile = fileTree.querySelector('.tree-item:not(.folder)');
+    const firstFile = fileTree.querySelector('.file-tree-item:not(.folder)');
     if (firstFile) {
       firstFile.click();
     }

@@ -33,15 +33,14 @@ body_class: gallery-index-page
     <div class="gallery-cards">
       {% for example in site.gallery %}
         {% if example.language == "Python" %}
-        <a href="{{ example.url | relative_url }}" class="gallery-card" data-language="{{ example.language | downcase }}" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
+        <div class="gallery-card" data-href="{{ example.url | relative_url }}" data-language="{{ example.language | downcase }}" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
           <div class="card-content">
             <div class="card-header">
               <div class="card-title">{{ example.title }}</div>
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " " | append: example.protocol | append: " " | append: example.role }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
-              </span>
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %} {{ example.schema_format }}</span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.protocol }}</span>
             </div>
@@ -49,11 +48,11 @@ body_class: gallery-index-page
           <div class="card-footer">
             <div class="card-command">
               <code>{{ example.command | default: "xrcg generate ..." }}</code>
-              <a href="https://github.com/xregistry/codegen#readme" class="docs-link" onclick="event.stopPropagation()">docs</a>
+              <a href="https://github.com/xregistry/codegen#readme" class="docs-link">docs</a>
             </div>
-            <div class="card-link">View example →</div>
+            <a href="{{ example.url | relative_url }}" class="card-link">View example →</a>
           </div>
-        </a>
+        </div>
         {% endif %}
       {% endfor %}
     </div>
@@ -68,15 +67,14 @@ body_class: gallery-index-page
     <div class="gallery-cards">
       {% for example in site.gallery %}
         {% if example.language == "C#" %}
-        <a href="{{ example.url | relative_url }}" class="gallery-card" data-language="{{ example.language | downcase | replace: '#', 'sharp' }}" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
+        <div class="gallery-card" data-href="{{ example.url | relative_url }}" data-language="{{ example.language | downcase | replace: '#', 'sharp' }}" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
           <div class="card-content">
             <div class="card-header">
               <div class="card-title">{{ example.title }}</div>
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " " | append: example.protocol | append: " " | append: example.role }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
-              </span>
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %} {{ example.schema_format }}</span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.protocol }}</span>
             </div>
@@ -84,11 +82,11 @@ body_class: gallery-index-page
           <div class="card-footer">
             <div class="card-command">
               <code>{{ example.command | default: "xrcg generate ..." }}</code>
-              <a href="https://github.com/xregistry/codegen#readme" class="docs-link" onclick="event.stopPropagation()">docs</a>
+              <a href="https://github.com/xregistry/codegen#readme" class="docs-link">docs</a>
             </div>
-            <div class="card-link">View example →</div>
+            <a href="{{ example.url | relative_url }}" class="card-link">View example →</a>
           </div>
-        </a>
+        </div>
         {% endif %}
       {% endfor %}
     </div>
@@ -103,15 +101,14 @@ body_class: gallery-index-page
     <div class="gallery-cards">
       {% for example in site.gallery %}
         {% if example.language == "Java" %}
-        <a href="{{ example.url | relative_url }}" class="gallery-card" data-language="{{ example.language | downcase }}" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
+        <div class="gallery-card" data-href="{{ example.url | relative_url }}" data-language="{{ example.language | downcase }}" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
           <div class="card-content">
             <div class="card-header">
               <div class="card-title">{{ example.title }}</div>
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " " | append: example.protocol | append: " " | append: example.role }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
-              </span>
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %} {{ example.schema_format }}</span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.protocol }}</span>
             </div>
@@ -119,11 +116,11 @@ body_class: gallery-index-page
           <div class="card-footer">
             <div class="card-command">
               <code>{{ example.command | default: "xrcg generate ..." }}</code>
-              <a href="https://github.com/xregistry/codegen#readme" class="docs-link" onclick="event.stopPropagation()">docs</a>
+              <a href="https://github.com/xregistry/codegen#readme" class="docs-link">docs</a>
             </div>
-            <div class="card-link">View example →</div>
+            <a href="{{ example.url | relative_url }}" class="card-link">View example →</a>
           </div>
-        </a>
+        </div>
         {% endif %}
       {% endfor %}
     </div>
@@ -138,15 +135,14 @@ body_class: gallery-index-page
     <div class="gallery-cards">
       {% for example in site.gallery %}
         {% if example.language == "TypeScript" %}
-        <a href="{{ example.url | relative_url }}" class="gallery-card" data-language="{{ example.language | downcase }}" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
+        <div class="gallery-card" data-href="{{ example.url | relative_url }}" data-language="{{ example.language | downcase }}" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
           <div class="card-content">
             <div class="card-header">
               <div class="card-title">{{ example.title }}</div>
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " " | append: example.protocol | append: " " | append: example.role }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
-              </span>
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %} {{ example.schema_format }}</span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.protocol }}</span>
             </div>
@@ -154,11 +150,11 @@ body_class: gallery-index-page
           <div class="card-footer">
             <div class="card-command">
               <code>{{ example.command | default: "xrcg generate ..." }}</code>
-              <a href="https://github.com/xregistry/codegen#readme" class="docs-link" onclick="event.stopPropagation()">docs</a>
+              <a href="https://github.com/xregistry/codegen#readme" class="docs-link">docs</a>
             </div>
-            <div class="card-link">View example →</div>
+            <a href="{{ example.url | relative_url }}" class="card-link">View example →</a>
           </div>
-        </a>
+        </div>
         {% endif %}
       {% endfor %}
     </div>
@@ -173,15 +169,14 @@ body_class: gallery-index-page
     <div class="gallery-cards">
       {% for example in site.gallery %}
         {% if example.language == "Go" %}
-        <a href="{{ example.url | relative_url }}" class="gallery-card" data-language="{{ example.language | downcase }}" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
+        <div class="gallery-card" data-href="{{ example.url | relative_url }}" data-language="{{ example.language | downcase }}" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
           <div class="card-content">
             <div class="card-header">
               <div class="card-title">{{ example.title }}</div>
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " " | append: example.protocol | append: " " | append: example.role }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
-              </span>
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %} {{ example.schema_format }}</span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.protocol }}</span>
             </div>
@@ -189,11 +184,11 @@ body_class: gallery-index-page
           <div class="card-footer">
             <div class="card-command">
               <code>{{ example.command | default: "xrcg generate ..." }}</code>
-              <a href="https://github.com/xregistry/codegen#readme" class="docs-link" onclick="event.stopPropagation()">docs</a>
+              <a href="https://github.com/xregistry/codegen#readme" class="docs-link">docs</a>
             </div>
-            <div class="card-link">View example →</div>
+            <a href="{{ example.url | relative_url }}" class="card-link">View example →</a>
           </div>
-        </a>
+        </div>
         {% endif %}
       {% endfor %}
     </div>
@@ -208,15 +203,14 @@ body_class: gallery-index-page
     <div class="gallery-cards">
       {% for example in site.gallery %}
         {% if example.language == "AsyncAPI" or example.language == "OpenAPI" %}
-        <a href="{{ example.url | relative_url }}" class="gallery-card" data-language="spec" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
+        <div class="gallery-card" data-href="{{ example.url | relative_url }}" data-language="spec" data-protocol="{{ example.protocol | downcase }}" data-schema="{{ example.schema_format | downcase | replace: ' ', '' }}">
           <div class="card-content">
             <div class="card-header">
               <div class="card-title">{{ example.title }}</div>
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " specification" }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
-              </span>
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %} {{ example.schema_format }}</span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.language }}</span>
             </div>
@@ -224,11 +218,11 @@ body_class: gallery-index-page
           <div class="card-footer">
             <div class="card-command">
               <code>{{ example.command | default: "xrcg generate ..." }}</code>
-              <a href="https://github.com/xregistry/codegen#readme" class="docs-link" onclick="event.stopPropagation()">docs</a>
+              <a href="https://github.com/xregistry/codegen#readme" class="docs-link">docs</a>
             </div>
-            <div class="card-link">View example →</div>
+            <a href="{{ example.url | relative_url }}" class="card-link">View example →</a>
           </div>
-        </a>
+        </div>
         {% endif %}
       {% endfor %}
     </div>
@@ -248,15 +242,14 @@ document.addEventListener('DOMContentLoaded', function() {
   const filterTabs = document.querySelectorAll('.filter-tab');
   const categories = document.querySelectorAll('.gallery-category');
   
+  // Filter functionality
   filterTabs.forEach(tab => {
     tab.addEventListener('click', function() {
-      // Update active tab
       filterTabs.forEach(t => t.classList.remove('active'));
       this.classList.add('active');
       
       const filter = this.dataset.filter;
       
-      // Show/hide categories
       categories.forEach(category => {
         const categoryType = category.dataset.category;
         if (filter === 'all' || categoryType === filter) {
@@ -265,6 +258,20 @@ document.addEventListener('DOMContentLoaded', function() {
           category.style.display = 'none';
         }
       });
+    });
+  });
+  
+  // Card click handling - navigate to example page
+  document.querySelectorAll('.gallery-card').forEach(card => {
+    card.addEventListener('click', function(e) {
+      // Don't navigate if clicking on a link inside the card
+      if (e.target.closest('a')) {
+        return;
+      }
+      const href = this.dataset.href;
+      if (href) {
+        window.location.href = href;
+      }
     });
   });
 });
