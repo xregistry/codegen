@@ -20,8 +20,11 @@
   
   <!-- Custom styles -->
   <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+  {% if page.body_class contains 'gallery' %}
+  <link rel="stylesheet" href="{{ '/assets/css/gallery.css' | relative_url }}">
+  {% endif %}
 </head>
-<body>
+<body{% if page.body_class %} class="{{ page.body_class }}"{% endif %}>
   <!-- Header with dark gradient (xRegistry.io style) -->
   <header class="site-header">
     <div class="container">

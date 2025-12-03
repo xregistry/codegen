@@ -19,6 +19,37 @@
   min-height: 100vh;
 }
 
+/* Override header for dark gallery pages */
+.gallery-index-page .site-header {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.gallery-index-page .site-header a {
+  color: var(--color-text);
+}
+
+.gallery-index-page .site-header .logo-text {
+  color: white;
+}
+
+/* Override footer for dark gallery pages */
+.gallery-index-page .site-footer {
+  background-color: var(--color-bg-alt);
+  border-top: 1px solid var(--color-border);
+}
+
+.gallery-index-page .site-footer,
+.gallery-index-page .site-footer a,
+.gallery-index-page .site-footer h4,
+.gallery-index-page .site-footer p {
+  color: var(--color-text-muted);
+}
+
+.gallery-index-page .site-footer a:hover {
+  color: var(--color-text);
+}
+
 /* ===== Gallery Index Page ===== */
 .gallery-index-page .main-content {
   background-color: var(--color-bg);
