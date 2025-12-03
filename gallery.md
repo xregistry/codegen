@@ -2,6 +2,7 @@
 layout: default
 title: Gallery
 description: Browse generated code examples for different languages and protocols
+permalink: /gallery/
 ---
 
 <div class="gallery-index">
