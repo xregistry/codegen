@@ -342,6 +342,7 @@
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  /* Allow panel-content to handle scrolling */
   overflow: hidden;
 }
 
@@ -459,6 +460,12 @@
   background: var(--color-bg);
   /* Contain content to prevent affecting parent flex layout */
   min-width: 0;
+}
+
+/* Tree panel needs horizontal scroll for long file names */
+.tree-panel .panel-content {
+  overflow-x: auto;
+  overflow-y: auto;
 }
 
 .panel-actions {
