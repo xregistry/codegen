@@ -248,11 +248,8 @@ def generate_file_tree_html(files: list) -> str:
     return render_tree(tree)
 
 
-def generate_gallery_page(example: GalleryExample, files: list, definition_content: str, gallery_dir: Path, zip_url: str) -> None:
-    """Generate a Jekyll page for a gallery example."""
-    example_dir = gallery_dir / example.id
-    example_dir.mkdir(parents=True, exist_ok=True)
-    
+def generate_gallery_page(example: GalleryExample, files: list, definition_content: str, collection_dir: Path, zip_url: str) -> None:
+    """Generate a Jekyll collection item for a gallery example."""
     # Create the Jekyll front matter and content
     files_json = json.dumps({"files": files}, indent=2)
     
@@ -276,7 +273,8 @@ file_tree_html: |
 ---
 """
     
-    (example_dir / "index.html").write_text(page_content, encoding='utf-8')
+    # Write as a Jekyll collection item (e.g., _gallery/py-kafka-contoso-producer.html)
+    (collection_dir / f"{example.id}.html").write_text(page_content, encoding='utf-8')
 
 
 def indent_content(content: str, spaces: int) -> str:
@@ -293,8 +291,8 @@ def main():
     # Determine paths
     script_dir = Path(__file__).parent
     site_root = script_dir.parent
-    gallery_dir = site_root / "gallery"
-    files_dir = site_root / "gallery" / "files"
+    collection_dir = site_root / "_gallery"  # Jekyll collection folder
+    files_dir = site_root / "gallery" / "files"  # Static files folder
     
     # Try to find definitions
     definitions_dir = find_definitions_dir()
@@ -305,9 +303,13 @@ def main():
         return 1
     
     print(f"📁 Definitions: {definitions_dir}")
-    print(f"📁 Gallery output: {gallery_dir}\n")
+    print(f"📁 Gallery output: {collection_dir}\n")
     
     # Clean previous gallery content
+    if collection_dir.exists():
+        shutil.rmtree(collection_dir)
+    collection_dir.mkdir(parents=True, exist_ok=True)
+    
     if files_dir.exists():
         shutil.rmtree(files_dir)
     files_dir.mkdir(parents=True, exist_ok=True)
@@ -354,7 +356,7 @@ def main():
         # Generate gallery page
         generate_gallery_page(
             example, files, definition_content, 
-            gallery_dir, zip_url
+            collection_dir, zip_url
         )
         
         print(f"   ✅ Generated {len(files)} files, ZIP: {zip_path.stat().st_size // 1024}KB")
