@@ -1,0 +1,196 @@
+{
+  "messagegroups": {
+    "Fabrikam.SmartOven": {
+      "envelope": "CloudEvents/1.0",
+      "description": "State change events for a Fabrikam smart oven",
+      "messages": {
+        "Fabrikam.SmartOven.TurnedOn": {
+          "description": "Event for when the oven is turned on with settings",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.SmartOven.TurnedOn",
+              "description": "Event raised when the oven is turned on"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "subject of the event"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/Fabrikam.SmartOven/schemas/Fabrikam.SmartOven.TurnedOnEventData"
+        },
+        "Fabrikam.SmartOven.TurnedOff": {
+          "description": "Event for when the oven is turned off",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.SmartOven.TurnedOff",
+              "description": "Event raised when the oven is turned off"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "subject of the event"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/Fabrikam.SmartOven/schemas/Fabrikam.SmartOven.TurnedOffEventData"
+        },
+        "Fabrikam.SmartOven.TimerSet": {
+          "description": "Event for when a timer is set on the oven",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.SmartOven.TimerSet",
+              "description": "Event raised when a timer is set"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "subject of the event"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/Fabrikam.SmartOven/schemas/Fabrikam.SmartOven.TimerSetEventData"
+        },
+        "Fabrikam.SmartOven.TimerCompleted": {
+          "description": "Event for when a timer completes",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.SmartOven.TimerCompleted",
+              "description": "Event raised when a timer completes"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "subject of the event"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/Fabrikam.SmartOven/schemas/Fabrikam.SmartOven.TimerCompletedEventData"
+        },
+        "Fabrikam.SmartOven.PreheatingFinished": {
+          "description": "Event for when preheating is finished",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.SmartOven.PreheatingFinished",
+              "description": "Event raised when preheating is finished"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "subject of the event"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/Fabrikam.SmartOven/schemas/Fabrikam.SmartOven.PreheatingFinishedEventData"
+        }
+      }
+    }
+  },
+  "schemagroups": {
+    "Fabrikam.SmartOven": {
+      "schemas": {
+        "Fabrikam.SmartOven.TurnedOnEventData": {
+          "format": "Proto/3",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Fabrikam.SmartOven;\n\nmessage TurnedOnEventData {\n  string tenantid = 1;\n  string deviceid = 2;\n  int32 temperatureF = 3;\n  int32 temperatureC = 4;\n  OvenModeEnum OvenMode = 5;\n  enum OvenModeEnum {\n    Microwave = 0;\n    TopHeat = 1;\n    BottomHeat = 2;\n    TopBottomHeat = 3;\n    Convection = 4;\n  }\n}\n"
+            }
+          }
+        },
+        "Fabrikam.SmartOven.TurnedOffEventData": {
+          "format": "Proto/3",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Fabrikam.SmartOven;\n\nmessage TurnedOffEventData {\n  string tenantid = 1;\n  string deviceid = 2;\n}\n"
+            }
+          }
+        },
+        "Fabrikam.SmartOven.TimerSetEventData": {
+          "format": "Proto/3",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Fabrikam.SmartOven;\n\nmessage TimerSetEventData {\n  string tenantid = 1;\n  string deviceid = 2;\n  TimerTypeEnum TimerType = 3;\n  int32 duration = 4;\n  enum TimerTypeEnum {\n    Standard = 0;\n    Smart = 1;\n  }\n}\n"
+            }
+          }
+        },
+        "Fabrikam.SmartOven.TimerCompletedEventData": {
+          "format": "Proto/3",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Fabrikam.SmartOven;\n\nmessage TimerCompletedEventData {\n  string tenantid = 1;\n  string deviceid = 2;\n  int32 duration = 3;\n}\n"
+            }
+          }
+        },
+        "Fabrikam.SmartOven.PreheatingFinishedEventData": {
+          "format": "Proto/3",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Fabrikam.SmartOven;\n\nmessage PreheatingFinishedEventData {\n  string tenantid = 1;\n  string deviceid = 2;\n  int32 temperatureF = 3;\n  int32 temperatureC = 4;\n}\n"
+            }
+          }
+        }
+      }
+    }
+  }
+}

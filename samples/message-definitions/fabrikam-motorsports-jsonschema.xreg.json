@@ -1,0 +1,169 @@
+{
+  "messagegroups": {
+    "net.fabrikam.telemetry": {
+      "envelope": "CloudEvents/1.0",
+      "messages": {
+        "net.fabrikam.telemetry.channel": {
+          "description": "Channel Timeseries Event",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "type": {
+              "value": "net.fabrikam.telemetry.channel"
+            },
+            "source": {
+              "type": "uritemplate",
+              "value": "fza://{tenantid}/{carId}"
+            },
+            "subject": {
+              "type": "uritemplate",
+              "value": "{channelId}"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "JSONSchema/draft-07",
+          "dataschemauri": "#/schemagroups/net.fabrikam.telemetry/schemas/net.fabrikam.telemetry.channel"
+        }
+      }
+    }
+  },
+  "schemagroups": {
+    "net.fabrikam.telemetry": {
+      "schemas": {
+        "net.fabrikam.telemetry.channel": {
+          "description": "Channel Timeseries Event Data",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "JSONSchema/draft-07",
+              "schema": {
+                "type": "object",
+                "title": "Channel",
+                "properties": {
+                  "ChannelId": {
+                    "type": "string",
+                    "enum": [
+                      "EngineMaxRpm",
+                      "EngineIdleRpm",
+                      "CurrentEngineRpm",
+                      "AccelerationX",
+                      "AccelerationY",
+                      "AccelerationZ",
+                      "VelocityX",
+                      "VelocityY",
+                      "VelocityZ",
+                      "AngularVelocityX",
+                      "AngularVelocityY",
+                      "AngularVelocityZ",
+                      "Yaw",
+                      "Pitch",
+                      "Roll",
+                      "NormalizedSuspensionTravelFrontLeft",
+                      "NormalizedSuspensionTravelFrontRight",
+                      "NormalizedSuspensionTravelRearLeft",
+                      "NormalizedSuspensionTravelRearRight",
+                      "TireSlipRatioFrontLeft",
+                      "TireSlipRatioFrontRight",
+                      "TireSlipRatioRearLeft",
+                      "TireSlipRatioRearRight",
+                      "WheelRotationSpeedFrontLeft",
+                      "WheelRotationSpeedFrontRight",
+                      "WheelRotationSpeedRearLeft",
+                      "WheelRotationSpeedRearRight",
+                      "WheelOnRumbleStripFrontLeft",
+                      "WheelOnRumbleStripFrontRight",
+                      "WheelOnRumbleStripRearLeft",
+                      "WheelOnRumbleStripRearRight",
+                      "WheelInPuddleDepthFrontLeft",
+                      "WheelInPuddleDepthFrontRight",
+                      "WheelInPuddleDepthRearLeft",
+                      "WheelInPuddleDepthRearRight",
+                      "SurfaceRumbleFrontLeft",
+                      "SurfaceRumbleFrontRight",
+                      "SurfaceRumbleRearLeft",
+                      "SurfaceRumbleRearRight",
+                      "TireSlipAngleFrontLeft",
+                      "TireSlipAngleFrontRight",
+                      "TireSlipAngleRearLeft",
+                      "TireSlipAngleRearRight",
+                      "TireCombinedSlipFrontLeft",
+                      "TireCombinedSlipFrontRight",
+                      "TireCombinedSlipRearLeft",
+                      "TireCombinedSlipRearRight",
+                      "SuspensionTravelMetersFrontLeft",
+                      "SuspensionTravelMetersFrontRight",
+                      "SuspensionTravelMetersRearLeft",
+                      "SuspensionTravelMetersRearRight"
+                    ],
+                    "title": "ChannelType",
+                    "description": "The unique identifier of the channel"
+                  },
+                  "CarId": {
+                    "type": "string",
+                    "description": "The unique identifier of the car"
+                  },
+                  "SessionId": {
+                    "type": "string",
+                    "description": "The unique identifier of the session"
+                  },
+                  "LapId": {
+                    "type": "string"
+                  },
+                  "SampleCount": {
+                    "type": "integer",
+                    "format": "int64",
+                    "description": "The number of samples in this batch"
+                  },
+                  "Frequency": {
+                    "type": "integer",
+                    "format": "int64",
+                    "description": "The frequency of the channel"
+                  },
+                  "Timespan": {
+                    "$ref": "#/definitions/BatchTimespan"
+                  },
+                  "Data": {
+                    "type": "array",
+                    "items": {
+                      "type": "number",
+                      "format": "double"
+                    }
+                  }
+                },
+                "required": [
+                  "ChannelId",
+                  "SampleCount",
+                  "Frequency",
+                  "Timespan",
+                  "Data"
+                ],
+                "definitions": {
+                  "BatchTimespan": {
+                    "type": "object",
+                    "title": "BatchTimespan",
+                    "properties": {
+                      "StartTS": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "EndTS": {
+                        "type": "integer",
+                        "format": "int64"
+                      }
+                    },
+                    "required": [
+                      "StartTS",
+                      "EndTS"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "format": "JSONSchema/draft-07"
+        }
+      }
+    }
+  }
+}

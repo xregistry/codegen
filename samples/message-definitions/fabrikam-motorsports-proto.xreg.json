@@ -1,0 +1,48 @@
+{
+  "messagegroups": {
+    "net.fabrikam.telemetry": {
+      "envelope": "CloudEvents/1.0",
+      "messages": {
+        "net.fabrikam.telemetry.channel": {
+          "description": "Channel Timeseries Event",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "type": {
+              "value": "net.fabrikam.telemetry.channel"
+            },
+            "source": {
+              "type": "uritemplate",
+              "value": "fza://{tenantid}/{carId}"
+            },
+            "subject": {
+              "type": "uritemplate",
+              "value": "{channelId}"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/net.fabrikam.telemetry/schemas/net.fabrikam.telemetry.channel"
+        }
+      }
+    }
+  },
+  "schemagroups": {
+    "net.fabrikam.telemetry": {
+      "schemas": {
+        "net.fabrikam.telemetry.channel": {
+          "description": "Channel Timeseries Event Data",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Net.Fabrikam.Telemetry;\n\nmessage Channel {\n  ChannelTypeEnum ChannelType = 1;\n  optional string CarId = 2;\n  optional string SessionId = 3;\n  optional string LapId = 4;\n  int64 SampleCount = 5;\n  int64 Frequency = 6;\n  BatchTimespanType BatchTimespan = 7;\n  repeated double Data = 8;\n  enum ChannelTypeEnum {\n    EngineMaxRpm = 0;\n    EngineIdleRpm = 1;\n    CurrentEngineRpm = 2;\n    AccelerationX = 3;\n    AccelerationY = 4;\n    AccelerationZ = 5;\n    VelocityX = 6;\n    VelocityY = 7;\n    VelocityZ = 8;\n    AngularVelocityX = 9;\n    AngularVelocityY = 10;\n    AngularVelocityZ = 11;\n    Yaw = 12;\n    Pitch = 13;\n    Roll = 14;\n    NormalizedSuspensionTravelFrontLeft = 15;\n    NormalizedSuspensionTravelFrontRight = 16;\n    NormalizedSuspensionTravelRearLeft = 17;\n    NormalizedSuspensionTravelRearRight = 18;\n    TireSlipRatioFrontLeft = 19;\n    TireSlipRatioFrontRight = 20;\n    TireSlipRatioRearLeft = 21;\n    TireSlipRatioRearRight = 22;\n    WheelRotationSpeedFrontLeft = 23;\n    WheelRotationSpeedFrontRight = 24;\n    WheelRotationSpeedRearLeft = 25;\n    WheelRotationSpeedRearRight = 26;\n    WheelOnRumbleStripFrontLeft = 27;\n    WheelOnRumbleStripFrontRight = 28;\n    WheelOnRumbleStripRearLeft = 29;\n    WheelOnRumbleStripRearRight = 30;\n    WheelInPuddleDepthFrontLeft = 31;\n    WheelInPuddleDepthFrontRight = 32;\n    WheelInPuddleDepthRearLeft = 33;\n    WheelInPuddleDepthRearRight = 34;\n    SurfaceRumbleFrontLeft = 35;\n    SurfaceRumbleFrontRight = 36;\n    SurfaceRumbleRearLeft = 37;\n    SurfaceRumbleRearRight = 38;\n    TireSlipAngleFrontLeft = 39;\n    TireSlipAngleFrontRight = 40;\n    TireSlipAngleRearLeft = 41;\n    TireSlipAngleRearRight = 42;\n    TireCombinedSlipFrontLeft = 43;\n    TireCombinedSlipFrontRight = 44;\n    TireCombinedSlipRearLeft = 45;\n    TireCombinedSlipRearRight = 46;\n    SuspensionTravelMetersFrontLeft = 47;\n    SuspensionTravelMetersFrontRight = 48;\n    SuspensionTravelMetersRearLeft = 49;\n    SuspensionTravelMetersRearRight = 50;\n  }\n  message BatchTimespanType {\n    int64 StartTS = 1;\n    int64 EndTS = 2;\n  }\n}\n"
+            }
+          },
+          "format": "Proto/3"
+        }
+      }
+    }
+  }
+}

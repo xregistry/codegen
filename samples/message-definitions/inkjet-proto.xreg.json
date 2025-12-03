@@ -1,0 +1,201 @@
+{
+  "messagegroups": {
+    "Fabrikam.InkJetPrinter": {
+      "envelope": "CloudEvents/1.0",
+      "description": "Operational events for a Fabrikam inkjet printer",
+      "messages": {
+        "Fabrikam.InkJetPrinter.PrintJobStarted": {
+          "description": "Event for when a print job starts",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.PrintJobStarted",
+              "description": "Event raised when a print job is initiated"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "identifier of the print job"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/Fabrikam.InkJetPrinter/schemas/Fabrikam.InkJetPrinter.PrintJobStartedEventData"
+        },
+        "Fabrikam.InkJetPrinter.PrintJobCompleted": {
+          "description": "Event for when a print job is completed",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.PrintJobCompleted",
+              "description": "Event raised when a print job is completed"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "identifier of the print job"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/Fabrikam.InkJetPrinter/schemas/Fabrikam.InkJetPrinter.PrintJobCompletedEventData"
+        },
+        "Fabrikam.InkJetPrinter.InkLow": {
+          "description": "Event for when ink levels are low",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.InkLow",
+              "description": "Event raised when ink levels are detected to be low"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "identifier of the affected ink cartridge"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/Fabrikam.InkJetPrinter/schemas/Fabrikam.InkJetPrinter.InkLowEventData"
+        },
+        "Fabrikam.InkJetPrinter.PaperJam": {
+          "description": "Event for when a paper jam occurs",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.PaperJam",
+              "description": "Event raised when a paper jam is detected"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "location of the jam within the printer"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/Fabrikam.InkJetPrinter/schemas/Fabrikam.InkJetPrinter.PaperJamEventData"
+        },
+        "Fabrikam.InkJetPrinter.MaintenanceRequired": {
+          "description": "Event for when the printer requires maintenance",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.MaintenanceRequired",
+              "description": "Event raised when maintenance is required for the printer"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "type of maintenance required"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "Proto/3",
+          "dataschemauri": "#/schemagroups/Fabrikam.InkJetPrinter/schemas/Fabrikam.InkJetPrinter.MaintenanceRequiredEventData"
+        }
+      }
+    }
+  },
+  "schemagroups": {
+    "Fabrikam.InkJetPrinter": {
+      "schemas": {
+        "Fabrikam.InkJetPrinter.PrintJobStartedEventData": {
+          "format": "Proto/3",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Fabrikam.InkJetPrinter;\n\nmessage PrintJobStartedEventData {\n  string tenantid = 1;\n  string deviceid = 2;\n  string jobId = 3;\n  string documentName = 4;\n  string startTime = 5;\n}\n"
+            }
+          }
+        },
+        "Fabrikam.InkJetPrinter.PrintJobCompletedEventData": {
+          "format": "Proto/3",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Fabrikam.InkJetPrinter;\n\nmessage PrintJobCompletedEventData {\n  string tenantid = 1;\n  string deviceid = 2;\n  string jobId = 3;\n  string documentName = 4;\n  string completionTime = 5;\n  PrintJobOutcomeEnum PrintJobOutcome = 6;\n  enum PrintJobOutcomeEnum {\n    Successful = 0;\n    Failed = 1;\n    Cancelled = 2;\n  }\n}\n"
+            }
+          }
+        },
+        "Fabrikam.InkJetPrinter.InkLowEventData": {
+          "format": "Proto/3",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Fabrikam.InkJetPrinter;\n\nmessage InkLowEventData {\n  string tenantid = 1;\n  string deviceid = 2;\n  string cartridgeId = 3;\n  InkColorEnum InkColor = 4;\n  int32 remainingLevel = 5;\n  enum InkColorEnum {\n    Black = 0;\n    Cyan = 1;\n    Magenta = 2;\n    Yellow = 3;\n  }\n}\n"
+            }
+          }
+        },
+        "Fabrikam.InkJetPrinter.PaperJamEventData": {
+          "format": "Proto/3",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Fabrikam.InkJetPrinter;\n\nmessage PaperJamEventData {\n  string tenantid = 1;\n  string deviceid = 2;\n  string jamLocation = 3;\n  bool cleared = 4;\n}\n"
+            }
+          }
+        },
+        "Fabrikam.InkJetPrinter.MaintenanceRequiredEventData": {
+          "format": "Proto/3",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "Proto/3",
+              "schema": "syntax = \"proto3\";\n\npackage Fabrikam.InkJetPrinter;\n\nmessage MaintenanceRequiredEventData {\n  string tenantid = 1;\n  string deviceid = 2;\n  MaintenanceTypeEnum MaintenanceType = 3;\n  UrgencyEnum Urgency = 4;\n  enum MaintenanceTypeEnum {\n    Cleaning = 0;\n    MechanicalAdjustment = 1;\n  }\n  enum UrgencyEnum {\n    Immediate = 0;\n    Routine = 1;\n  }\n}\n"
+            }
+          }
+        }
+      }
+    }
+  }
+}
