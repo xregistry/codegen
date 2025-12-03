@@ -547,6 +547,9 @@
 /* ===== File tree ===== */
 .file-tree {
   padding: 0.5rem;
+  /* Allow content to extend beyond container for horizontal scroll */
+  width: max-content;
+  min-width: 100%;
 }
 
 .file-tree ul {
