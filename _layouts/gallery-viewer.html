@@ -6,25 +6,30 @@
   <title>{{ page.title }} | {{ site.title }} Gallery</title>
   <meta name="description" content="{{ page.description | default: site.description }}">
   
-  <!-- Fonts -->
+  <!-- Fonts - Noto Sans like Avrotize -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   
-  <!-- Devicons -->
+  <!-- Devicons for language icons -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/devicon.min.css">
   
-  <!-- Prism.js for syntax highlighting -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
+  <!-- Prism.js for syntax highlighting - Okaidia dark theme -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.css">
   
   <!-- Custom styles -->
   <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
   <link rel="stylesheet" href="{{ '/assets/css/gallery.css' | relative_url }}">
+  
+  <style>
+    body {
+      font-family: 'Noto Sans', sans-serif;
+    }
+  </style>
 </head>
-<body class="gallery-page">
-  <!-- Compact header for gallery -->
+<body class="gallery-page gallery-viewer-page">
+  <!-- Compact header -->
   <header class="site-header compact">
     <div class="container">
       <nav class="header-nav">
@@ -42,37 +47,71 @@
     </div>
   </header>
 
-  <!-- Three-panel gallery layout -->
-  <div class="gallery-container">
-    <!-- Left panel: Definition browser -->
-    <aside class="gallery-sidebar left-panel" id="definition-panel">
+  <!-- Title section above the three panels -->
+  <div class="viewer-header">
+    <div class="viewer-header-content">
+      <a href="{{ '/gallery/' | relative_url }}" class="back-link">← Back</a>
+      <div class="viewer-title-section">
+        <h1 class="viewer-title">{{ page.title }}</h1>
+        <p class="viewer-description">{{ page.description | default: page.definition_name | append: " with " | append: page.schema_format | append: " schema → " | append: page.language | append: " " | append: page.protocol | append: " " | append: page.role }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three-panel layout -->
+  <div class="viewer-panels" id="viewer-panels">
+    <!-- Left panel: Source definition -->
+    <div class="panel source-panel" id="source-panel" style="flex: 0 0 350px;">
       <div class="panel-header">
-        <h3>Definition</h3>
-        <button class="panel-toggle" aria-label="Toggle panel">
-          <span class="toggle-icon">◀</span>
-        </button>
+        <h3><span class="icon">📄</span> Source: {{ page.definition_name }}</h3>
+        <button class="panel-toggle" id="source-toggle" aria-label="Toggle panel">◀</button>
       </div>
       <div class="panel-content">
-        <div class="definition-info">
-          <h4>{{ page.definition_name }}</h4>
-          <p class="definition-meta">
-            <span class="tag schema-format">{{ page.schema_format }}</span>
-            <span class="tag protocol">{{ page.protocol }}</span>
-          </p>
+        <pre class="line-numbers"><code class="language-json" id="source-code">{{ page.definition_content | escape }}</code></pre>
+      </div>
+    </div>
+    
+    <!-- Separator 1 -->
+    <div class="panel-separator" id="separator-1" title="Drag to resize"></div>
+    
+    <!-- Center panel: File tree -->
+    <div class="panel files-panel" id="files-panel" style="flex: 0 0 280px;">
+      <div class="panel-header">
+        <div class="panel-actions" style="order: -1;">
+          <button class="panel-toggle" id="files-toggle-left" aria-label="Toggle panel">◀</button>
         </div>
-        <div class="code-block">
-          <pre class="line-numbers"><code class="language-json" id="definition-code">{{ page.definition_content | escape }}</code></pre>
+        <h3><span class="icon">📁</span> Output Files</h3>
+        <div class="panel-actions">
+          <button class="panel-toggle" id="files-toggle-right" aria-label="Toggle panel">▶</button>
         </div>
       </div>
-    </aside>
-
-    <!-- Center panel: File tree -->
-    <main class="gallery-main center-panel" id="file-tree-panel">
+      <div class="panel-content">
+        <div class="file-tree" id="file-tree">
+          {{ page.file_tree_html }}
+        </div>
+      </div>
+    </div>
+    
+    <!-- Separator 2 -->
+    <div class="panel-separator" id="separator-2" title="Drag to resize"></div>
+    
+    <!-- Right panel: Code preview -->
+    <div class="panel preview-panel" id="preview-panel" style="flex: 1;">
       <div class="panel-header">
-        <h3>Generated Files</h3>
+        <div class="panel-actions" style="order: -1;">
+          <button class="panel-toggle" id="preview-toggle" aria-label="Toggle panel">◀</button>
+        </div>
+        <h3><span class="icon">📄</span> <span id="preview-filename">Select a file</span></h3>
         <div class="panel-actions">
-          <a href="{{ page.zip_url }}" class="btn btn-primary btn-download" download>
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <button class="copy-btn" id="copy-btn" title="Copy code">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            Copy
+          </button>
+          <a href="{{ page.zip_url }}" class="download-btn" download>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
               <line x1="12" y1="15" x2="12" y2="3"></line>
@@ -82,44 +121,9 @@
         </div>
       </div>
       <div class="panel-content">
-        <div class="example-metadata">
-          <span class="metadata-item">
-            <i class="devicon-{{ page.language_icon }}-plain"></i>
-            {{ page.language }}
-          </span>
-          <span class="metadata-item">
-            <span class="protocol-badge">{{ page.protocol }}</span>
-          </span>
-          <span class="metadata-item">
-            <span class="role-badge {{ page.role | downcase }}">{{ page.role }}</span>
-          </span>
-        </div>
-        <div class="file-tree" id="file-tree">
-          <!-- File tree will be populated by JavaScript -->
-          {{ page.file_tree_html }}
-        </div>
+        <pre class="line-numbers"><code id="preview-code" class="language-plaintext">Select a file from the tree to view its contents.</code></pre>
       </div>
-    </main>
-
-    <!-- Right panel: Code viewer -->
-    <aside class="gallery-sidebar right-panel" id="code-panel">
-      <div class="panel-header">
-        <h3 id="code-panel-title">Select a file</h3>
-        <div class="panel-actions">
-          <button class="btn btn-icon" id="copy-code" title="Copy code">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <div class="panel-content">
-        <div class="code-block">
-          <pre class="line-numbers"><code id="code-viewer" class="language-plaintext">Select a file from the tree to view its contents.</code></pre>
-        </div>
-      </div>
-    </aside>
+    </div>
   </div>
 
   <!-- File data for JavaScript -->
@@ -131,8 +135,176 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.js"></script>
-  <script src="{{ '/assets/js/main.js' | relative_url }}"></script>
-  <script src="{{ '/assets/js/gallery.js' | relative_url }}"></script>
+  
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Parse file data
+    let filesData = [];
+    try {
+      const dataEl = document.getElementById('gallery-data');
+      if (dataEl && dataEl.textContent.trim()) {
+        filesData = JSON.parse(dataEl.textContent);
+      }
+    } catch (e) {
+      console.error('Failed to parse gallery data:', e);
+    }
+    
+    // Get elements
+    const viewerPanels = document.getElementById('viewer-panels');
+    const sourcePanel = document.getElementById('source-panel');
+    const filesPanel = document.getElementById('files-panel');
+    const previewPanel = document.getElementById('preview-panel');
+    const separator1 = document.getElementById('separator-1');
+    const separator2 = document.getElementById('separator-2');
+    const previewCode = document.getElementById('preview-code');
+    const previewFilename = document.getElementById('preview-filename');
+    const copyBtn = document.getElementById('copy-btn');
+    
+    // Panel toggle functionality
+    function setupToggle(toggleBtn, panel, direction) {
+      toggleBtn.addEventListener('click', function() {
+        panel.classList.toggle('collapsed');
+        this.textContent = panel.classList.contains('collapsed') 
+          ? (direction === 'left' ? '▶' : '◀')
+          : (direction === 'left' ? '◀' : '▶');
+      });
+    }
+    
+    setupToggle(document.getElementById('source-toggle'), sourcePanel, 'left');
+    setupToggle(document.getElementById('files-toggle-left'), filesPanel, 'left');
+    setupToggle(document.getElementById('files-toggle-right'), filesPanel, 'right');
+    setupToggle(document.getElementById('preview-toggle'), previewPanel, 'left');
+    
+    // Drag separator functionality
+    function setupSeparator(separator, leftPanel, rightPanel) {
+      let isDragging = false;
+      let startX = 0;
+      let startLeftWidth = 0;
+      
+      separator.addEventListener('mousedown', function(e) {
+        isDragging = true;
+        startX = e.clientX;
+        startLeftWidth = leftPanel.offsetWidth;
+        separator.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+      });
+      
+      document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        
+        const delta = e.clientX - startX;
+        const newWidth = Math.max(180, Math.min(startLeftWidth + delta, viewerPanels.offsetWidth - 400));
+        leftPanel.style.flex = `0 0 ${newWidth}px`;
+      });
+      
+      document.addEventListener('mouseup', function() {
+        if (isDragging) {
+          isDragging = false;
+          separator.classList.remove('dragging');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        }
+      });
+    }
+    
+    setupSeparator(separator1, sourcePanel, filesPanel);
+    setupSeparator(separator2, filesPanel, previewPanel);
+    
+    // File tree click handling
+    const fileTree = document.getElementById('file-tree');
+    
+    fileTree.addEventListener('click', function(e) {
+      const treeItem = e.target.closest('.tree-item');
+      if (!treeItem) return;
+      
+      const filePath = treeItem.dataset.path;
+      
+      // Handle folder toggle
+      if (treeItem.classList.contains('folder')) {
+        const folderChildren = treeItem.nextElementSibling;
+        const toggleIcon = treeItem.querySelector('.folder-toggle');
+        if (folderChildren && folderChildren.classList.contains('folder-children')) {
+          folderChildren.classList.toggle('collapsed');
+          if (toggleIcon) {
+            toggleIcon.classList.toggle('collapsed');
+          }
+        }
+        return;
+      }
+      
+      // Handle file selection
+      if (filePath) {
+        // Update active state
+        fileTree.querySelectorAll('.tree-item').forEach(item => item.classList.remove('active'));
+        treeItem.classList.add('active');
+        
+        // Find file content
+        const file = filesData.find(f => f.path === filePath);
+        if (file) {
+          previewFilename.textContent = filePath.split('/').pop();
+          
+          // Determine language for syntax highlighting
+          const ext = filePath.split('.').pop().toLowerCase();
+          const langMap = {
+            'py': 'python',
+            'cs': 'csharp',
+            'java': 'java',
+            'ts': 'typescript',
+            'js': 'javascript',
+            'go': 'go',
+            'json': 'json',
+            'yaml': 'yaml',
+            'yml': 'yaml',
+            'xml': 'xml',
+            'md': 'markdown',
+            'proto': 'protobuf',
+            'avsc': 'json',
+            'sh': 'bash',
+            'bat': 'batch',
+            'ps1': 'powershell',
+            'toml': 'toml',
+            'csproj': 'xml',
+            'sln': 'plaintext'
+          };
+          
+          const lang = langMap[ext] || 'plaintext';
+          previewCode.className = `language-${lang}`;
+          previewCode.textContent = file.content;
+          
+          // Re-highlight
+          Prism.highlightElement(previewCode);
+        }
+      }
+    });
+    
+    // Copy button
+    copyBtn.addEventListener('click', function() {
+      const code = previewCode.textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        const originalText = copyBtn.innerHTML;
+        copyBtn.classList.add('copied');
+        copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+        setTimeout(() => {
+          copyBtn.classList.remove('copied');
+          copyBtn.innerHTML = originalText;
+        }, 2000);
+      });
+    });
+    
+    // Highlight source code
+    const sourceCode = document.getElementById('source-code');
+    if (sourceCode) {
+      Prism.highlightElement(sourceCode);
+    }
+    
+    // Auto-select first file
+    const firstFile = fileTree.querySelector('.tree-item:not(.folder)');
+    if (firstFile) {
+      firstFile.click();
+    }
+  });
+  </script>
 </body>
 </html>
