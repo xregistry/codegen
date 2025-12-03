@@ -58,10 +58,41 @@ jobs:
           echo "has_tag=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: Install xrcg from PyPI
+    - name: Wait for xrcg package on PyPI (only for tag releases)
+      if: steps.get_version.outputs.has_tag == 'true'
       run: |
-        echo "📦 Installing latest xrcg from PyPI..."
-        # Install the latest available version (may be a dev version)
+        echo "⏳ Waiting for xrcg ${{ steps.get_version.outputs.version }} to be available on PyPI..."
+        MAX_ATTEMPTS=30  # 30 attempts * 10 seconds = 5 minutes
+        ATTEMPT=0
+        
+        while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+          ATTEMPT=$((ATTEMPT + 1))
+          echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking for xrcg==${{ steps.get_version.outputs.version }} on PyPI..."
+          
+          # Try to install the specific version
+          if pip install "xrcg==${{ steps.get_version.outputs.version }}" --no-cache-dir 2>&1; then
+            INSTALLED_VERSION=$(pip show xrcg | grep "^Version:" | cut -d' ' -f2)
+            echo "✅ Installed xrcg version: $INSTALLED_VERSION"
+            break
+          fi
+          
+          if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+            echo "Package not yet available, waiting 10 seconds..."
+            sleep 10
+          fi
+        done
+        
+        if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+          echo "❌ Timeout waiting for xrcg ${{ steps.get_version.outputs.version }} on PyPI"
+          echo "The PyPI publish workflow may have failed or is still running."
+          echo "Check: https://pypi.org/project/xrcg/#history"
+          exit 1
+        fi
+
+    - name: Install xrcg from PyPI (non-release builds)
+      if: steps.get_version.outputs.has_tag != 'true'
+      run: |
+        echo "📦 Installing latest xrcg from PyPI for testing..."
         pip install --upgrade xrcg || echo "⚠️ Could not install xrcg, CLI tests will be skipped"
         if command -v xrcg &> /dev/null; then
           INSTALLED_VERSION=$(pip show xrcg | grep "^Version:" | cut -d' ' -f2)
