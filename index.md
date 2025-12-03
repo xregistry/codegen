@@ -94,26 +94,23 @@ description: Generate messaging code from xRegistry message and endpoint definit
   </div>
 </section>
 
-<section>
+<section class="examples-section">
   <h2>Example Usage</h2>
   
-  <h3>Generate a Kafka Consumer in C#</h3>
+  <div class="example-block">
+    <h3>Generate a Kafka Consumer in C#</h3>
+    <pre><code>xrcg generate --style cs/kafkaconsumer -d contoso-erp.xreg.json -o ./output</code></pre>
+  </div>
   
-```bash
-xrcg generate --style cs/kafkaconsumer -d contoso-erp.xreg.json -o ./output
-```
+  <div class="example-block">
+    <h3>Generate an MQTT Client in Python</h3>
+    <pre><code>xrcg generate --style py/mqttclient -d smartoven.xreg.json -o ./output</code></pre>
+  </div>
   
-  <h3>Generate an MQTT Client in Python</h3>
-  
-```bash
-xrcg generate --style py/mqttclient -d smartoven.xreg.json -o ./output
-```
-  
-  <h3>Generate an AMQP Producer in Java</h3>
-  
-```bash
-xrcg generate --style java/amqpproducer -d fabrikam.xreg.json -o ./output
-```
+  <div class="example-block">
+    <h3>Generate an AMQP Producer in Java</h3>
+    <pre><code>xrcg generate --style java/amqpproducer -d fabrikam.xreg.json -o ./output</code></pre>
+  </div>
 </section>
 
 <section>

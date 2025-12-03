@@ -484,6 +484,40 @@ pre code {
   border: 1px solid var(--color-border);
 }
 
+/* ===== Examples Section ===== */
+.examples-section {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.example-block {
+  margin-bottom: var(--space-lg);
+}
+
+.example-block h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+}
+
+.example-block pre {
+  margin: 0;
+  padding: var(--space-md);
+  background-color: var(--color-code-bg);
+  border: 1px solid var(--color-code-border);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.example-block code {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--color-primary);
+  background: none;
+  padding: 0;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .hero h1 {
