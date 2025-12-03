@@ -5,24 +5,22 @@ on:
     tags:
       - 'v*'
   workflow_run:
-    workflows: ["Publish to PyPI"]
+    workflows: ["Python Test"]
     types:
       - completed
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       force_publish:
         description: 'Force publish even without tag'
         required: false
         default: 'false'
-      skip_pypi_wait:
-        description: 'Skip waiting for PyPI package'
-        required: false
-        default: 'false'
 
 jobs:
   publish-vscode:
     runs-on: ubuntu-latest
-    # Only run if PyPI publish succeeded (or triggered by tag/manual dispatch)
+    # Only run if tests passed (or triggered by tag/manual dispatch)
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
@@ -60,11 +58,10 @@ jobs:
           echo "has_tag=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: Wait for xrcg package on PyPI
-      if: github.event.inputs.skip_pypi_wait != 'true'
+    - name: Wait for xrcg package on PyPI (only for tag releases)
+      if: steps.get_version.outputs.has_tag == 'true'
       run: |
-        echo "⏳ Waiting for xrcg package to be available on PyPI..."
-        EXPECTED_VERSION="${{ steps.get_version.outputs.version }}"
+        echo "⏳ Waiting for xrcg ${{ steps.get_version.outputs.version }} to be available on PyPI..."
         MAX_ATTEMPTS=30  # 30 attempts * 10 seconds = 5 minutes
         ATTEMPT=0
         
@@ -72,15 +69,11 @@ jobs:
           ATTEMPT=$((ATTEMPT + 1))
           echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking for xrcg on PyPI..."
           
-          # Try to get package info from PyPI
-          if pip index versions xrcg 2>/dev/null; then
-            echo "✅ xrcg package found on PyPI"
-            # Try to install it
-            if pip install xrcg --upgrade; then
-              INSTALLED_VERSION=$(pip show xrcg | grep "^Version:" | cut -d' ' -f2)
-              echo "✅ Installed xrcg version: $INSTALLED_VERSION"
-              break
-            fi
+          # Try to install the specific version
+          if pip install "xrcg==${{ steps.get_version.outputs.version }}" 2>/dev/null; then
+            INSTALLED_VERSION=$(pip show xrcg | grep "^Version:" | cut -d' ' -f2)
+            echo "✅ Installed xrcg version: $INSTALLED_VERSION"
+            break
           fi
           
           if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
@@ -90,16 +83,24 @@ jobs:
         done
         
         if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-          echo "⚠️ Timeout waiting for xrcg on PyPI, attempting installation anyway..."
-          pip install xrcg || echo "Warning: Could not install xrcg from PyPI"
+          echo "❌ Timeout waiting for xrcg ${{ steps.get_version.outputs.version }} on PyPI"
+          echo "The PyPI publish workflow may have failed or is still running."
+          exit 1
         fi
-        
-        # Verify xrcg is working
+
+    - name: Install xrcg from PyPI (non-release builds)
+      if: steps.get_version.outputs.has_tag != 'true'
+      run: |
+        echo "📦 Installing latest xrcg from PyPI for testing..."
+        pip install xrcg || echo "⚠️ Could not install xrcg, CLI tests will be skipped"
+
+    - name: Verify xrcg installation
+      run: |
         if command -v xrcg &> /dev/null; then
           echo "✅ xrcg CLI is available:"
           xrcg --help | head -5
         else
-          echo "⚠️ xrcg CLI not found in PATH after installation"
+          echo "⚠️ xrcg CLI not found in PATH"
         fi
 
     - name: Check if VSCE_PAT secret is available
