@@ -113,7 +113,7 @@ def run_xrcg_generate(definition_path: Path, style: str, output_dir: Path) -> bo
         sys.executable, "-m", "xrcg", "generate",
         "--style", style,
         "-d", str(definition_path),
-        "-o", str(output_dir)
+        "--output", str(output_dir)
     ]
     
     try:
