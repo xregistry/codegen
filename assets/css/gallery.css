@@ -457,6 +457,9 @@
   flex: 1;
   overflow: auto;
   background: var(--color-bg);
+  /* Prevent content from affecting panel width - let flex-grow handle sizing */
+  width: 0;
+  min-width: 0;
 }
 
 .panel-actions {
@@ -523,6 +526,9 @@
   padding: 1rem;
   min-height: 100%;
   background: var(--color-bg) !important;
+  /* Allow horizontal scroll without affecting panel width */
+  width: max-content;
+  min-width: 100%;
 }
 
 .source-panel code,
