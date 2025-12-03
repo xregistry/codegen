@@ -1,60 +1,17 @@
-/* xRegistry Codegen Gallery - Avrotize-inspired dark theme with xRegistry.io colors */
+/* xRegistry Codegen Gallery - Light theme matching xRegistry.io */
+/* Note: This file supplements style.css - the base light theme comes from there */
 
-/* ===== Gallery Page Dark Theme Override ===== */
+/* ===== Gallery Index Page - uses light theme from style.css ===== */
 .gallery-page,
 .gallery-index-page {
-  --color-bg: #0f172a;
-  --color-bg-alt: #1e293b;
-  --color-bg-subtle: #334155;
-  --color-text: #f1f5f9;
-  --color-text-muted: #94a3b8;
-  --color-text-light: #64748b;
-  --color-border: #334155;
-  --color-border-light: #475569;
-  --color-code-bg: #1e293b;
-  --color-code-border: #334155;
-  
-  background-color: var(--color-bg);
-  color: var(--color-text);
-  min-height: 100vh;
+  /* No dark theme overrides - inherit from style.css light theme */
 }
 
-/* Override header for dark gallery pages */
-.gallery-index-page .site-header {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.gallery-index-page .site-header a {
-  color: var(--color-text);
-}
-
-.gallery-index-page .site-header .logo-text {
-  color: white;
-}
-
-/* Override footer for dark gallery pages */
-.gallery-index-page .site-footer {
-  background-color: var(--color-bg-alt);
-  border-top: 1px solid var(--color-border);
-}
-
-.gallery-index-page .site-footer,
-.gallery-index-page .site-footer a,
-.gallery-index-page .site-footer h4,
-.gallery-index-page .site-footer p {
-  color: var(--color-text-muted);
-}
-
-.gallery-index-page .site-footer a:hover {
-  color: var(--color-text);
-}
-
-/* ===== Gallery Index Page ===== */
 .gallery-index-page .main-content {
-  background-color: var(--color-bg);
+  padding: 0;
 }
 
+/* ===== Gallery Hero Section ===== */
 .gallery-hero {
   text-align: center;
   padding: 3rem 1.5rem 2rem;
@@ -109,20 +66,21 @@
 /* ===== Gallery Cards Grid ===== */
 .gallery-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 720px) {
   .gallery-cards {
     grid-template-columns: 1fr;
   }
 }
 
-/* ===== Gallery Card - Avrotize Style ===== */
+/* ===== Gallery Card ===== */
 .gallery-card {
-  display: block;
-  background-color: var(--color-bg-alt);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   text-decoration: none;
@@ -133,12 +91,13 @@
 
 .gallery-card:hover {
   border-color: var(--color-primary);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   text-decoration: none;
 }
 
 .card-content {
   padding: 1rem 1.25rem;
+  flex: 1;
 }
 
 .card-header {
@@ -160,7 +119,7 @@
 }
 
 .card-footer {
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: var(--color-bg-subtle);
   padding: 0.75rem 1.25rem;
   border-top: 1px solid var(--color-border);
 }
@@ -171,6 +130,7 @@
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .format-badge {
@@ -181,18 +141,21 @@
   font-size: 0.75rem;
   font-weight: 500;
   border-radius: 4px;
-  background-color: var(--color-bg-subtle);
+  background-color: var(--color-bg-alt);
   color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
 }
 
 .format-badge.source {
-  background-color: #1e3a5f;
-  color: #7dd3fc;
+  background-color: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
 }
 
 .format-badge.target {
-  background-color: #1a4731;
-  color: #86efac;
+  background-color: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
 }
 
 .format-badge i {
@@ -216,7 +179,7 @@
   flex: 1;
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   font-size: 0.75rem;
-  color: #a5b4fc;
+  color: var(--color-primary);
   background: none;
   padding: 0;
   white-space: nowrap;
@@ -262,7 +225,7 @@
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 500;
-  background-color: var(--color-bg-alt);
+  background-color: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: 6px;
   color: var(--color-text-muted);
@@ -334,7 +297,7 @@
 
 .back-link:hover {
   color: var(--color-text);
-  border-color: var(--color-border-light);
+  border-color: var(--color-primary);
   text-decoration: none;
 }
 
@@ -656,7 +619,7 @@
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
   color: var(--color-text-muted);
-  background-color: var(--color-bg-subtle);
+  background-color: var(--color-bg-alt);
   border: 1px solid var(--color-border);
   border-radius: 4px;
   cursor: pointer;
@@ -665,7 +628,8 @@
 
 .copy-btn:hover {
   color: var(--color-text);
-  background-color: var(--color-bg-alt);
+  background-color: var(--color-bg-subtle);
+  border-color: var(--color-primary);
 }
 
 .copy-btn.copied {
@@ -698,83 +662,6 @@
 .download-btn svg {
   width: 14px;
   height: 14px;
-}
-
-/* ===== Prism.js Dark Theme Override ===== */
-.gallery-viewer-page pre[class*="language-"],
-.gallery-viewer-page code[class*="language-"] {
-  color: #e2e8f0;
-  background: none;
-  text-shadow: none;
-}
-
-.gallery-viewer-page .token.comment,
-.gallery-viewer-page .token.prolog,
-.gallery-viewer-page .token.doctype,
-.gallery-viewer-page .token.cdata {
-  color: #64748b;
-}
-
-.gallery-viewer-page .token.punctuation {
-  color: #94a3b8;
-}
-
-.gallery-viewer-page .token.property,
-.gallery-viewer-page .token.tag,
-.gallery-viewer-page .token.boolean,
-.gallery-viewer-page .token.number,
-.gallery-viewer-page .token.constant,
-.gallery-viewer-page .token.symbol {
-  color: #f472b6;
-}
-
-.gallery-viewer-page .token.selector,
-.gallery-viewer-page .token.attr-name,
-.gallery-viewer-page .token.string,
-.gallery-viewer-page .token.char,
-.gallery-viewer-page .token.builtin {
-  color: #a5f3fc;
-}
-
-.gallery-viewer-page .token.operator,
-.gallery-viewer-page .token.entity,
-.gallery-viewer-page .token.url,
-.gallery-viewer-page .language-css .token.string,
-.gallery-viewer-page .style .token.string {
-  color: #fbbf24;
-}
-
-.gallery-viewer-page .token.atrule,
-.gallery-viewer-page .token.attr-value,
-.gallery-viewer-page .token.keyword {
-  color: #c4b5fd;
-}
-
-.gallery-viewer-page .token.function {
-  color: #7dd3fc;
-}
-
-.gallery-viewer-page .token.regex,
-.gallery-viewer-page .token.important,
-.gallery-viewer-page .token.variable {
-  color: #fcd34d;
-}
-
-.gallery-viewer-page .token.class-name {
-  color: #86efac;
-}
-
-/* Line numbers */
-.gallery-viewer-page pre.line-numbers {
-  padding-left: 3.5em;
-}
-
-.gallery-viewer-page .line-numbers-rows {
-  border-right: 1px solid var(--color-border);
-}
-
-.gallery-viewer-page .line-numbers-rows > span:before {
-  color: #475569;
 }
 
 /* ===== Responsive ===== */
