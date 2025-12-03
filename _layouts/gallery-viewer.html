@@ -14,8 +14,8 @@
   <!-- Devicons for language icons -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/devicon.min.css">
   
-  <!-- Prism.js for syntax highlighting - Okaidia dark theme -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css">
+  <!-- Prism.js for syntax highlighting - Light theme for light background -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css">
   
   <!-- Custom styles -->
@@ -47,81 +47,97 @@
     </div>
   </header>
 
-  <!-- Title section above the three panels -->
-  <div class="viewer-header">
-    <div class="viewer-header-content">
-      <a href="{{ '/gallery/' | relative_url }}" class="back-link">← Back</a>
-      <div class="viewer-title-section">
-        <h1 class="viewer-title">{{ page.title }}</h1>
-        <p class="viewer-description">{{ page.description | default: page.definition_name | append: " with " | append: page.schema_format | append: " schema → " | append: page.language | append: " " | append: page.protocol | append: " " | append: page.role }}</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Three-panel layout -->
-  <div class="viewer-panels" id="viewer-panels">
-    <!-- Left panel: Source definition -->
-    <div class="panel source-panel" id="source-panel" style="flex: 0 0 350px;">
-      <div class="panel-header">
-        <h3><span class="icon">📄</span> Source: {{ page.definition_name }}</h3>
-        <button class="panel-toggle" id="source-toggle" aria-label="Toggle panel">◀</button>
-      </div>
-      <div class="panel-content">
-        <pre class="line-numbers"><code class="language-json" id="source-code">{{ page.definition_content | escape }}</code></pre>
-      </div>
-    </div>
-    
-    <!-- Separator 1 -->
-    <div class="panel-separator" id="separator-1" title="Drag to resize"></div>
-    
-    <!-- Center panel: File tree -->
-    <div class="panel files-panel" id="files-panel" style="flex: 0 0 280px;">
-      <div class="panel-header">
-        <div class="panel-actions" style="order: -1;">
-          <button class="panel-toggle" id="files-toggle-left" aria-label="Toggle panel">◀</button>
-        </div>
-        <h3><span class="icon">📁</span> Output Files</h3>
-        <div class="panel-actions">
-          <button class="panel-toggle" id="files-toggle-right" aria-label="Toggle panel">▶</button>
-        </div>
-      </div>
-      <div class="panel-content">
-        <div class="file-tree" id="file-tree">
-          {{ page.file_tree_html }}
+  <!-- Gallery viewer page wrapper -->
+  <div class="gallery-viewer-wrapper">
+    <!-- Header with back button and title -->
+    <div class="gallery-header">
+      <div class="gallery-header-content">
+        <a href="{{ '/gallery/' | relative_url }}" class="btn btn-outline btn-back">← Back</a>
+        <div class="gallery-header-text">
+          <h1>{{ page.title }}</h1>
+          <p>{{ page.description | default: page.definition_name | append: " with " | append: page.schema_format | append: " schema → " | append: page.language | append: " " | append: page.protocol | append: " " | append: page.role }}</p>
         </div>
       </div>
     </div>
     
-    <!-- Separator 2 -->
-    <div class="panel-separator" id="separator-2" title="Drag to resize"></div>
-    
-    <!-- Right panel: Code preview -->
-    <div class="panel preview-panel" id="preview-panel" style="flex: 1;">
-      <div class="panel-header">
-        <div class="panel-actions" style="order: -1;">
-          <button class="panel-toggle" id="preview-toggle" aria-label="Toggle panel">◀</button>
+    <!-- Three-panel viewer -->
+    <div class="gallery-viewer" id="galleryViewer">
+      <!-- Source Panel -->
+      <div class="gallery-panel source-panel" id="sourcePanel" data-panel="source">
+        <div class="panel-collapse-handle" data-target="source" title="Expand Source">
+          <span class="collapse-label">📄 Source</span>
         </div>
-        <h3><span class="icon">📄</span> <span id="preview-filename">Select a file</span></h3>
-        <div class="panel-actions">
-          <button class="copy-btn" id="copy-btn" title="Copy code">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-            Copy
-          </button>
-          <a href="{{ page.zip_url }}" class="download-btn" download>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            Download ZIP
-          </a>
+        <div class="panel-main">
+          <div class="panel-header">
+            <span>📄 Source: {{ page.definition_name }}</span>
+            <button class="panel-collapse-btn" data-target="source" title="Collapse panel">◀</button>
+          </div>
+          <div class="panel-content" id="sourceContent">
+            <pre class="line-numbers"><code class="language-json" id="source-code">{{ page.definition_content | escape }}</code></pre>
+          </div>
         </div>
       </div>
-      <div class="panel-content">
-        <pre class="line-numbers"><code id="preview-code" class="language-plaintext">Select a file from the tree to view its contents.</code></pre>
+      
+      <!-- Resize Handle 1 -->
+      <div class="resize-handle" data-resize="source-tree" title="Drag to resize">
+        <div class="resize-grip"></div>
+      </div>
+      
+      <!-- File Tree Panel -->
+      <div class="gallery-panel tree-panel" id="treePanel" data-panel="tree">
+        <div class="panel-collapse-handle" data-target="tree" title="Expand Output Files">
+          <span class="collapse-label">📁 Files</span>
+        </div>
+        <div class="panel-main">
+          <div class="panel-header">
+            <button class="panel-collapse-btn" data-target="tree" title="Collapse panel">◀</button>
+            <span>📁 Output Files</span>
+            <button class="panel-collapse-btn" data-target="tree" title="Collapse panel">▶</button>
+          </div>
+          <div class="panel-content">
+            <div class="file-tree" id="fileTree">
+              {{ page.file_tree_html }}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Resize Handle 2 -->
+      <div class="resize-handle" data-resize="tree-output" title="Drag to resize">
+        <div class="resize-grip"></div>
+      </div>
+      
+      <!-- Output Panel -->
+      <div class="gallery-panel output-panel" id="outputPanel" data-panel="output">
+        <div class="panel-collapse-handle" data-target="output" title="Expand Output">
+          <span class="collapse-label">📄 Output</span>
+        </div>
+        <div class="panel-main">
+          <div class="panel-header">
+            <button class="panel-collapse-btn" data-target="output" title="Collapse panel">◀</button>
+            <span id="outputFileName">📄 Select a file to view</span>
+            <div class="panel-actions">
+              <button class="copy-btn" id="copy-btn" title="Copy code">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy
+              </button>
+              <a href="{{ page.zip_url }}" class="download-btn" download>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Download ZIP
+              </a>
+            </div>
+          </div>
+          <div class="panel-content" id="outputContent">
+            <pre class="line-numbers"><code id="preview-code" class="language-plaintext">Select a file from the tree to view its contents.</code></pre>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -137,84 +153,250 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
   
   <script>
+  (function() {
+    // Panel collapse/expand functionality (adapted from avrotize)
+    const viewer = document.getElementById('galleryViewer');
+    const panels = {
+      source: document.getElementById('sourcePanel'),
+      tree: document.getElementById('treePanel'),
+      output: document.getElementById('outputPanel')
+    };
+    const handles = {
+      sourceTree: document.querySelector('[data-resize="source-tree"]'),
+      treeOutput: document.querySelector('[data-resize="tree-output"]')
+    };
+    
+    function getCollapsedCount() {
+      return Object.values(panels).filter(p => p.classList.contains('collapsed')).length;
+    }
+    
+    function isCollapsed(panelId) {
+      return panels[panelId] && panels[panelId].classList.contains('collapsed');
+    }
+    
+    function togglePanel(panelId) {
+      const panel = panels[panelId];
+      if (!panel) return;
+      
+      const wasCollapsed = panel.classList.contains('collapsed');
+      
+      if (wasCollapsed) {
+        // Expanding - always allowed
+        panel.classList.remove('collapsed');
+      } else {
+        // Collapsing - only if less than 2 are already collapsed
+        if (getCollapsedCount() < 2) {
+          panel.classList.add('collapsed');
+        }
+      }
+      
+      updateLayout();
+      saveState();
+    }
+    
+    function updateLayout() {
+      const sourceCollapsed = isCollapsed('source');
+      const treeCollapsed = isCollapsed('tree');
+      const outputCollapsed = isCollapsed('output');
+      
+      // Update resize handle states
+      if (handles.sourceTree) {
+        const disabled = sourceCollapsed || (treeCollapsed && outputCollapsed);
+        handles.sourceTree.classList.toggle('disabled', disabled);
+        handles.sourceTree.classList.toggle('spans-collapsed', treeCollapsed && !sourceCollapsed && !outputCollapsed);
+      }
+      if (handles.treeOutput) {
+        const disabled = outputCollapsed || treeCollapsed;
+        handles.treeOutput.classList.toggle('disabled', disabled);
+      }
+      
+      // Reset flex values for uncollapsed panels
+      if (!panels.source.style.flex || sourceCollapsed) {
+        panels.source.style.flex = sourceCollapsed ? '' : '1 1 auto';
+      }
+      if (!panels.tree.style.flex || treeCollapsed) {
+        panels.tree.style.flex = treeCollapsed ? '' : '0 0 280px';
+      }
+      if (!panels.output.style.flex || outputCollapsed) {
+        panels.output.style.flex = outputCollapsed ? '' : '1 1 auto';
+      }
+      
+      // Handle different collapsed combinations
+      if (sourceCollapsed && !treeCollapsed && !outputCollapsed) {
+        panels.tree.style.flex = '0 0 280px';
+        panels.output.style.flex = '1 1 auto';
+      } else if (treeCollapsed && !sourceCollapsed && !outputCollapsed) {
+        panels.source.style.flex = '1 1 50%';
+        panels.output.style.flex = '1 1 50%';
+      } else if (outputCollapsed && !sourceCollapsed && !treeCollapsed) {
+        panels.source.style.flex = '1 1 auto';
+        panels.tree.style.flex = '0 0 280px';
+      } else if (sourceCollapsed && treeCollapsed) {
+        panels.output.style.flex = '1 1 auto';
+      } else if (sourceCollapsed && outputCollapsed) {
+        panels.tree.style.flex = '1 1 auto';
+        panels.tree.style.maxWidth = 'none';
+      } else if (treeCollapsed && outputCollapsed) {
+        panels.source.style.flex = '1 1 auto';
+      }
+    }
+    
+    // Collapse button click handlers
+    document.querySelectorAll('.panel-collapse-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePanel(btn.dataset.target);
+      });
+    });
+    
+    // Collapsed handle click to expand
+    document.querySelectorAll('.panel-collapse-handle').forEach(handle => {
+      handle.addEventListener('click', () => {
+        togglePanel(handle.dataset.target);
+      });
+    });
+    
+    // Resize functionality
+    let isResizing = false;
+    let currentHandle = null;
+    let startX = 0;
+    let startWidths = {};
+    
+    document.querySelectorAll('.resize-handle').forEach(handle => {
+      handle.addEventListener('mousedown', (e) => {
+        if (handle.classList.contains('disabled')) return;
+        
+        isResizing = true;
+        currentHandle = handle;
+        startX = e.clientX;
+        
+        const resizeType = handle.dataset.resize;
+        const treeCollapsed = isCollapsed('tree');
+        
+        if (resizeType === 'source-tree') {
+          startWidths.source = panels.source.offsetWidth;
+          if (treeCollapsed) {
+            startWidths.output = panels.output.offsetWidth;
+          } else {
+            startWidths.tree = panels.tree.offsetWidth;
+          }
+        } else if (resizeType === 'tree-output') {
+          startWidths.tree = panels.tree.offsetWidth;
+          startWidths.output = panels.output.offsetWidth;
+        }
+        
+        viewer.classList.add('resizing');
+        handle.classList.add('active');
+        
+        e.preventDefault();
+      });
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      
+      const deltaX = e.clientX - startX;
+      const resizeType = currentHandle.dataset.resize;
+      const treeCollapsed = isCollapsed('tree');
+      
+      if (resizeType === 'source-tree') {
+        if (treeCollapsed) {
+          const newSourceWidth = Math.max(200, startWidths.source + deltaX);
+          const newOutputWidth = Math.max(200, startWidths.output - deltaX);
+          panels.source.style.flex = `0 0 ${newSourceWidth}px`;
+          panels.output.style.flex = `0 0 ${newOutputWidth}px`;
+        } else {
+          const newSourceWidth = Math.max(200, startWidths.source + deltaX);
+          const newTreeWidth = Math.max(180, Math.min(500, startWidths.tree - deltaX));
+          panels.source.style.flex = `0 0 ${newSourceWidth}px`;
+          panels.tree.style.flex = `0 0 ${newTreeWidth}px`;
+        }
+      } else if (resizeType === 'tree-output') {
+        const newTreeWidth = Math.max(180, Math.min(500, startWidths.tree + deltaX));
+        const newOutputWidth = Math.max(200, startWidths.output - deltaX);
+        panels.tree.style.flex = `0 0 ${newTreeWidth}px`;
+        panels.output.style.flex = `0 0 ${newOutputWidth}px`;
+      }
+    });
+    
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        viewer.classList.remove('resizing');
+        if (currentHandle) {
+          currentHandle.classList.remove('active');
+        }
+        currentHandle = null;
+        saveState();
+      }
+    });
+    
+    // State persistence
+    function saveState() {
+      const state = {
+        collapsed: {
+          source: isCollapsed('source'),
+          tree: isCollapsed('tree'),
+          output: isCollapsed('output')
+        },
+        widths: {
+          source: panels.source.style.flex,
+          tree: panels.tree.style.flex,
+          output: panels.output.style.flex
+        }
+      };
+      try {
+        localStorage.setItem('galleryViewerState', JSON.stringify(state));
+      } catch (e) {}
+    }
+    
+    function loadState() {
+      try {
+        const state = JSON.parse(localStorage.getItem('galleryViewerState'));
+        if (state) {
+          let collapsedCount = 0;
+          Object.entries(state.collapsed || {}).forEach(([id, collapsed]) => {
+            if (collapsed && collapsedCount < 2 && panels[id]) {
+              panels[id].classList.add('collapsed');
+              collapsedCount++;
+            }
+          });
+          updateLayout();
+        }
+      } catch (e) {}
+    }
+    
+    // Initialize panel state
+    loadState();
+    updateLayout();
+  })();
+  </script>
+
+  <script>
   document.addEventListener('DOMContentLoaded', function() {
     // Parse file data
     let filesData = [];
     try {
       const dataEl = document.getElementById('gallery-data');
       if (dataEl && dataEl.textContent.trim()) {
-        filesData = JSON.parse(dataEl.textContent);
+        const parsed = JSON.parse(dataEl.textContent);
+        // Handle both {files: [...]} and [...] formats with type checking
+        if (Array.isArray(parsed)) {
+          filesData = parsed;
+        } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.files)) {
+          filesData = parsed.files;
+        }
       }
     } catch (e) {
       console.error('Failed to parse gallery data:', e);
     }
     
-    // Get elements
-    const viewerPanels = document.getElementById('viewer-panels');
-    const sourcePanel = document.getElementById('source-panel');
-    const filesPanel = document.getElementById('files-panel');
-    const previewPanel = document.getElementById('preview-panel');
-    const separator1 = document.getElementById('separator-1');
-    const separator2 = document.getElementById('separator-2');
+    const fileTree = document.getElementById('fileTree');
     const previewCode = document.getElementById('preview-code');
-    const previewFilename = document.getElementById('preview-filename');
+    const outputFileName = document.getElementById('outputFileName');
     const copyBtn = document.getElementById('copy-btn');
     
-    // Panel toggle functionality
-    function setupToggle(toggleBtn, panel, direction) {
-      toggleBtn.addEventListener('click', function() {
-        panel.classList.toggle('collapsed');
-        this.textContent = panel.classList.contains('collapsed') 
-          ? (direction === 'left' ? '▶' : '◀')
-          : (direction === 'left' ? '◀' : '▶');
-      });
-    }
-    
-    setupToggle(document.getElementById('source-toggle'), sourcePanel, 'left');
-    setupToggle(document.getElementById('files-toggle-left'), filesPanel, 'left');
-    setupToggle(document.getElementById('files-toggle-right'), filesPanel, 'right');
-    setupToggle(document.getElementById('preview-toggle'), previewPanel, 'left');
-    
-    // Drag separator functionality
-    function setupSeparator(separator, leftPanel, rightPanel) {
-      let isDragging = false;
-      let startX = 0;
-      let startLeftWidth = 0;
-      
-      separator.addEventListener('mousedown', function(e) {
-        isDragging = true;
-        startX = e.clientX;
-        startLeftWidth = leftPanel.offsetWidth;
-        separator.classList.add('dragging');
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
-        e.preventDefault();
-      });
-      
-      document.addEventListener('mousemove', function(e) {
-        if (!isDragging) return;
-        
-        const delta = e.clientX - startX;
-        const newWidth = Math.max(180, Math.min(startLeftWidth + delta, viewerPanels.offsetWidth - 400));
-        leftPanel.style.flex = `0 0 ${newWidth}px`;
-      });
-      
-      document.addEventListener('mouseup', function() {
-        if (isDragging) {
-          isDragging = false;
-          separator.classList.remove('dragging');
-          document.body.style.cursor = '';
-          document.body.style.userSelect = '';
-        }
-      });
-    }
-    
-    setupSeparator(separator1, sourcePanel, filesPanel);
-    setupSeparator(separator2, filesPanel, previewPanel);
-    
     // File tree click handling
-    const fileTree = document.getElementById('file-tree');
-    
     fileTree.addEventListener('click', function(e) {
       const treeItem = e.target.closest('.file-tree-item');
       if (!treeItem) return;
@@ -243,7 +425,7 @@
         // Find file content
         const file = filesData.find(f => f.path === filePath);
         if (file) {
-          previewFilename.textContent = filePath.split('/').pop();
+          outputFileName.textContent = '📄 ' + filePath.split('/').pop();
           
           // Determine language for syntax highlighting
           const ext = filePath.split('.').pop().toLowerCase();
