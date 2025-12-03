@@ -3,7 +3,7 @@
   "version": "0.13.0",
   "displayName": "xRegistry Code Generator",
   "description": "Generate type-safe messaging/eventing SDKs from xRegistry message catalogs",
-  "publisher": "xrcg-cg",
+  "publisher": "xregistry",
   "license": "SEE LICENSE IN LICENSE.txt",
   "icon": "xrcg-icon-color.png",
   "galleryBanner": {
