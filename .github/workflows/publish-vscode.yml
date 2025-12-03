@@ -5,22 +5,24 @@ on:
     tags:
       - 'v*'
   workflow_run:
-    workflows: ["Python Test"]
+    workflows: ["Publish to PyPI"]
     types:
       - completed
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       force_publish:
         description: 'Force publish even without tag'
         required: false
         default: 'false'
+      skip_pypi_wait:
+        description: 'Skip waiting for PyPI package'
+        required: false
+        default: 'false'
 
 jobs:
   publish-vscode:
     runs-on: ubuntu-latest
-    # Only run if tests passed (or triggered by tag/manual dispatch)
+    # Only run if PyPI publish succeeded (or triggered by tag/manual dispatch)
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
@@ -39,6 +41,11 @@ jobs:
       with:
         node-version: '20'
 
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
     - name: Extract version from tag
       id: get_version
       run: |
@@ -47,7 +54,52 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "has_tag=true" >> $GITHUB_OUTPUT
         else
+          # Get version from git describe
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "has_tag=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Wait for xrcg package on PyPI
+      if: github.event.inputs.skip_pypi_wait != 'true'
+      run: |
+        echo "⏳ Waiting for xrcg package to be available on PyPI..."
+        EXPECTED_VERSION="${{ steps.get_version.outputs.version }}"
+        MAX_ATTEMPTS=30  # 30 attempts * 10 seconds = 5 minutes
+        ATTEMPT=0
+        
+        while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+          ATTEMPT=$((ATTEMPT + 1))
+          echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking for xrcg on PyPI..."
+          
+          # Try to get package info from PyPI
+          if pip index versions xrcg 2>/dev/null; then
+            echo "✅ xrcg package found on PyPI"
+            # Try to install it
+            if pip install xrcg --upgrade; then
+              INSTALLED_VERSION=$(pip show xrcg | grep "^Version:" | cut -d' ' -f2)
+              echo "✅ Installed xrcg version: $INSTALLED_VERSION"
+              break
+            fi
+          fi
+          
+          if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+            echo "Package not yet available, waiting 10 seconds..."
+            sleep 10
+          fi
+        done
+        
+        if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+          echo "⚠️ Timeout waiting for xrcg on PyPI, attempting installation anyway..."
+          pip install xrcg || echo "Warning: Could not install xrcg from PyPI"
+        fi
+        
+        # Verify xrcg is working
+        if command -v xrcg &> /dev/null; then
+          echo "✅ xrcg CLI is available:"
+          xrcg --help | head -5
+        else
+          echo "⚠️ xrcg CLI not found in PATH after installation"
         fi
 
     - name: Check if VSCE_PAT secret is available
@@ -72,13 +124,20 @@ jobs:
       working-directory: ./xrcg_vscode
       run: npm install
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-
     - name: Validate package.json for duplicates
       run: python tools/validate_vscode_package.py --package-json xrcg_vscode/package.json
+
+    - name: Run extension tests
+      working-directory: ./xrcg_vscode
+      run: |
+        # Install xvfb for headless VS Code testing
+        sudo apt-get update
+        sudo apt-get install -y xvfb
+        
+        # Run tests with xvfb
+        xvfb-run -a npm test
+      env:
+        DISPLAY: ':99.0'
 
     - name: Build extension
       working-directory: ./xrcg_vscode
