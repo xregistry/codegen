@@ -26,7 +26,6 @@ GALLERY_EXAMPLES = [
     {"id": "py-kafka-smartoven-proto", "definition": "smartoven-proto.xreg.json", "style": "py/kafkaproducer", "language": "Python", "language_icon": "python", "protocol": "Kafka", "role": "Producer", "schema_format": "Protobuf"},
     {"id": "py-amqp-inkjet-producer", "definition": "inkjet.xreg.json", "style": "py/amqpproducer", "language": "Python", "language_icon": "python", "protocol": "AMQP", "role": "Producer", "schema_format": "Avro"},
     {"id": "py-mqtt-lightbulb", "definition": "lightbulb.xreg.json", "style": "py/mqttclient", "language": "Python", "language_icon": "python", "protocol": "MQTT", "role": "Client", "schema_format": "Avro"},
-    {"id": "py-eh-storage-consumer", "definition": "Microsoft.Storage.xreg.json", "style": "py/ehconsumer", "language": "Python", "language_icon": "python", "protocol": "Event Hubs", "role": "Consumer", "schema_format": "JSON Schema"},
 
     # C# Examples
     {"id": "cs-kafka-contoso-producer", "definition": "contoso-erp.xreg.json", "style": "cs/kafkaproducer", "language": "C#", "language_icon": "csharp", "protocol": "Kafka", "role": "Producer", "schema_format": "JSON Schema"},
@@ -75,6 +74,14 @@ class GalleryExample:
     schema_format: str
     
     @property
+    def project_name(self) -> str:
+        """Generate a project name from the definition filename."""
+        # Convert "contoso-erp.xreg.json" -> "ContosoErp"
+        base = self.definition.replace('.xreg.json', '').replace('.cereg.yaml', '')
+        # Convert kebab-case to PascalCase
+        return ''.join(word.capitalize() for word in base.split('-'))
+    
+    @property
     def title(self) -> str:
         """Generate a human-readable title."""
         def_name = self.definition.replace('.xreg.json', '').replace('-', ' ').title()
@@ -83,7 +90,11 @@ class GalleryExample:
     @property
     def command(self) -> str:
         """Generate the xrcg command used."""
-        return f"xrcg generate --style {self.style} -d {self.definition} -o ./output"
+        parts = self.style.split('/')
+        if len(parts) == 2:
+            lang, style = parts
+            return f"xrcg generate --language {lang} --style {style} -d {self.definition} --output ./output --projectname {self.project_name}"
+        return f"xrcg generate --style {self.style} -d {self.definition} --output ./output --projectname {self.project_name}"
 
 
 def find_definitions_dir() -> Path:
@@ -107,13 +118,29 @@ def find_definitions_dir() -> Path:
     return repo_root / "samples" / "message-definitions"
 
 
-def run_xrcg_generate(definition_path: Path, style: str, output_dir: Path) -> bool:
-    """Run xrcg generate command."""
+def run_xrcg_generate(definition_path: Path, style: str, output_dir: Path, project_name: str) -> bool:
+    """Run xrcg generate command.
+    
+    Args:
+        definition_path: Path to the xRegistry definition file
+        style: Template style in format "language/style" (e.g., "py/kafkaproducer")
+        output_dir: Directory to generate code into
+        project_name: Project name for the generated code
+    """
+    # Split style into language and style parts (e.g., "py/kafkaproducer" -> "py", "kafkaproducer")
+    parts = style.split('/')
+    if len(parts) != 2:
+        print(f"  ⚠️  Invalid style format: {style} (expected 'language/style')")
+        return False
+    language, style_name = parts
+    
     cmd = [
         sys.executable, "-m", "xrcg", "generate",
-        "--style", style,
+        "--language", language,
+        "--style", style_name,
         "-d", str(definition_path),
-        "--output", str(output_dir)
+        "--output", str(output_dir),
+        "--projectname", project_name
     ]
     
     try:
@@ -124,7 +151,15 @@ def run_xrcg_generate(definition_path: Path, style: str, output_dir: Path) -> bo
             timeout=120
         )
         if result.returncode != 0:
-            print(f"  ⚠️  xrcg failed: {result.stderr[:200]}")
+            print(f"  ⚠️  xrcg failed (exit {result.returncode}): {result.stderr[:300]}")
+            return False
+        # Check if any files were actually generated
+        if not any(output_dir.rglob('*')):
+            print(f"  ⚠️  xrcg succeeded but no files created")
+            if result.stdout:
+                print(f"     stdout: {result.stdout[:200]}")
+            if result.stderr:
+                print(f"     stderr: {result.stderr[:200]}")
             return False
         return True
     except subprocess.TimeoutExpired:
@@ -296,7 +331,7 @@ def main():
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Run xrcg generate
-        if not run_xrcg_generate(definition_path, example.style, output_dir):
+        if not run_xrcg_generate(definition_path, example.style, output_dir, example.project_name):
             print(f"   ⚠️  Generation failed, skipping")
             fail_count += 1
             continue
