@@ -91,7 +91,7 @@ The extension will generate a complete, compile-ready project with tests and dep
 
 - [xRegistry Specification](https://github.com/xregistry/spec)
 - [Code Generator GitHub Repository](https://github.com/xregistry/codegen)
-- [Sample Message Catalogs](https://github.com/xregistry/codegen/tree/main/samples/message-definitions)
+- [Example Message Catalogs](https://github.com/xregistry/codegen/tree/main/examples/message-definitions)
 
 ## License
 

@@ -95,22 +95,22 @@ def run_go_test(xreg_file: str, output_dir: str, projectname: str, style: str):
 
 def test_kafkaproducer_contoso_erp_go():
     with tempfile.TemporaryDirectory() as tmpdirname:
-        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'contoso-erp.xreg.json').replace(
+        run_go_test(os.path.join(project_root, 'examples', 'message-definitions', 'contoso-erp.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaproducer_contoso_erp_go", "kafkaproducer")
 
 def test_kafkaproducer_fabrikam_motorsports_go():
     with tempfile.TemporaryDirectory() as tmpdirname:
-        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'fabrikam-motorsports.xreg.json').replace(
+        run_go_test(os.path.join(project_root, 'examples', 'message-definitions', 'fabrikam-motorsports.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaproducer_fabrikam_motorsports_go", "kafkaproducer")
 
 def test_kafkaproducer_inkjet_go():
     with tempfile.TemporaryDirectory() as tmpdirname:
-        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'inkjet.xreg.json').replace(
+        run_go_test(os.path.join(project_root, 'examples', 'message-definitions', 'inkjet.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaproducer_inkjet_go", "kafkaproducer")
 
 def test_kafkaproducer_lightbulb_go():
     with tempfile.TemporaryDirectory() as tmpdirname:
-        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
+        run_go_test(os.path.join(project_root, 'examples', 'message-definitions', 'lightbulb.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaproducer_lightbulb_go", "kafkaproducer")
 
 
@@ -118,22 +118,22 @@ def test_kafkaproducer_lightbulb_go():
 
 def test_kafkaconsumer_contoso_erp_go():
     with tempfile.TemporaryDirectory() as tmpdirname:
-        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'contoso-erp.xreg.json').replace(
+        run_go_test(os.path.join(project_root, 'examples', 'message-definitions', 'contoso-erp.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaconsumer_contoso_erp_go", "kafkaconsumer")
 
 def test_kafkaconsumer_fabrikam_motorsports_go():
     with tempfile.TemporaryDirectory() as tmpdirname:
-        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'fabrikam-motorsports.xreg.json').replace(
+        run_go_test(os.path.join(project_root, 'examples', 'message-definitions', 'fabrikam-motorsports.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaconsumer_fabrikam_motorsports_go", "kafkaconsumer")
 
 def test_kafkaconsumer_inkjet_go():
     with tempfile.TemporaryDirectory() as tmpdirname:
-        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'inkjet.xreg.json').replace(
+        run_go_test(os.path.join(project_root, 'examples', 'message-definitions', 'inkjet.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaconsumer_inkjet_go", "kafkaconsumer")
 
 def test_kafkaconsumer_lightbulb_go():
     with tempfile.TemporaryDirectory() as tmpdirname:
-        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
+        run_go_test(os.path.join(project_root, 'examples', 'message-definitions', 'lightbulb.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaconsumer_lightbulb_go", "kafkaconsumer")
 
 

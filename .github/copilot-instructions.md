@@ -121,7 +121,7 @@ xrcg catalog endpoint get --id orders-endpoint # Requires registry.base_url conf
 1. Create directory: `xregistry/templates/{language}/{new-style}/`
 2. Add `_templateinfo.json` with `description`, `priority`, `main_project_name`, `data_project_name`
 3. Add Jinja templates (use existing styles as reference—copy from `producer` or `consumer`)
-4. Add test case in `test/{language}/test_{language}.py` using sample definitions from `samples/message-definitions/`
+4. Add test case in `test/{language}/test_{language}.py` using sample definitions from `examples/message-definitions/`
 5. Run targeted test: `pytest test/{language}/test_{language}.py::test_{style}_{sample}_{lang} > tmp/output.txt 2>&1`
 
 ### Debugging Template Rendering
@@ -153,7 +153,7 @@ Schema conversion is handled by **Avrotize**—don't reinvent schema translation
 | `xregistry/generator/xregistry_loader.py` | Document loading, basemessage resolution |
 | `xregistry/generator/jinja_filters.py` | Custom Jinja2 filters (case conversion, regex) |
 | `xregistry/common/model.py` | xRegistry model schema definitions |
-| `samples/message-definitions/*.xreg.json` | Test fixtures (Contoso ERP, Inkjet, etc.) |
+| `examples/message-definitions/*.xreg.json` | Test fixtures (Contoso ERP, Inkjet, etc.) |
 
 ## Anti-Patterns to Avoid
 

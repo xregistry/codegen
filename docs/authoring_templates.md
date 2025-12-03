@@ -309,7 +309,7 @@ The `~` operator appends path segments.
 This generates:
 
 ```text
-samples/sample.py
+examples/sample.py
 scripts/build.py
 ```
 

@@ -23,7 +23,7 @@ pip install git+https://github.com/xregistry/codegen.git
 # Using Docker (Linux/macOS)
 docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xrcg:latest \
   generate --projectname PrinterEvents --language py --style kafkaproducer \
-  --definitions https://raw.githubusercontent.com/xregistry/codegen/main/samples/message-definitions/inkjet.xreg.json \
+  --definitions https://raw.githubusercontent.com/xregistry/codegen/main/examples/message-definitions/inkjet.xreg.json \
   --output ./generated
 ```
 
@@ -31,14 +31,14 @@ docker run --rm -v $(pwd):/work ghcr.io/xregistry/codegen/xrcg:latest \
 # Using Docker (Windows PowerShell)
 docker run --rm -v ${PWD}:/work ghcr.io/xregistry/codegen/xrcg:latest `
   generate --projectname PrinterEvents --language py --style kafkaproducer `
-  --definitions https://raw.githubusercontent.com/xregistry/codegen/main/samples/message-definitions/inkjet.xreg.json `
+  --definitions https://raw.githubusercontent.com/xregistry/codegen/main/examples/message-definitions/inkjet.xreg.json `
   --output ./generated
 ```
 
 ```bash
 # Or with pip install (any platform)
 xrcg generate --projectname PrinterEvents --language py --style kafkaproducer \
-  --definitions https://raw.githubusercontent.com/xregistry/codegen/main/samples/message-definitions/inkjet.xreg.json \
+  --definitions https://raw.githubusercontent.com/xregistry/codegen/main/examples/message-definitions/inkjet.xreg.json \
   --output ./generated
 ```
 
@@ -214,17 +214,17 @@ For development setup, see [Development Environment](docs/development_environmen
 
 The generator consumes [xRegistry](https://xregistry.io/) message catalog documents—JSON/YAML files that describe schemas, messages, and endpoints. You can:
 
-- Use existing definition files (see [samples/message-definitions/](samples/message-definitions/))
+- Use existing definition files (see [examples/message-definitions/](examples/message-definitions/))
 - Create definitions manually following the [xRegistry spec](https://github.com/xregistry/spec)
 - Manage definitions using the CLI's `manifest` or `catalog` commands
 
-### Sample Definitions
+### Example Definitions
 
-| Sample | Description |
-|--------|-------------|
-| [contoso-erp.xreg.json](samples/message-definitions/contoso-erp.xreg.json) | ERP system events (orders, payments, inventory) |
-| [fabrikam-motorsports.xreg.json](samples/message-definitions/fabrikam-motorsports.xreg.json) | Motorsports telemetry stream |
-| [inkjet.xreg.json](samples/message-definitions/inkjet.xreg.json) | IoT printer events |
+| Example | Description |
+|---------|-------------|
+| [contoso-erp.xreg.json](examples/message-definitions/contoso-erp.xreg.json) | ERP system events (orders, payments, inventory) |
+| [fabrikam-motorsports.xreg.json](examples/message-definitions/fabrikam-motorsports.xreg.json) | Motorsports telemetry stream |
+| [inkjet.xreg.json](examples/message-definitions/inkjet.xreg.json) | IoT printer events |
 
 ### Managing Definitions with CLI
 

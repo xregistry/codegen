@@ -80,7 +80,7 @@ def test_codegen_py():
                         '--style', dir_name,
                         '--language', 'py',
                         '--definitions', os.path.join(
-                            project_root, 'samples/message-definitions/contoso-erp.xreg.json'.replace('/', os.path.sep)),
+                            project_root, 'examples/message-definitions/contoso-erp.xreg.json'.replace('/', os.path.sep)),
                         '--output', output_dir,
                         '--projectname', f'test_build_{dir_name}']
             assert xrcg.cli() == 0
