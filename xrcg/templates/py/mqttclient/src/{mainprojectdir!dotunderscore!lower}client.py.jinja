@@ -50,13 +50,10 @@ def _apply_topic_template(topic_pattern: str, template_values: Optional[Dict[str
 
 def _build_topic_regex(topic_pattern: str) -> re.Pattern:
     """Build a regex pattern for matching topics and extracting template values."""
-    # Escape regex special chars except our placeholders
+    # Escape regex special chars in the topic pattern
     escaped = re.escape(topic_pattern)
-    # Restore placeholders and convert to named groups
-    pattern = _URI_TEMPLATE_PATTERN.sub(
-        lambda m: f'(?P<{m.group(1)}>[^/]+)',
-        topic_pattern
-    )
+    # Restore placeholders (which were escaped to \{...\}) and convert to named groups
+    pattern = re.sub(r'\\{([A-Za-z0-9_]+)\\}', r'(?P<\1>[^/]+)', escaped)
     return re.compile('^' + pattern + '$')
 
 
@@ -359,7 +356,7 @@ class {{ class_name }}(_ClientBase):
         # Merge explicit parameters with topic_template_values dictionary
         all_template_values = dict(topic_template_values or {})
         {%- for var in topic_template_vars %}
-        if {{ var | snake }}:
+        if {{ var | snake }} is not None:
             all_template_values["{{ var }}"] = {{ var | snake }}
         {%- endfor %}
         

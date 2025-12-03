@@ -131,9 +131,10 @@ public abstract class {{ consumer_class }} {
     private static Map<String, Pattern> buildTopicPatterns(Map<String, String> topicMappings) {
         Map<String, Pattern> patterns = new HashMap<>();
         for (Map.Entry<String, String> entry : topicMappings.entrySet()) {
-            String pattern = "^" + URI_TEMPLATE_PATTERN.matcher(
-                Pattern.quote(entry.getValue()).replace("\\{", "{").replace("\\}", "}")
-            ).replaceAll("(?<$1>[^/]+)") + "$";
+            // Build a regex pattern by replacing placeholders with capture groups
+            String escaped = Pattern.quote(entry.getValue());
+            // Restore the placeholders that were escaped and convert to simple capture groups
+            String pattern = "^" + escaped.replaceAll("\\\\\\{[A-Za-z0-9_]+\\\\\\}", "([^/]+)") + "$";
             patterns.put(entry.getKey(), Pattern.compile(pattern));
         }
         return patterns;
@@ -149,11 +150,12 @@ public abstract class {{ consumer_class }} {
     protected Map<String, String> extractTopicParameters(String topic, String messageId) {
         Map<String, String> parameters = new HashMap<>();
         Pattern pattern = topicPatterns.get(messageId);
-        if (pattern != null) {
+        String topicTemplate = topicMappings.get(messageId);
+        if (pattern != null && topicTemplate != null) {
             Matcher matcher = pattern.matcher(topic);
             if (matcher.matches()) {
-                // Extract named groups - need to parse pattern for group names
-                Matcher templateMatcher = URI_TEMPLATE_PATTERN.matcher(topicMappings.get(messageId));
+                // Extract placeholder names from the template
+                Matcher templateMatcher = URI_TEMPLATE_PATTERN.matcher(topicTemplate);
                 int groupIndex = 1;
                 while (templateMatcher.find()) {
                     String groupName = templateMatcher.group(1);
