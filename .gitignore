@@ -1,0 +1,28 @@
+# Jekyll build artifacts
+_site/
+.sass-cache/
+.jekyll-cache/
+.jekyll-metadata
+
+# Gem files
+Gemfile.lock
+*.gem
+.bundle/
+vendor/
+
+# Build outputs
+gallery/_generated/
+scripts/__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (if used for JS bundling)
+node_modules/
+package-lock.json

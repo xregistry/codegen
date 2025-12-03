@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ page.title }} | {{ site.title }} Gallery</title>
+  <meta name="description" content="{{ page.description | default: site.description }}">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Devicons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/devicon.min.css">
+  
+  <!-- Prism.js for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.css">
+  
+  <!-- Custom styles -->
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/assets/css/gallery.css' | relative_url }}">
+</head>
+<body class="gallery-page">
+  <!-- Compact header for gallery -->
+  <header class="site-header compact">
+    <div class="container">
+      <nav class="header-nav">
+        <a href="{{ '/' | relative_url }}" class="logo">
+          <span class="logo-text">xRegistry Codegen</span>
+        </a>
+        <ul class="nav-links">
+          <li><a href="{{ '/' | relative_url }}">Home</a></li>
+          <li><a href="{{ '/gallery/' | relative_url }}" class="active">Gallery</a></li>
+          <li><a href="https://github.com/xregistry/xregistry-codegen" target="_blank" rel="noopener">
+            <i class="devicon-github-original"></i>
+          </a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Three-panel gallery layout -->
+  <div class="gallery-container">
+    <!-- Left panel: Definition browser -->
+    <aside class="gallery-sidebar left-panel" id="definition-panel">
+      <div class="panel-header">
+        <h3>Definition</h3>
+        <button class="panel-toggle" aria-label="Toggle panel">
+          <span class="toggle-icon">◀</span>
+        </button>
+      </div>
+      <div class="panel-content">
+        <div class="definition-info">
+          <h4>{{ page.definition_name }}</h4>
+          <p class="definition-meta">
+            <span class="tag schema-format">{{ page.schema_format }}</span>
+            <span class="tag protocol">{{ page.protocol }}</span>
+          </p>
+        </div>
+        <div class="code-block">
+          <pre class="line-numbers"><code class="language-json" id="definition-code">{{ page.definition_content | escape }}</code></pre>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center panel: File tree -->
+    <main class="gallery-main center-panel" id="file-tree-panel">
+      <div class="panel-header">
+        <h3>Generated Files</h3>
+        <div class="panel-actions">
+          <a href="{{ page.zip_url }}" class="btn btn-primary btn-download" download>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download ZIP
+          </a>
+        </div>
+      </div>
+      <div class="panel-content">
+        <div class="example-metadata">
+          <span class="metadata-item">
+            <i class="devicon-{{ page.language_icon }}-plain"></i>
+            {{ page.language }}
+          </span>
+          <span class="metadata-item">
+            <span class="protocol-badge">{{ page.protocol }}</span>
+          </span>
+          <span class="metadata-item">
+            <span class="role-badge {{ page.role | downcase }}">{{ page.role }}</span>
+          </span>
+        </div>
+        <div class="file-tree" id="file-tree">
+          <!-- File tree will be populated by JavaScript -->
+          {{ page.file_tree_html }}
+        </div>
+      </div>
+    </main>
+
+    <!-- Right panel: Code viewer -->
+    <aside class="gallery-sidebar right-panel" id="code-panel">
+      <div class="panel-header">
+        <h3 id="code-panel-title">Select a file</h3>
+        <div class="panel-actions">
+          <button class="btn btn-icon" id="copy-code" title="Copy code">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="panel-content">
+        <div class="code-block">
+          <pre class="line-numbers"><code id="code-viewer" class="language-plaintext">Select a file from the tree to view its contents.</code></pre>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- File data for JavaScript -->
+  <script type="application/json" id="gallery-data">
+    {{ page.files_json }}
+  </script>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.js"></script>
+  <script src="{{ '/assets/js/main.js' | relative_url }}"></script>
+  <script src="{{ '/assets/js/gallery.js' | relative_url }}"></script>
+</body>
+</html>

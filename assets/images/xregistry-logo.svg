@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40">
+  <defs>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2879d0"/>
+      <stop offset="100%" style="stop-color:#1e5fa8"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="8" width="24" height="24" rx="4" fill="url(#logoGrad)"/>
+  <path d="M8 16 L14 22 L20 14" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="32" y="26" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="600" fill="#1e2b3a">xRegistry</text>
+</svg>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if page.title %}{{ page.title }} | {% endif %}{{ site.title }}</title>
+  <meta name="description" content="{{ page.description | default: site.description }}">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Devicons for language/framework icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/devicon.min.css">
+  
+  <!-- Prism.js for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css">
+  
+  <!-- Custom styles -->
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+</head>
+<body>
+  <!-- Header with dark gradient (xRegistry.io style) -->
+  <header class="site-header">
+    <div class="container">
+      <nav class="header-nav">
+        <a href="{{ '/' | relative_url }}" class="logo">
+          <img src="{{ '/assets/images/xregistry-logo.svg' | relative_url }}" alt="xRegistry" class="logo-img" onerror="this.style.display='none'">
+          <span class="logo-text">xRegistry Codegen</span>
+        </a>
+        <ul class="nav-links">
+          <li><a href="{{ '/' | relative_url }}">Home</a></li>
+          <li><a href="{{ '/gallery/' | relative_url }}">Gallery</a></li>
+          <li><a href="https://xregistry.io" target="_blank" rel="noopener">xRegistry.io</a></li>
+          <li><a href="https://github.com/xregistry/xregistry-codegen" target="_blank" rel="noopener">
+            <i class="devicon-github-original"></i> GitHub
+          </a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <main class="main-content">
+    <div class="container">
+      {{ content }}
+    </div>
+  </main>
+
+  <!-- Footer with dark background -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h4>xRegistry Codegen</h4>
+          <p>Generate messaging code from xRegistry definitions for multiple languages and protocols.</p>
+        </div>
+        <div class="footer-section">
+          <h4>Resources</h4>
+          <ul>
+            <li><a href="https://xregistry.io">xRegistry Specification</a></li>
+            <li><a href="https://cloudevents.io">CloudEvents</a></li>
+            <li><a href="https://github.com/xregistry/xregistry-codegen">GitHub Repository</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>Related Projects</h4>
+          <ul>
+            <li><a href="https://github.com/clemensv/avrotize">Avrotize</a></li>
+            <li><a href="https://pypi.org/project/xrcg">xrcg on PyPI</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; {{ 'now' | date: '%Y' }} xRegistry Contributors. Licensed under Apache 2.0.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="{{ '/assets/js/main.js' | relative_url }}"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+# xRegistry Codegen GitHub Pages Site Configuration
+title: "xRegistry Codegen"
+description: "Code generation from xRegistry message and endpoint definitions"
+baseurl: "/xregistry-codegen"
+url: "https://xregistry.github.io"
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+
+# Theme
+remote_theme: pages-themes/minimal@v0.2.0
+
+# Plugins
+plugins:
+  - jekyll-remote-theme
+
+# Collections for gallery
+collections:
+  gallery:
+    output: true
+    permalink: /gallery/:name/
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: "default"
+  - scope:
+      path: ""
+      type: "gallery"
+    values:
+      layout: "gallery-viewer"
+
+# Exclude from build
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
+  - scripts
+  - "*.py"
+  - "*.sh"
+  - README.md
