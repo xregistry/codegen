@@ -43,6 +43,7 @@ xrcg = "xrcg.cli:main"
 
 [tool.setuptools_scm]
 write_to = "xrcg/_version.py"
+local_scheme = "no-local-version"
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
