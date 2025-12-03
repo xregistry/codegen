@@ -130,7 +130,7 @@
                   <polyline points="7 10 12 15 17 10"></polyline>
                   <line x1="12" y1="15" x2="12" y2="3"></line>
                 </svg>
-                ZIP
+                Download ZIP
               </a>
             </div>
           </div>
@@ -380,8 +380,12 @@
       const dataEl = document.getElementById('gallery-data');
       if (dataEl && dataEl.textContent.trim()) {
         const parsed = JSON.parse(dataEl.textContent);
-        // Handle both {files: [...]} and [...] formats
-        filesData = parsed.files || parsed;
+        // Handle both {files: [...]} and [...] formats with type checking
+        if (Array.isArray(parsed)) {
+          filesData = parsed;
+        } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.files)) {
+          filesData = parsed.files;
+        }
       }
     } catch (e) {
       console.error('Failed to parse gallery data:', e);
