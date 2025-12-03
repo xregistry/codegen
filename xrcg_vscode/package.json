@@ -667,19 +667,33 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run esbuild-base -- --minify",
-    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "esbuild": "npm run esbuild-base -- --sourcemap",
-    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
+    "esbuild-base": "node esbuild.js",
+    "esbuild": "node esbuild.js",
+    "esbuild-extension": "node -e \"require('esbuild').buildSync({entryPoints:['src/extension.ts'],bundle:true,outfile:'dist/extension.js',external:['vscode'],format:'cjs',platform:'node',sourcemap:true})\"",
+    "esbuild-watch": "npm run esbuild-base -- --watch",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run esbuild-extension && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
     "test-compile": "tsc -p ./"
   },
   "dependencies": {
     "typescript": "5.6.3"
   },
   "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
     "@types/node": "^18.14.0",
     "@types/vscode": "^1.94.0",
     "@types/vscode-webview": "^1.57.5",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-electron": "^2.3.8",
+    "eslint": "^8.56.0",
     "esbuild": "^0.24.0",
-    "esbuild-plugin-copy": "^2.1.1"
+    "esbuild-plugin-copy": "^2.1.1",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0"
   }
 }
