@@ -40,9 +40,7 @@ body_class: gallery-index-page
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " " | append: example.protocol | append: " " | append: example.role }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">
-                <i class="devicon-{{ example.language_icon }}-plain"></i>
-                {{ example.schema_format }}
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
               </span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.protocol }}</span>
@@ -77,9 +75,7 @@ body_class: gallery-index-page
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " " | append: example.protocol | append: " " | append: example.role }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">
-                <i class="devicon-{{ example.language_icon }}-plain"></i>
-                {{ example.schema_format }}
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
               </span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.protocol }}</span>
@@ -114,9 +110,7 @@ body_class: gallery-index-page
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " " | append: example.protocol | append: " " | append: example.role }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">
-                <i class="devicon-{{ example.language_icon }}-plain"></i>
-                {{ example.schema_format }}
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
               </span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.protocol }}</span>
@@ -151,9 +145,7 @@ body_class: gallery-index-page
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " " | append: example.protocol | append: " " | append: example.role }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">
-                <i class="devicon-{{ example.language_icon }}-plain"></i>
-                {{ example.schema_format }}
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
               </span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.protocol }}</span>
@@ -188,9 +180,7 @@ body_class: gallery-index-page
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " " | append: example.protocol | append: " " | append: example.role }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">
-                <i class="devicon-{{ example.language_icon }}-plain"></i>
-                {{ example.schema_format }}
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
               </span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.protocol }}</span>
@@ -225,9 +215,7 @@ body_class: gallery-index-page
               <div class="card-description">{{ example.description | default: "Generate " | append: example.language | append: " specification" }}</div>
             </div>
             <div class="card-formats">
-              <span class="format-badge source">
-                <i class="devicon-{{ example.language_icon }}-plain"></i>
-                {{ example.schema_format }}
+              <span class="format-badge source">{% if example.schema_format == "JSON Schema" %}<i class="devicon-json-plain"></i>{% elsif example.schema_format == "Avro" %}<i class="devicon-apache-plain"></i>{% elsif example.schema_format == "Protobuf" %}<i class="devicon-google-plain"></i>{% endif %}{{ example.schema_format }}
               </span>
               <span class="format-arrow">→</span>
               <span class="format-badge target">{{ example.language }}</span>
@@ -281,3 +269,4 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
+
