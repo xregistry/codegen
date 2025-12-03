@@ -316,19 +316,19 @@
         if (treeCollapsed) {
           const newSourceWidth = Math.max(200, startWidths.source + deltaX);
           const newOutputWidth = Math.max(200, startWidths.output - deltaX);
-          panels.source.style.flex = `0 0 ${newSourceWidth}px`;
-          panels.output.style.flex = `0 0 ${newOutputWidth}px`;
+          panels.source.style.flex = `1 0 ${newSourceWidth}px`;
+          panels.output.style.flex = `1 0 ${newOutputWidth}px`;
         } else {
           const newSourceWidth = Math.max(200, startWidths.source + deltaX);
           const newTreeWidth = Math.max(180, Math.min(500, startWidths.tree - deltaX));
-          panels.source.style.flex = `0 0 ${newSourceWidth}px`;
+          panels.source.style.flex = `1 0 ${newSourceWidth}px`;
           panels.tree.style.flex = `0 0 ${newTreeWidth}px`;
         }
       } else if (resizeType === 'tree-output') {
         const newTreeWidth = Math.max(180, Math.min(500, startWidths.tree + deltaX));
         const newOutputWidth = Math.max(200, startWidths.output - deltaX);
         panels.tree.style.flex = `0 0 ${newTreeWidth}px`;
-        panels.output.style.flex = `0 0 ${newOutputWidth}px`;
+        panels.output.style.flex = `1 0 ${newOutputWidth}px`;
       }
     });
     
@@ -374,16 +374,28 @@
               collapsedCount++;
             }
           });
-          // Restore saved widths
+          // Restore saved widths - ensure source/output have flex-grow:1
           if (state.widths) {
             if (state.widths.source && panels.source && !isCollapsed('source')) {
-              panels.source.style.flex = state.widths.source;
+              // Convert old 0 0 Xpx format to 1 0 Xpx for source panel
+              const sourceMatch = state.widths.source.match(/(\d+)px/);
+              if (sourceMatch) {
+                panels.source.style.flex = `1 0 ${sourceMatch[1]}px`;
+              } else {
+                panels.source.style.flex = state.widths.source;
+              }
             }
             if (state.widths.tree && panels.tree && !isCollapsed('tree')) {
               panels.tree.style.flex = state.widths.tree;
             }
             if (state.widths.output && panels.output && !isCollapsed('output')) {
-              panels.output.style.flex = state.widths.output;
+              // Convert old 0 0 Xpx format to 1 0 Xpx for output panel
+              const outputMatch = state.widths.output.match(/(\d+)px/);
+              if (outputMatch) {
+                panels.output.style.flex = `1 0 ${outputMatch[1]}px`;
+              } else {
+                panels.output.style.flex = state.widths.output;
+              }
             }
           }
           updateLayout();
@@ -392,15 +404,17 @@
     }
     
     // Lock panel widths to pixels after initial layout to prevent content-based resizing
+    // Source and output panels use flex-grow: 1 to fill available space
+    // Tree panel stays fixed width
     function lockPanelWidths() {
       if (!isCollapsed('source') && !panels.source.style.flex.includes('px')) {
-        panels.source.style.flex = `0 0 ${panels.source.offsetWidth}px`;
+        panels.source.style.flex = `1 0 ${panels.source.offsetWidth}px`;
       }
       if (!isCollapsed('tree') && !panels.tree.style.flex.includes('px')) {
         panels.tree.style.flex = `0 0 ${panels.tree.offsetWidth}px`;
       }
       if (!isCollapsed('output') && !panels.output.style.flex.includes('px')) {
-        panels.output.style.flex = `0 0 ${panels.output.offsetWidth}px`;
+        panels.output.style.flex = `1 0 ${panels.output.offsetWidth}px`;
       }
       saveState();
     }
