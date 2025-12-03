@@ -162,9 +162,18 @@ namespace {{ project_name | pascal }}.Test
             var factory = new MqttFactory();
             var client = factory.CreateMqttClient();
             client.ConnectAsync(options).Wait();
-            _producer = new {{ producer_class_name }}(client);
+            
+            // Use custom topic mappings for testing - all messages go to the test topic
+            var testTopicMappings = new Dictionary<string, string>
+            {
+                {%- for messageid, message in messagegroup.messages.items() %}
+                { "{{ messageid }}", _fixture.TopicName },
+                {%- endfor %}
+            };
+            
+            _producer = new {{ producer_class_name }}(client, testTopicMappings);
             _subscriber = new MqttSubscriber(client, new string[] { _fixture.TopicName });
-            _dispatcher = new {{ dispatcher_class_name }}(_subscriber, null, _fixture.GetLoggerFactory());
+            _dispatcher = new {{ dispatcher_class_name }}(_subscriber, testTopicMappings, _fixture.GetLoggerFactory());
             _subscriber.SubscribeAsync().GetAwaiter().GetResult();
         }
 
@@ -217,7 +226,6 @@ namespace {{ project_name | pascal }}.Test
                     , {{ arg.strip().split(' ')[1] -}}: "test"
                     {%- endfor -%}
                     {%- endif -%}
-                    , topicTemplateValues: new Dictionary<string, string> { { "topic", _fixture.TopicName } }
                     );
                 }
                 {%- else %}
@@ -234,7 +242,6 @@ namespace {{ project_name | pascal }}.Test
                     , {{ arg.strip().split(' ')[1] -}}: "test"
                     {%- endfor -%}
                     {%- endif -%}
-                    , topicTemplateValues: new Dictionary<string, string> { { "topic", _fixture.TopicName } }
                     );
                 }
                 {%- endif %}
