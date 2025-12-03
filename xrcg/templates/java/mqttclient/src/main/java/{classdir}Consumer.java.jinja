@@ -12,6 +12,12 @@
 package {{ group_package }};
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -24,13 +30,142 @@ import {{ message_body_type.rsplit('.', 1)[0] }}.*;
 
 {%- set consumer_class = (groupname | strip_namespace) ~ 'Consumer' %}
 
+{#- Helper macro to get the default topic for a message -#}
+{%- macro get_default_topic(message, messageid) -%}
+{%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic -%}
+{{ message.protocoloptions.properties.topic.value }}
+{%- elif message.binding and message.binding.mqtt and message.binding.mqtt.topic -%}
+{{ message.binding.mqtt.topic }}
+{%- elif message.metadata and message.metadata.attributes and message.metadata.attributes["topic-name"] -%}
+{{ message.metadata.attributes["topic-name"].value }}
+{%- else -%}
+{{ messageid }}
+{%- endif -%}
+{%- endmacro -%}
+
 /**
  * MQTT Consumer for {{ messagegroupid }} message group.
  * Processes messages from MQTT topics and dispatches them to registered handlers.
  */
 public abstract class {{ consumer_class }} {
     private static final Logger logger = LogManager.getLogger({{ consumer_class }}.class);
+    private static final Pattern URI_TEMPLATE_PATTERN = Pattern.compile("\\{([A-Za-z0-9_]+)\\}");
+    
     protected final ObjectMapper objectMapper = new ObjectMapper();
+    private final Map<String, String> topicMappings;
+    private final Map<String, Pattern> topicPatterns;
+
+    /**
+     * Creates a new consumer with default topic mappings.
+     */
+    protected {{ consumer_class }}() {
+        this(null);
+    }
+
+    /**
+     * Creates a new consumer with custom topic mappings.
+     * 
+     * @param topicMappings Optional map of message identifiers to topic patterns.
+     *                      Topic patterns may be URI templates with placeholders like {placeholder}.
+     *                      For consumers, placeholders are converted to MQTT wildcards (+) for subscription.
+     *                      If null, uses default 1:1 mapping.
+     */
+    protected {{ consumer_class }}(Map<String, String> topicMappings) {
+        this.topicMappings = topicMappings != null ? new HashMap<>(topicMappings) : getDefaultTopicMappings();
+        this.topicPatterns = buildTopicPatterns(this.topicMappings);
+    }
+
+    /**
+     * Gets the default topic mappings for all messages in this group.
+     * 
+     * @return A map of message identifiers to their default topic patterns
+     */
+    public static Map<String, String> getDefaultTopicMappings() {
+        Map<String, String> mappings = new HashMap<>();
+        {%- for messageid, message in messagegroup.messages.items() %}
+        mappings.put("{{ messageid }}", "{{ get_default_topic(message, messageid) }}");
+        {%- endfor %}
+        return mappings;
+    }
+
+    /**
+     * Gets subscription topics with URI template placeholders replaced by MQTT wildcards (+).
+     * 
+     * @param topicMappings Optional topic mappings. If null, uses default mappings.
+     * @return List of topic patterns suitable for MQTT subscription
+     */
+    public static List<String> getSubscriptionTopics(Map<String, String> topicMappings) {
+        Map<String, String> mappings = topicMappings != null ? topicMappings : getDefaultTopicMappings();
+        List<String> topics = new ArrayList<>();
+        for (String topic : mappings.values()) {
+            // Replace URI template placeholders with MQTT wildcard (+)
+            String wildcardTopic = URI_TEMPLATE_PATTERN.matcher(topic).replaceAll("+");
+            if (!topics.contains(wildcardTopic)) {
+                topics.add(wildcardTopic);
+            }
+        }
+        return topics;
+    }
+
+    /**
+     * Gets subscription topics using the default topic mappings.
+     * 
+     * @return List of topic patterns suitable for MQTT subscription
+     */
+    public static List<String> getSubscriptionTopics() {
+        return getSubscriptionTopics(null);
+    }
+
+    /**
+     * Gets the current topic mappings.
+     * 
+     * @return A copy of the current topic mappings
+     */
+    public Map<String, String> getTopicMappings() {
+        return new HashMap<>(topicMappings);
+    }
+
+    /**
+     * Builds regex patterns from topic mappings for matching incoming messages.
+     */
+    private static Map<String, Pattern> buildTopicPatterns(Map<String, String> topicMappings) {
+        Map<String, Pattern> patterns = new HashMap<>();
+        for (Map.Entry<String, String> entry : topicMappings.entrySet()) {
+            String pattern = "^" + URI_TEMPLATE_PATTERN.matcher(
+                Pattern.quote(entry.getValue()).replace("\\{", "{").replace("\\}", "}")
+            ).replaceAll("(?<$1>[^/]+)") + "$";
+            patterns.put(entry.getKey(), Pattern.compile(pattern));
+        }
+        return patterns;
+    }
+
+    /**
+     * Extracts URI template placeholder values from a topic.
+     * 
+     * @param topic The actual topic the message was received on
+     * @param messageId The message identifier to match against
+     * @return Map of placeholder names to values
+     */
+    protected Map<String, String> extractTopicParameters(String topic, String messageId) {
+        Map<String, String> parameters = new HashMap<>();
+        Pattern pattern = topicPatterns.get(messageId);
+        if (pattern != null) {
+            Matcher matcher = pattern.matcher(topic);
+            if (matcher.matches()) {
+                // Extract named groups - need to parse pattern for group names
+                Matcher templateMatcher = URI_TEMPLATE_PATTERN.matcher(topicMappings.get(messageId));
+                int groupIndex = 1;
+                while (templateMatcher.find()) {
+                    String groupName = templateMatcher.group(1);
+                    if (groupIndex <= matcher.groupCount()) {
+                        parameters.put(groupName, matcher.group(groupIndex));
+                    }
+                    groupIndex++;
+                }
+            }
+        }
+        return parameters;
+    }
 
     /**
      * Process a message from MQTT.
@@ -48,29 +183,24 @@ public abstract class {{ consumer_class }} {
     }
 
     /**
-     * Dispatch the message to the appropriate handler based on topic.
+     * Dispatch the message to the appropriate handler based on topic pattern matching.
      */
     private void dispatchMessage(String topic, byte[] payload) throws Exception {
         {%- for messageid, message in messagegroup.messages.items() %}
         {%- set messagename = messageid | pascal | strip_namespace %}
         {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
-        {%- if message.binding and message.binding.mqtt and message.binding.mqtt.topic -%}
-        {%- set expected_topic = message.binding.mqtt.topic %}
-        {%- elif message.metadata and message.metadata.attributes and message.metadata.attributes["topic-name"] -%}
-        {%- set expected_topic = message.metadata.attributes["topic-name"].value %}
-        {%- else -%}
-        {%- set expected_topic = messageid %}
-        {%- endif %}
+        {%- set default_topic = get_default_topic(message, messageid) %}
         
-        // Try {{ messagename }} (topic: {{ expected_topic }})
-        if (topic.equals("{{ expected_topic }}") || topic.endsWith("/{{ expected_topic }}")) {
+        // Try {{ messagename }}
+        if (topicPatterns.containsKey("{{ messageid }}") && topicPatterns.get("{{ messageid }}").matcher(topic).matches()) {
             try {
                 {%- if message_body_type == 'byte[]' %}
                 byte[] data = payload;
                 {%- else %}
                 {{ message_body_type }} data = {{ message_body_type }}.fromData(payload, "application/json");
                 {%- endif %}
-                on{{ messagename }}(data, topic);
+                Map<String, String> topicParams = extractTopicParameters(topic, "{{ messageid }}");
+                on{{ messagename }}(data, topic, topicParams);
                 return;
             } catch (Exception ex) {
                 logger.trace("Message does not match {{ messagename }} schema", ex);
@@ -91,8 +221,9 @@ public abstract class {{ consumer_class }} {
      * 
      * @param data The deserialized message data
      * @param topic The MQTT topic
+     * @param topicParameters Map of URI template placeholder values extracted from the topic
      */
-    protected abstract void on{{ messagename }}({{ message_body_type }} data, String topic);
+    protected abstract void on{{ messagename }}({{ message_body_type }} data, String topic, Map<String, String> topicParameters);
     {%- endfor %}
 
     /**
