@@ -1,7 +1,7 @@
 # xRegistry Codegen GitHub Pages Site Configuration
 title: "xRegistry Codegen"
 description: "Code generation from xRegistry message and endpoint definitions"
-baseurl: "/xregistry-codegen"
+baseurl: "/codegen"
 url: "https://xregistry.github.io"
 
 # Build settings

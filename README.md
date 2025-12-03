@@ -78,6 +78,6 @@ The site uses a light theme aligned with [xregistry.io](https://xregistry.io):
 
 ## Related Links
 
-- [Main Repository](https://github.com/xregistry/xregistry-codegen)
+- [Main Repository](https://github.com/xregistry/codegen)
 - [xRegistry Specification](https://xregistry.io)
 - [CloudEvents](https://cloudevents.io)

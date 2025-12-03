@@ -20,7 +20,7 @@ description: Generate messaging code from xRegistry message and endpoint definit
       </svg>
       View Gallery
     </a>
-    <a href="https://github.com/xregistry/xregistry-codegen" class="btn btn-secondary" target="_blank">
+    <a href="https://github.com/xregistry/codegen" class="btn btn-secondary" target="_blank">
       <i class="devicon-github-original"></i>
       GitHub
     </a>

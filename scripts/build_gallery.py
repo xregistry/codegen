@@ -314,7 +314,7 @@ def main():
         # Create ZIP file
         zip_path = files_dir / example.id / f"{example.id}.zip"
         create_zip(output_dir, zip_path)
-        zip_url = f"/xregistry-codegen/gallery/files/{example.id}/{example.id}.zip"
+        zip_url = f"/codegen/gallery/files/{example.id}/{example.id}.zip"
         
         # Generate gallery page
         generate_gallery_page(
