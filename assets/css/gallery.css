@@ -457,12 +457,7 @@
   flex: 1;
   overflow: auto;
   background: var(--color-bg);
-}
-
-/* Prevent content from affecting panel width in source/output panels - let flex-grow handle sizing */
-.source-panel .panel-content,
-.output-panel .panel-content {
-  width: 0;
+  /* Contain content to prevent affecting parent flex layout */
   min-width: 0;
 }
 
