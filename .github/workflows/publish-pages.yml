@@ -6,8 +6,6 @@ on:
     workflows: ["Publish to PyPI"]
     types:
       - completed
-    branches:
-      - main
   # Also allow manual trigger
   workflow_dispatch:
 
