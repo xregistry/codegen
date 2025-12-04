@@ -163,17 +163,17 @@ namespace {{ project_name | pascal }}.Test
             var client = factory.CreateMqttClient();
             client.ConnectAsync(options).Wait();
             
-            // Use custom topic mappings for testing - all messages go to the test topic
-            var testTopicMappings = new Dictionary<string, string>
+            // Use custom topic mappings for dispatcher - all messages are received on the test topic
+            var dispatcherTopicMappings = new Dictionary<string, string>
             {
                 {%- for messageid, message in messagegroup.messages.items() %}
                 { "{{ messageid }}", _fixture.TopicName },
                 {%- endfor %}
             };
             
-            _producer = new {{ producer_class_name }}(client, testTopicMappings);
+            _producer = new {{ producer_class_name }}(client);
             _subscriber = new MqttSubscriber(client, new string[] { _fixture.TopicName });
-            _dispatcher = new {{ dispatcher_class_name }}(_subscriber, testTopicMappings, _fixture.GetLoggerFactory());
+            _dispatcher = new {{ dispatcher_class_name }}(_subscriber, dispatcherTopicMappings, _fixture.GetLoggerFactory());
             _subscriber.SubscribeAsync().GetAwaiter().GetResult();
         }
 
@@ -183,7 +183,6 @@ namespace {{ project_name | pascal }}.Test
         {%- set messagename = messageid | strip_namespace | pascal %}
         {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
         {%- set isMqtt = (message | exists( "protocol", "mqtt" )) %}
-        {%- set topicargs = mqtt.DeclareTopicTemplateArguments(message) -%}
         [Fact]
         public async Task Test{{ messagename }}Message()
         {
@@ -221,11 +220,7 @@ namespace {{ project_name | pascal }}.Test
                     , {{ arg.strip().split(' ')[1] -}}: "test"
                     {%- endfor -%}
                     {%- endif -%}
-                    {%- if topicargs -%}
-                    {%- for arg in topicargs.split(',') if arg.strip() -%}
-                    , {{ arg.strip().split(' ')[1] -}}: "test"
-                    {%- endfor -%}
-                    {%- endif -%}
+                    , topic: _fixture.TopicName
                     );
                 }
                 {%- else %}
@@ -237,11 +232,7 @@ namespace {{ project_name | pascal }}.Test
                     , {{ arg.strip().split(' ')[1] -}}: "test"
                     {%- endfor -%}
                     {%- endif -%}
-                    {%- if topicargs -%}
-                    {%- for arg in topicargs.split(',') if arg.strip() -%}
-                    , {{ arg.strip().split(' ')[1] -}}: "test"
-                    {%- endfor -%}
-                    {%- endif -%}
+                    , topic: _fixture.TopicName
                     );
                 }
                 {%- endif %}

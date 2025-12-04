@@ -291,17 +291,6 @@ export class {{ class_name }} {
     {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
     {%- set type_name = util.body_type(data_project_name, root, message) %}
     {%- set default_topic = get_default_topic(message, messageid) %}
-    {%- set topic_template_vars = [] %}
-    {%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic and message.protocoloptions.properties.topic.type == "uritemplate" %}
-        {%- set topic_phs = message.protocoloptions.properties.topic.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
-        {%- if topic_phs %}
-            {%- for placeholder in topic_phs %}
-                {%- if placeholder not in topic_template_vars %}
-                    {%- set _ = topic_template_vars.append(placeholder) %}
-                {%- endif %}
-            {%- endfor %}
-        {%- endif %}
-    {%- endif %}
     
     /**
      * Publish the `{{ messagename }}` message
@@ -322,10 +311,7 @@ export class {{ class_name }} {
      * @param {{ attrname }} CloudEvent {{ attrname }} attribute{% if not attribute.required %} (optional){% endif %}
      {%- endfor %}
      {%- endif %}
-     {%- for var in topic_template_vars %}
-     * @param {{ var }} Topic template placeholder value
-     {%- endfor %}
-     * @param topicTemplateValues Optional additional topic template placeholder values
+     * @param topic Optional topic override. If not provided, uses default topic '{{ default_topic }}'.
      * @returns Promise that resolves when the message is published
      */
     async publish{{ messagename }}(
@@ -343,24 +329,10 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        {%- for var in topic_template_vars %}
-        {{ var }}?: string,
-        {%- endfor %}
-        topicTemplateValues?: Record<string, string>,
+        topic?: string,
     ): Promise<void> {
         return new Promise((resolve, reject) => {
-            // Get topic pattern from mappings
-            const topicPattern = this.topicMappings['{{ messageid }}'] ?? '{{ default_topic }}';
-            
-            // Merge explicit parameters with topicTemplateValues
-            const allTemplateValues: Record<string, string> = { ...topicTemplateValues };
-            {%- for var in topic_template_vars %}
-            if ({{ var }}) {
-                allTemplateValues['{{ var }}'] = {{ var }};
-            }
-            {%- endfor %}
-            
-            const topic = applyTopicTemplate(topicPattern, allTemplateValues);
+            const targetTopic = topic ?? '{{ default_topic }}';
             
             {%- if isCloudEvent %}
             const cloudEvent = new CloudEvent({
@@ -426,7 +398,7 @@ export class {{ class_name }} {
             const properties: mqtt.IClientPublishOptions = {};
             {%- endif %}
             
-            this.client.publish(topic, payload, properties, (err) => {
+            this.client.publish(targetTopic, payload, properties, (err) => {
                 if (err) {
                     reject(err);
                 } else {

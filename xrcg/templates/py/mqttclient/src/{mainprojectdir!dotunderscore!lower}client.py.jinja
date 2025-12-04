@@ -305,17 +305,6 @@ class {{ class_name }}(_ClientBase):
             {%- endif %}
         {%- endif %}
     {%- endfor %}
-    {%- set topic_template_vars = [] %}
-    {%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic and message.protocoloptions.properties.topic.type == "uritemplate" %}
-        {%- set topic_phs = message.protocoloptions.properties.topic.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
-        {%- if topic_phs %}
-            {%- for placeholder in topic_phs %}
-                {%- if placeholder not in topic_template_vars %}
-                    {%- set _ = topic_template_vars.append(placeholder) %}
-                {%- endif %}
-            {%- endfor %}
-        {%- endif %}
-    {%- endif %}
     async def publish_{{messagename.split('.')[-1]}}(self,
         {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.value -%}
         {%- if attribute.type != "uritemplate" -%}
@@ -325,11 +314,8 @@ class {{ class_name }}(_ClientBase):
         {%- for var in uri_template_vars %}
         {{ var | snake }}: str,
         {%- endfor %}
-        {%- for var in topic_template_vars %}
-        {{ var | snake }}: str,
-        {%- endfor %}
         data: {{type_name}},
-        topic_template_values: Optional[Dict[str, str]] = None,
+        topic: Optional[str] = None,
         content_type: str = "application/json") -> None:
         """
         Publish the '{{ messageid }}' event to an MQTT topic.
@@ -343,24 +329,11 @@ class {{ class_name }}(_ClientBase):
         {%- for var in uri_template_vars %}
             {{ var | snake }}: URI template variable for '{{var}}'
         {%- endfor %}
-        {%- for var in topic_template_vars %}
-            {{ var | snake }}: Topic template placeholder value for '{{var}}'
-        {%- endfor %}
             data: The event data to be published
-            topic_template_values: Optional dictionary of additional topic template placeholder values
+            topic: Optional topic override. If not provided, uses default topic '{{ get_default_topic(message, messageid) }}'.
             content_type: The content type for the event data
         """
-        # Get topic pattern from mappings
-        topic_pattern = self._topic_mappings.get("{{ messageid }}", "{{ get_default_topic(message, messageid) }}")
-        
-        # Merge explicit parameters with topic_template_values dictionary
-        all_template_values = dict(topic_template_values or {})
-        {%- for var in topic_template_vars %}
-        if {{ var | snake }} is not None:
-            all_template_values["{{ var }}"] = {{ var | snake }}
-        {%- endfor %}
-        
-        topic = _apply_topic_template(topic_pattern, all_template_values)
+        target_topic = topic if topic is not None else "{{ get_default_topic(message, messageid) }}"
         
         attributes = {
         {%- for attrname, attribute in message.envelopemetadata.items() %}
@@ -397,7 +370,7 @@ class {{ class_name }}(_ClientBase):
             # Binary mode headers would go into MQTT 5.0 user properties
             # For MQTT 3.1.1, we'll use structured mode
         
-        self.client.publish(topic, payload, qos=1)
+        self.client.publish(target_topic, payload, qos=1)
 
     {% endfor %}
 {% endfor %}
