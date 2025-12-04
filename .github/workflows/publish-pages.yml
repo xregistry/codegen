@@ -47,6 +47,13 @@ jobs:
         echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
         echo "📦 Latest release version: $VERSION"
 
+    - name: Fetch sample definitions from main branch
+      run: |
+        echo "📥 Fetching sample definitions from main branch..."
+        git fetch origin main
+        git checkout origin/main -- samples/message-definitions
+        echo "✅ Fetched $(ls -1 samples/message-definitions/*.json 2>/dev/null | wc -l) definition files"
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
