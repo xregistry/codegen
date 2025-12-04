@@ -1,0 +1,103 @@
+name: Publish GitHub Pages
+
+on:
+  # Trigger after PyPI publish workflow completes
+  workflow_run:
+    workflows: ["Publish to PyPI"]
+    types:
+      - completed
+    branches:
+      - main
+  # Also allow manual trigger
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-pages:
+    runs-on: ubuntu-latest
+    # Only run if PyPI publish succeeded and was triggered by a tag
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && 
+       github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    
+    steps:
+    - name: Checkout gh-pages branch
+      uses: actions/checkout@v6
+      with:
+        ref: gh-pages
+        fetch-depth: 0
+
+    - name: Get latest tag version
+      id: get_version
+      run: |
+        git fetch --tags
+        LATEST_TAG=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "v0.0.0")
+        VERSION="${LATEST_TAG#v}"
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+        echo "📦 Latest release version: $VERSION"
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install xrcg from PyPI
+      run: |
+        echo "📦 Installing xrcg ${{ steps.get_version.outputs.version }} from PyPI..."
+        pip install "xrcg==${{ steps.get_version.outputs.version }}" || pip install xrcg
+        echo "✅ Installed xrcg version: $(pip show xrcg | grep Version)"
+
+    - name: Build gallery
+      run: |
+        if [ -f "scripts/build_gallery.py" ]; then
+          echo "🖼️ Building gallery..."
+          python scripts/build_gallery.py
+        else
+          echo "⚠️ No gallery build script found"
+        fi
+
+    - name: Setup Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.1'
+        bundler-cache: true
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+
+    - name: Build with Jekyll
+      run: |
+        bundle install
+        bundle exec jekyll build --baseurl "/codegen"
+      env:
+        JEKYLL_ENV: production
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./_site
+
+  deploy-pages:
+    needs: build-pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
