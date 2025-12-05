@@ -518,6 +518,9 @@
         fileTree.querySelectorAll('.file-tree-item').forEach(item => item.classList.remove('active'));
         treeItem.classList.add('active');
         
+        // Update URL hash
+        updateUrlHash(filePath);
+        
         // Find file content
         const file = filesData.find(f => f.path === filePath);
         if (file) {
@@ -577,10 +580,84 @@
       Prism.highlightElement(sourceCode);
     }
     
-    // Auto-select first file
-    const firstFile = fileTree.querySelector('.file-tree-item:not(.folder)');
-    if (firstFile) {
-      firstFile.click();
+    // URL Hash Navigation Functions
+    function updateUrlHash(filePath) {
+      if (filePath) {
+        const newHash = '#file=' + encodeURIComponent(filePath);
+        if (window.location.hash !== newHash) {
+          history.replaceState(null, '', newHash);
+        }
+      }
+    }
+    
+    function getFilePathFromHash() {
+      const hash = window.location.hash;
+      if (hash && hash.startsWith('#file=')) {
+        return decodeURIComponent(hash.substring(6));
+      }
+      return null;
+    }
+    
+    function expandParentFolders(path) {
+      const parts = path.split('/');
+      let currentPath = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        currentPath += (i > 0 ? '/' : '') + parts[i];
+        const folderItem = fileTree.querySelector('.file-tree-item.folder[data-path="' + currentPath + '"]');
+        if (folderItem) {
+          const folderContents = folderItem.parentElement.querySelector('.folder-contents');
+          const toggleIcon = folderItem.querySelector('.folder-toggle');
+          if (folderContents && folderContents.classList.contains('collapsed')) {
+            folderContents.classList.remove('collapsed');
+            if (toggleIcon) {
+              toggleIcon.classList.remove('collapsed');
+            }
+          }
+        }
+      }
+    }
+    
+    function selectFileByPath(path) {
+      // Expand parent folders first
+      expandParentFolders(path);
+      
+      // Find and click the file
+      const fileItem = fileTree.querySelector('.file-tree-item[data-path="' + path + '"]');
+      if (fileItem) {
+        fileItem.click();
+        return true;
+      }
+      return false;
+    }
+    
+    function loadDefaultFile() {
+      // Try to load README.md first
+      const readmeItem = fileTree.querySelector('.file-tree-item[data-path="README.md"]');
+      if (readmeItem) {
+        readmeItem.click();
+        return;
+      }
+      
+      // Fall back to first file
+      const firstFile = fileTree.querySelector('.file-tree-item:not(.folder)');
+      if (firstFile) {
+        firstFile.click();
+      }
+    }
+    
+    // Check for file path in URL hash on load
+    const hashPath = getFilePathFromHash();
+    if (hashPath) {
+      // Wait a tick for DOM to be ready
+      setTimeout(() => {
+        if (!selectFileByPath(hashPath)) {
+          // Hash path not found, load default
+          loadDefaultFile();
+        }
+      }, 0);
+    } else {
+      // No hash, load default file
+      loadDefaultFile();
     }
   });
   </script>
