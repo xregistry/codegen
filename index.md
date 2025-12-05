@@ -231,55 +231,50 @@ xrcg config list</code></pre>
   
   <div class="example-block">
     <h3>Apache Kafka</h3>
-    <pre><code># Python Kafka Producer
-xrcg generate --language py --style kafkaproducer -d contoso-erp.xreg.json -o ./output
+    <pre><code><a href="{{ '/gallery/py-kafka-contoso-producer/' | relative_url }}" class="code-link"># Python Kafka Producer
+xrcg generate --language py --style kafkaproducer -d contoso-erp.xreg.json -o ./output</a>
 
-# C# Kafka Consumer  
-xrcg generate --language cs --style kafkaconsumer -d contoso-erp.xreg.json -o ./output
+<a href="{{ '/gallery/cs-kafka-contoso-producer/' | relative_url }}" class="code-link"># C# Kafka Consumer  
+xrcg generate --language cs --style kafkaconsumer -d contoso-erp.xreg.json -o ./output</a>
 
-# Java Kafka Producer
-xrcg generate --language java --style kafkaproducer -d contoso-erp.xreg.json -o ./output</code></pre>
-    <p class="example-gallery-links">Gallery: <a href="{{ '/gallery/py-kafka-contoso-producer/' | relative_url }}">Python Producer</a> · <a href="{{ '/gallery/py-kafka-contoso-consumer/' | relative_url }}">Python Consumer</a> · <a href="{{ '/gallery/java-kafka-contoso-producer/' | relative_url }}">Java Producer</a></p>
+<a href="{{ '/gallery/java-kafka-contoso-producer/' | relative_url }}" class="code-link"># Java Kafka Producer
+xrcg generate --language java --style kafkaproducer -d contoso-erp.xreg.json -o ./output</a></code></pre>
   </div>
   
   <div class="example-block">
     <h3>Azure Event Hubs</h3>
-    <pre><code># TypeScript Event Hubs Producer
-xrcg generate --language ts --style ehproducer -d fabrikam-motorsports.xreg.json -o ./output
+    <pre><code><a href="{{ '/gallery/ts-eh-fabrikam-producer/' | relative_url }}" class="code-link"># TypeScript Event Hubs Producer
+xrcg generate --language ts --style ehproducer -d fabrikam-motorsports.xreg.json -o ./output</a>
 
-# C# Event Hubs Consumer
-xrcg generate --language cs --style ehconsumer -d fabrikam-motorsports.xreg.json -o ./output</code></pre>
-    <p class="example-gallery-links">Gallery: <a href="{{ '/gallery/ts-eh-fabrikam-producer/' | relative_url }}">TypeScript Producer</a> · <a href="{{ '/gallery/cs-eh-fabrikam-consumer/' | relative_url }}">C# Consumer</a> · <a href="{{ '/gallery/py-eh-fabrikam-producer/' | relative_url }}">Python Producer</a></p>
+<a href="{{ '/gallery/cs-eh-fabrikam-consumer/' | relative_url }}" class="code-link"># C# Event Hubs Consumer
+xrcg generate --language cs --style ehconsumer -d fabrikam-motorsports.xreg.json -o ./output</a></code></pre>
   </div>
   
   <div class="example-block">
     <h3>MQTT 5.0</h3>
-    <pre><code># Python MQTT Client
-xrcg generate --language py --style mqttclient -d lightbulb.xreg.json -o ./output
+    <pre><code><a href="{{ '/gallery/py-mqtt-lightbulb/' | relative_url }}" class="code-link"># Python MQTT Client
+xrcg generate --language py --style mqttclient -d lightbulb.xreg.json -o ./output</a>
 
-# Java MQTT Client
-xrcg generate --language java --style mqttclient -d lightbulb.xreg.json -o ./output</code></pre>
-    <p class="example-gallery-links">Gallery: <a href="{{ '/gallery/py-mqtt-lightbulb/' | relative_url }}">Python Client</a> · <a href="{{ '/gallery/java-mqtt-lightbulb/' | relative_url }}">Java Client</a> · <a href="{{ '/gallery/ts-mqtt-lightbulb/' | relative_url }}">TypeScript Client</a></p>
+<a href="{{ '/gallery/java-mqtt-lightbulb/' | relative_url }}" class="code-link"># Java MQTT Client
+xrcg generate --language java --style mqttclient -d lightbulb.xreg.json -o ./output</a></code></pre>
   </div>
   
   <div class="example-block">
     <h3>AMQP 1.0 (RabbitMQ, Artemis, Qpid)</h3>
-    <pre><code># C# AMQP Producer
-xrcg generate --language cs --style amqpproducer -d inkjet.xreg.json -o ./output
+    <pre><code><a href="{{ '/gallery/cs-amqp-inkjet-producer/' | relative_url }}" class="code-link"># C# AMQP Producer
+xrcg generate --language cs --style amqpproducer -d inkjet.xreg.json -o ./output</a>
 
-# Python AMQP Producer
-xrcg generate --language py --style amqpproducer -d inkjet.xreg.json -o ./output</code></pre>
-    <p class="example-gallery-links">Gallery: <a href="{{ '/gallery/cs-amqp-inkjet-producer/' | relative_url }}">C# Producer</a> · <a href="{{ '/gallery/py-amqp-inkjet-producer/' | relative_url }}">Python Producer</a></p>
+<a href="{{ '/gallery/py-amqp-inkjet-producer/' | relative_url }}" class="code-link"># Python AMQP Producer
+xrcg generate --language py --style amqpproducer -d inkjet.xreg.json -o ./output</a></code></pre>
   </div>
   
   <div class="example-block">
     <h3>AsyncAPI / OpenAPI</h3>
-    <pre><code># Generate AsyncAPI 3.0 spec
-xrcg generate --language asyncapi --style consumer -d contoso-erp.xreg.json -o ./output
+    <pre><code><a href="{{ '/gallery/asyncapi-contoso-consumer/' | relative_url }}" class="code-link"># Generate AsyncAPI 3.0 spec
+xrcg generate --language asyncapi --style consumer -d contoso-erp.xreg.json -o ./output</a>
 
-# Generate OpenAPI 3.0 spec
-xrcg generate --language openapi --style producer -d contoso-erp.xreg.json -o ./output</code></pre>
-    <p class="example-gallery-links">Gallery: <a href="{{ '/gallery/asyncapi-contoso-consumer/' | relative_url }}">AsyncAPI Spec</a> · <a href="{{ '/gallery/openapi-contoso-producer/' | relative_url }}">OpenAPI Spec</a></p>
+<a href="{{ '/gallery/openapi-contoso-producer/' | relative_url }}" class="code-link"># Generate OpenAPI 3.0 spec
+xrcg generate --language openapi --style producer -d contoso-erp.xreg.json -o ./output</a></code></pre>
   </div>
 </section>
 
