@@ -538,3 +538,332 @@ pre code {
     font-size: 0.875rem;
   }
 }
+
+/* ===== Quick Start Installation Options ===== */
+.install-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
+}
+
+.install-option {
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-lg);
+}
+
+.install-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.install-header i {
+  font-size: 1.75rem;
+  color: var(--color-primary);
+}
+
+.install-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.install-header .badge {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  background-color: var(--color-success);
+  color: white;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.install-command {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.install-command code {
+  flex: 1;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.875rem;
+  background-color: var(--color-code-bg);
+  border: 1px solid var(--color-code-border);
+  border-radius: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.install-command.wide {
+  max-width: 100%;
+}
+
+.install-command.wide code {
+  font-size: 0.8rem;
+}
+
+.install-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.install-details {
+  margin-top: var(--space-md);
+  border-top: 1px solid var(--color-border-light);
+  padding-top: var(--space-md);
+}
+
+.install-details summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.install-details summary:hover {
+  text-decoration: underline;
+}
+
+.code-tabs {
+  margin-top: var(--space-md);
+}
+
+.code-tab {
+  margin-bottom: var(--space-sm);
+}
+
+.code-tab .tab-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+.code-tab pre {
+  margin: 0;
+  padding: var(--space-sm);
+  font-size: 0.75rem;
+}
+
+.code-tab code {
+  font-size: 0.75rem;
+}
+
+.quick-example {
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-lg);
+}
+
+.quick-example h3 {
+  margin: 0 0 var(--space-md);
+  font-size: 1rem;
+  text-align: center;
+}
+
+.quick-example .install-command {
+  max-width: 100%;
+  justify-content: flex-start;
+}
+
+.quick-example .install-command code {
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.copy-btn.copied {
+  color: var(--color-success);
+}
+
+/* ===== What You Get Section ===== */
+.what-you-get-section {
+  margin: var(--space-2xl) 0;
+}
+
+.section-intro {
+  text-align: center;
+  font-size: 1.125rem;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xl);
+}
+
+/* ===== Command Reference Section ===== */
+.command-reference-section {
+  margin: var(--space-2xl) 0;
+  background-color: var(--color-bg-alt);
+  padding: var(--space-2xl);
+  border-radius: 12px;
+}
+
+.command-block {
+  margin-bottom: var(--space-xl);
+}
+
+.command-block:last-child {
+  margin-bottom: 0;
+}
+
+.command-block h3 {
+  margin-bottom: var(--space-md);
+}
+
+.command-block h4 {
+  font-size: 0.9rem;
+  margin-bottom: var(--space-sm);
+  color: var(--color-text-muted);
+}
+
+.options-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-md);
+  font-size: 0.875rem;
+}
+
+.options-table th,
+.options-table td {
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.options-table th {
+  background-color: var(--color-bg-subtle);
+  font-weight: 600;
+}
+
+.options-table td code {
+  font-size: 0.8rem;
+}
+
+.command-examples {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--space-md);
+}
+
+/* ===== Examples Section Enhanced ===== */
+.examples-section {
+  max-width: 900px;
+  margin: var(--space-2xl) auto;
+}
+
+.examples-section h2 {
+  text-align: center;
+  margin-bottom: var(--space-xl);
+}
+
+.example-block h3 {
+  font-size: 1.125rem;
+  margin-bottom: var(--space-sm);
+  color: var(--color-text);
+}
+
+.example-block h4 {
+  font-size: 0.9rem;
+  margin-bottom: var(--space-sm);
+  color: var(--color-text-muted);
+}
+
+.example-block pre code {
+  color: var(--color-text);
+}
+
+/* ===== xRegistry Section ===== */
+.xregistry-section {
+  margin: var(--space-2xl) 0;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.xregistry-list {
+  padding-left: var(--space-lg);
+  margin-bottom: var(--space-xl);
+}
+
+.xregistry-list li {
+  margin-bottom: var(--space-sm);
+}
+
+/* ===== Community Section ===== */
+.community-section {
+  text-align: center;
+  margin: var(--space-2xl) 0;
+  padding: var(--space-2xl);
+  background-color: var(--color-bg-alt);
+  border-radius: 12px;
+}
+
+.community-links {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-xl);
+  flex-wrap: wrap;
+  margin-top: var(--space-lg);
+}
+
+.community-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--color-text);
+  transition: all 0.2s ease;
+}
+
+.community-link:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+  text-decoration: none;
+}
+
+.community-icon {
+  font-size: 1.25rem;
+}
+
+.community-link i {
+  font-size: 1.25rem;
+  color: var(--color-primary);
+}
+
+/* ===== Responsive for new sections ===== */
+@media (max-width: 768px) {
+  .install-options {
+    grid-template-columns: 1fr;
+  }
+  
+  .install-command code {
+    font-size: 0.75rem;
+  }
+  
+  .install-command.wide code {
+    font-size: 0.7rem;
+  }
+  
+  .options-table {
+    font-size: 0.75rem;
+  }
+  
+  .options-table th,
+  .options-table td {
+    padding: var(--space-xs) var(--space-sm);
+  }
+  
+  .community-links {
+    flex-direction: column;
+    align-items: center;
+  }
+}
