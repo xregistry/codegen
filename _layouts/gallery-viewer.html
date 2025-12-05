@@ -57,6 +57,15 @@
         <div class="gallery-header-text">
           <h1>{{ page.title }}</h1>
           <p>{{ page.description | default: page.definition_name | append: " with " | append: page.schema_format | append: " schema → " | append: page.language | append: " " | append: page.protocol | append: " " | append: page.role }}</p>
+          <div class="gallery-header-command">
+            <code>{{ page.command }}</code>
+            <button class="copy-command-btn" title="Copy command" onclick="navigator.clipboard.writeText('{{ page.command }}'); this.classList.add('copied'); setTimeout(() => this.classList.remove('copied'), 2000);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -272,8 +281,13 @@
     // Resize functionality
     let isResizing = false;
     let currentHandle = null;
-    let startX = 0;
-    let startWidths = {};
+    let startPos = 0;
+    let startSizes = {};
+    
+    // Detect if we're in vertical (stacked) layout mode
+    function isVerticalLayout() {
+      return window.innerWidth <= 900;
+    }
     
     document.querySelectorAll('.resize-handle').forEach(handle => {
       handle.addEventListener('mousedown', (e) => {
@@ -281,21 +295,22 @@
         
         isResizing = true;
         currentHandle = handle;
-        startX = e.clientX;
+        const vertical = isVerticalLayout();
+        startPos = vertical ? e.clientY : e.clientX;
         
         const resizeType = handle.dataset.resize;
         const treeCollapsed = isCollapsed('tree');
         
         if (resizeType === 'source-tree') {
-          startWidths.source = panels.source.offsetWidth;
+          startSizes.source = vertical ? panels.source.offsetHeight : panels.source.offsetWidth;
           if (treeCollapsed) {
-            startWidths.output = panels.output.offsetWidth;
+            startSizes.output = vertical ? panels.output.offsetHeight : panels.output.offsetWidth;
           } else {
-            startWidths.tree = panels.tree.offsetWidth;
+            startSizes.tree = vertical ? panels.tree.offsetHeight : panels.tree.offsetWidth;
           }
         } else if (resizeType === 'tree-output') {
-          startWidths.tree = panels.tree.offsetWidth;
-          startWidths.output = panels.output.offsetWidth;
+          startSizes.tree = vertical ? panels.tree.offsetHeight : panels.tree.offsetWidth;
+          startSizes.output = vertical ? panels.output.offsetHeight : panels.output.offsetWidth;
         }
         
         viewer.classList.add('resizing');
@@ -308,27 +323,49 @@
     document.addEventListener('mousemove', (e) => {
       if (!isResizing) return;
       
-      const deltaX = e.clientX - startX;
+      const vertical = isVerticalLayout();
+      const currentPos = vertical ? e.clientY : e.clientX;
+      const delta = currentPos - startPos;
       const resizeType = currentHandle.dataset.resize;
       const treeCollapsed = isCollapsed('tree');
       
+      // Min sizes - use smaller values for vertical layout
+      const minPanelSize = vertical ? 100 : 200;
+      const minTreeSize = vertical ? 80 : 180;
+      const maxTreeSize = vertical ? 400 : 500;
+      
       if (resizeType === 'source-tree') {
         if (treeCollapsed) {
-          const newSourceWidth = Math.max(200, startWidths.source + deltaX);
-          const newOutputWidth = Math.max(200, startWidths.output - deltaX);
-          panels.source.style.flex = `1 0 ${newSourceWidth}px`;
-          panels.output.style.flex = `1 0 ${newOutputWidth}px`;
+          const newSourceSize = Math.max(minPanelSize, startSizes.source + delta);
+          const newOutputSize = Math.max(minPanelSize, startSizes.output - delta);
+          if (vertical) {
+            panels.source.style.flex = `0 0 ${newSourceSize}px`;
+            panels.output.style.flex = `0 0 ${newOutputSize}px`;
+          } else {
+            panels.source.style.flex = `1 0 ${newSourceSize}px`;
+            panels.output.style.flex = `1 0 ${newOutputSize}px`;
+          }
         } else {
-          const newSourceWidth = Math.max(200, startWidths.source + deltaX);
-          const newTreeWidth = Math.max(180, Math.min(500, startWidths.tree - deltaX));
-          panels.source.style.flex = `1 0 ${newSourceWidth}px`;
-          panels.tree.style.flex = `0 0 ${newTreeWidth}px`;
+          const newSourceSize = Math.max(minPanelSize, startSizes.source + delta);
+          const newTreeSize = Math.max(minTreeSize, Math.min(maxTreeSize, startSizes.tree - delta));
+          if (vertical) {
+            panels.source.style.flex = `0 0 ${newSourceSize}px`;
+            panels.tree.style.flex = `0 0 ${newTreeSize}px`;
+          } else {
+            panels.source.style.flex = `1 0 ${newSourceSize}px`;
+            panels.tree.style.flex = `0 0 ${newTreeSize}px`;
+          }
         }
       } else if (resizeType === 'tree-output') {
-        const newTreeWidth = Math.max(180, Math.min(500, startWidths.tree + deltaX));
-        const newOutputWidth = Math.max(200, startWidths.output - deltaX);
-        panels.tree.style.flex = `0 0 ${newTreeWidth}px`;
-        panels.output.style.flex = `1 0 ${newOutputWidth}px`;
+        const newTreeSize = Math.max(minTreeSize, Math.min(maxTreeSize, startSizes.tree + delta));
+        const newOutputSize = Math.max(minPanelSize, startSizes.output - delta);
+        if (vertical) {
+          panels.tree.style.flex = `0 0 ${newTreeSize}px`;
+          panels.output.style.flex = `0 0 ${newOutputSize}px`;
+        } else {
+          panels.tree.style.flex = `0 0 ${newTreeSize}px`;
+          panels.output.style.flex = `1 0 ${newOutputSize}px`;
+        }
       }
     });
     

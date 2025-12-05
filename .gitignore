@@ -26,3 +26,8 @@ Thumbs.db
 # Node (if used for JS bundling)
 node_modules/
 package-lock.json
+
+tmp/
+xrcg_vscode/
+xrcg/
+.playwright-mcp/

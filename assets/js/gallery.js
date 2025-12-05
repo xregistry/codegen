@@ -25,11 +25,21 @@ function initGallery() {
   initPanelToggles();
   initCopyCodeButton();
   initKeyboardNavigation(filesData);
+  initHashNavigation(filesData);
   
-  // Load first file by default
-  const firstFile = findFirstFile(filesData);
-  if (firstFile) {
-    loadFileContent(firstFile.path, firstFile.content, filesData);
+  // Check for file path in URL hash, otherwise try README.md, then first file
+  const hashPath = getFilePathFromHash();
+  if (hashPath) {
+    const fileFromHash = filesData.files.find(f => f.path === hashPath);
+    if (fileFromHash) {
+      selectFileByPath(hashPath, filesData);
+    } else {
+      // Hash doesn't match any file, try README.md or first file
+      loadDefaultFile(filesData);
+    }
+  } else {
+    // No hash, try README.md or first file
+    loadDefaultFile(filesData);
   }
 }
 
@@ -164,11 +174,88 @@ function selectFile(element, path, filesData) {
   });
   element.classList.add('active');
   
+  // Update URL hash with file path
+  updateUrlHash(path);
+  
   // Find file content
   const file = filesData.files.find(f => f.path === path);
   if (file) {
     loadFileContent(path, file.content, filesData);
   }
+}
+
+/**
+ * Select a file by its path (used for hash navigation)
+ */
+function selectFileByPath(path, filesData) {
+  const element = document.querySelector(`.file-tree-item[data-path="${path}"]`);
+  if (element) {
+    // Ensure parent folders are expanded
+    expandParentFolders(element);
+    selectFile(element, path, filesData);
+    element.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+/**
+ * Expand all parent folders of an element
+ */
+function expandParentFolders(element) {
+  let parent = element.parentElement;
+  while (parent) {
+    if (parent.classList && parent.classList.contains('folder-contents')) {
+      parent.classList.remove('collapsed');
+      // Also update the folder toggle icon
+      const folderItem = parent.previousElementSibling;
+      if (folderItem) {
+        const toggle = folderItem.querySelector('.folder-toggle');
+        if (toggle) {
+          toggle.classList.remove('collapsed');
+        }
+      }
+    }
+    parent = parent.parentElement;
+  }
+}
+
+/**
+ * Update the URL hash with the file path
+ */
+function updateUrlHash(path) {
+  // Use encodeURIComponent for the path to handle special characters
+  const hash = 'file=' + encodeURIComponent(path);
+  // Use replaceState to avoid adding to browser history for every file click
+  history.replaceState(null, '', '#' + hash);
+}
+
+/**
+ * Get file path from URL hash
+ */
+function getFilePathFromHash() {
+  const hash = window.location.hash;
+  if (!hash || hash.length <= 1) return null;
+  
+  // Parse hash - expecting format: #file=path/to/file
+  const hashContent = hash.substring(1); // Remove the # character
+  if (hashContent.startsWith('file=')) {
+    return decodeURIComponent(hashContent.substring(5));
+  }
+  return null;
+}
+
+/**
+ * Initialize hash change listener for browser back/forward navigation
+ */
+function initHashNavigation(filesData) {
+  window.addEventListener('hashchange', function() {
+    const hashPath = getFilePathFromHash();
+    if (hashPath) {
+      const file = filesData.files.find(f => f.path === hashPath);
+      if (file) {
+        selectFileByPath(hashPath, filesData);
+      }
+    }
+  });
 }
 
 /**
@@ -204,6 +291,27 @@ function loadFileContent(path, content, filesData) {
 function findFirstFile(filesData) {
   if (!filesData.files || filesData.files.length === 0) return null;
   return filesData.files[0];
+}
+
+/**
+ * Load the default file: try README.md first, then fall back to first file
+ */
+function loadDefaultFile(filesData) {
+  // Try to find README.md (case-insensitive)
+  const readmeFile = filesData.files.find(f => 
+    f.path.toLowerCase() === 'readme.md' || 
+    f.path.toLowerCase().endsWith('/readme.md')
+  );
+  
+  if (readmeFile) {
+    selectFileByPath(readmeFile.path, filesData);
+  } else {
+    // Fall back to first file
+    const firstFile = findFirstFile(filesData);
+    if (firstFile) {
+      selectFileByPath(firstFile.path, filesData);
+    }
+  }
 }
 
 /**

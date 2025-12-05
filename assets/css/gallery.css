@@ -321,6 +321,53 @@
   margin: 0;
 }
 
+.gallery-header-command {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.gallery-header-command code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 700px;
+}
+
+.copy-command-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: all 0.2s ease;
+}
+
+.copy-command-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.copy-command-btn.copied {
+  color: var(--color-success, #22c55e);
+  border-color: var(--color-success, #22c55e);
+}
+
 /* ===== Gallery Viewer (3-panel layout) ===== */
 .gallery-viewer {
   flex: 1;
@@ -671,11 +718,19 @@
     flex-direction: column;
   }
   
+  .gallery-viewer.resizing {
+    cursor: row-resize;
+  }
+  
+  .gallery-viewer.resizing * {
+    cursor: row-resize !important;
+  }
+  
   .gallery-panel {
-    flex: 1 1 auto !important;
+    flex: 1 1 auto;
     min-width: 100% !important;
     max-width: 100% !important;
-    min-height: 150px;
+    min-height: 100px;
   }
   
   .gallery-panel.collapsed {
@@ -724,6 +779,11 @@
   
   .gallery-header-text h1 {
     font-size: 1.25rem;
+  }
+  
+  .gallery-header-command code {
+    max-width: 100%;
+    font-size: 0.7rem;
   }
   
   .gallery-cards {
