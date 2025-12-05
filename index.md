@@ -46,10 +46,10 @@ description: Generate messaging code from xRegistry message and endpoint definit
         </button>
       </div>
       <p class="install-note">No Python required. Works on Linux, macOS, and Windows.</p>
+      <p class="install-note"><strong>Note:</strong> File paths must be relative to your current directory due to Docker volume mapping.</p>
       <p class="install-link"><a href="#command-reference">View command reference →</a></p>
       <details class="install-details">
         <summary>Shell alias for convenience</summary>
-        <p class="details-note"><strong>Note:</strong> File paths must be relative to your current directory due to Docker volume mapping.</p>
         <div class="code-tabs">
           <div class="code-tab">
             <span class="tab-label">Linux/macOS</span>
