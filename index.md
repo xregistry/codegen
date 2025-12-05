@@ -125,7 +125,7 @@ description: Generate messaging code from xRegistry message and endpoint definit
   </div>
   
   <div class="card feature-card">
-    <div class="feature-icon">☁️</div>
+    <div class="feature-icon"><img src="https://github.com/cncf/artwork/raw/main/projects/cloudevents/icon/color/cloudevents-icon-color.png" alt="CloudEvents" class="feature-icon-img"></div>
     <h3>CloudEvents Native</h3>
     <p class="card-description">
       First-class support for CloudEvents message format with proper type mappings and metadata handling.

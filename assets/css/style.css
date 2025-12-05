@@ -455,6 +455,12 @@ pre code {
   color: var(--color-primary);
 }
 
+.feature-icon-img {
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: contain;
+}
+
 /* ===== Installation Section ===== */
 .install-section {
   background-color: var(--color-bg-alt);
