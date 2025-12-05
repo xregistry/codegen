@@ -519,6 +519,21 @@ pre code {
   padding: 0;
 }
 
+.example-gallery-links {
+  margin: var(--space-sm) 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.example-gallery-links a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.example-gallery-links a:hover {
+  text-decoration: underline;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .hero h1 {
@@ -545,6 +560,7 @@ pre code {
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: var(--space-lg);
   margin-bottom: var(--space-xl);
+  align-items: stretch;
 }
 
 .install-option {
@@ -552,6 +568,8 @@ pre code {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
 }
 
 .install-header {
@@ -613,8 +631,36 @@ pre code {
   color: var(--color-text-muted);
 }
 
+.install-link {
+  margin: var(--space-sm) 0 0;
+  font-size: 0.8125rem;
+}
+
+.install-link a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.install-link a:hover {
+  text-decoration: underline;
+}
+
+.details-note {
+  margin: var(--space-sm) 0;
+  padding: var(--space-sm);
+  background-color: rgba(var(--color-warning-rgb, 255, 193, 7), 0.1);
+  border-left: 3px solid var(--color-warning, #ffc107);
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+}
+
+.details-note strong {
+  color: var(--color-warning-dark, #e0a800);
+}
+
 .install-details {
-  margin-top: var(--space-md);
+  margin-top: auto;
   border-top: 1px solid var(--color-border-light);
   padding-top: var(--space-md);
 }

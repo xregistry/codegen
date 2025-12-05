@@ -46,8 +46,10 @@ description: Generate messaging code from xRegistry message and endpoint definit
         </button>
       </div>
       <p class="install-note">No Python required. Works on Linux, macOS, and Windows.</p>
+      <p class="install-link"><a href="#command-reference">View command reference →</a></p>
       <details class="install-details">
         <summary>Shell alias for convenience</summary>
+        <p class="details-note"><strong>Note:</strong> File paths must be relative to your current directory due to Docker volume mapping.</p>
         <div class="code-tabs">
           <div class="code-tab">
             <span class="tab-label">Linux/macOS</span>
@@ -75,6 +77,7 @@ description: Generate messaging code from xRegistry message and endpoint definit
         </button>
       </div>
       <p class="install-note">Requires Python 3.10+</p>
+      <p class="install-link"><a href="#command-reference">View command reference →</a></p>
     </div>
   </div>
   
@@ -178,7 +181,7 @@ description: Generate messaging code from xRegistry message and endpoint definit
   </div>
 </section>
 
-<section class="command-reference-section">
+<section class="command-reference-section" id="command-reference">
   <h2>Command Reference</h2>
   
   <div class="command-block">
@@ -236,24 +239,27 @@ xrcg generate --language cs --style kafkaconsumer -d contoso-erp.xreg.json -o ./
 
 # Java Kafka Producer
 xrcg generate --language java --style kafkaproducer -d contoso-erp.xreg.json -o ./output</code></pre>
+    <p class="example-gallery-links">Gallery: <a href="{{ '/gallery/py-kafka-contoso-producer/' | relative_url }}">Python Producer</a> · <a href="{{ '/gallery/py-kafka-contoso-consumer/' | relative_url }}">Python Consumer</a> · <a href="{{ '/gallery/java-kafka-contoso-producer/' | relative_url }}">Java Producer</a></p>
   </div>
   
   <div class="example-block">
     <h3>Azure Event Hubs</h3>
     <pre><code># TypeScript Event Hubs Producer
-xrcg generate --language ts --style ehproducer -d fabrikam.xreg.json -o ./output
+xrcg generate --language ts --style ehproducer -d fabrikam-motorsports.xreg.json -o ./output
 
-# C# Event Hubs Consumer with Azure Functions
-xrcg generate --language cs --style ehazfn -d fabrikam.xreg.json -o ./output</code></pre>
+# C# Event Hubs Consumer
+xrcg generate --language cs --style ehconsumer -d fabrikam-motorsports.xreg.json -o ./output</code></pre>
+    <p class="example-gallery-links">Gallery: <a href="{{ '/gallery/ts-eh-fabrikam-producer/' | relative_url }}">TypeScript Producer</a> · <a href="{{ '/gallery/cs-eh-fabrikam-consumer/' | relative_url }}">C# Consumer</a> · <a href="{{ '/gallery/py-eh-fabrikam-producer/' | relative_url }}">Python Producer</a></p>
   </div>
   
   <div class="example-block">
     <h3>MQTT 5.0</h3>
     <pre><code># Python MQTT Client
-xrcg generate --language py --style mqttclient -d smartoven.xreg.json -o ./output
+xrcg generate --language py --style mqttclient -d lightbulb.xreg.json -o ./output
 
 # Java MQTT Client
-xrcg generate --language java --style mqttclient -d smartoven.xreg.json -o ./output</code></pre>
+xrcg generate --language java --style mqttclient -d lightbulb.xreg.json -o ./output</code></pre>
+    <p class="example-gallery-links">Gallery: <a href="{{ '/gallery/py-mqtt-lightbulb/' | relative_url }}">Python Client</a> · <a href="{{ '/gallery/java-mqtt-lightbulb/' | relative_url }}">Java Client</a> · <a href="{{ '/gallery/ts-mqtt-lightbulb/' | relative_url }}">TypeScript Client</a></p>
   </div>
   
   <div class="example-block">
@@ -261,8 +267,9 @@ xrcg generate --language java --style mqttclient -d smartoven.xreg.json -o ./out
     <pre><code># C# AMQP Producer
 xrcg generate --language cs --style amqpproducer -d inkjet.xreg.json -o ./output
 
-# Java AMQP Consumer
-xrcg generate --language java --style amqpconsumer -d inkjet.xreg.json -o ./output</code></pre>
+# Python AMQP Producer
+xrcg generate --language py --style amqpproducer -d inkjet.xreg.json -o ./output</code></pre>
+    <p class="example-gallery-links">Gallery: <a href="{{ '/gallery/cs-amqp-inkjet-producer/' | relative_url }}">C# Producer</a> · <a href="{{ '/gallery/py-amqp-inkjet-producer/' | relative_url }}">Python Producer</a></p>
   </div>
   
   <div class="example-block">
@@ -272,6 +279,7 @@ xrcg generate --language asyncapi --style consumer -d contoso-erp.xreg.json -o .
 
 # Generate OpenAPI 3.0 spec
 xrcg generate --language openapi --style producer -d contoso-erp.xreg.json -o ./output</code></pre>
+    <p class="example-gallery-links">Gallery: <a href="{{ '/gallery/asyncapi-contoso-consumer/' | relative_url }}">AsyncAPI Spec</a> · <a href="{{ '/gallery/openapi-contoso-producer/' | relative_url }}">OpenAPI Spec</a></p>
   </div>
 </section>
 
@@ -363,9 +371,11 @@ xrcg generate --language openapi --style producer -d contoso-erp.xreg.json -o ./
       <tr><th>File</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>contoso-erp.xreg.json</code></td><td>ERP system events (orders, payments, inventory)</td></tr>
-      <tr><td><code>fabrikam-motorsports.xreg.json</code></td><td>Motorsports telemetry stream</td></tr>
-      <tr><td><code>inkjet.xreg.json</code></td><td>IoT printer events</td></tr>
+      <tr><td><a href="https://github.com/xregistry/codegen/blob/main/samples/message-definitions/contoso-erp.xreg.json" target="_blank"><code>contoso-erp.xreg.json</code></a></td><td>ERP system events (orders, payments, inventory)</td></tr>
+      <tr><td><a href="https://github.com/xregistry/codegen/blob/main/samples/message-definitions/fabrikam-motorsports.xreg.json" target="_blank"><code>fabrikam-motorsports.xreg.json</code></a></td><td>Motorsports telemetry stream (Avro schema)</td></tr>
+      <tr><td><a href="https://github.com/xregistry/codegen/blob/main/samples/message-definitions/inkjet.xreg.json" target="_blank"><code>inkjet.xreg.json</code></a></td><td>IoT printer events (Avro schema)</td></tr>
+      <tr><td><a href="https://github.com/xregistry/codegen/blob/main/samples/message-definitions/smartoven-jsonschema.xreg.json" target="_blank"><code>smartoven-jsonschema.xreg.json</code></a></td><td>Smart oven IoT events (JSON Schema)</td></tr>
+      <tr><td><a href="https://github.com/xregistry/codegen/blob/main/samples/message-definitions/lightbulb.xreg.json" target="_blank"><code>lightbulb.xreg.json</code></a></td><td>Smart lightbulb device events (Avro schema)</td></tr>
     </tbody>
   </table>
 </section>
