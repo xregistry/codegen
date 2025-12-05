@@ -84,7 +84,7 @@ description: Generate messaging code from xRegistry message and endpoint definit
   <div class="quick-example">
     <h3>Generate your first SDK</h3>
     <div class="install-command wide">
-      <code>xrcg generate --language py --style kafkaproducer -d https://raw.githubusercontent.com/xregistry/codegen/main/samples/message-definitions/inkjet.xreg.json -o ./output --projectname PrinterEvents</code>
+      <code>xrcg generate --language py --style kafkaproducer -d https://raw.githubusercontent.com/xregistry/codegen/main/samples/message-definitions/inkjet.xreg.json --output ./output --projectname PrinterEvents</code>
       <button class="btn btn-icon copy-btn" data-copy="xrcg generate --language py --style kafkaproducer -d https://raw.githubusercontent.com/xregistry/codegen/main/samples/message-definitions/inkjet.xreg.json -o ./output --projectname PrinterEvents" title="Copy">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
