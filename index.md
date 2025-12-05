@@ -48,7 +48,7 @@ description: Generate messaging code from xRegistry message and endpoint definit
       <p class="install-note">No Python required. Works on Linux, macOS, and Windows.</p>
       <p class="install-note"><strong>Note:</strong> File paths must be relative to your current directory due to Docker volume mapping.</p>
       <p class="install-link"><a href="#command-reference">View command reference →</a></p>
-      <details class="install-details">
+      <details class="install-details" open>
         <summary>Shell alias for convenience</summary>
         <div class="code-tabs">
           <div class="code-tab">
