@@ -729,6 +729,8 @@ pre code {
 .quick-example .install-command code {
   white-space: nowrap;
   overflow-x: auto;
+  overflow-y: hidden;
+  text-overflow: unset;
 }
 
 .copy-btn.copied {
