@@ -543,21 +543,18 @@ pre code {
 /* Code block links in example usage */
 .example-block pre a.code-link {
   color: inherit;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: var(--color-primary);
+  text-underline-offset: 2px;
   display: block;
-  padding: var(--space-xs) var(--space-sm);
-  margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-sm));
   border-radius: 4px;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, text-decoration-color 0.15s ease;
 }
 
 .example-block pre a.code-link:hover {
   background-color: rgba(var(--color-primary-rgb, 99, 102, 241), 0.1);
-  text-decoration: none;
-}
-
-.example-block pre a.code-link:not(:last-child) {
-  margin-bottom: var(--space-xs);
+  text-decoration-style: solid;
 }
 
 /* ===== Responsive ===== */
