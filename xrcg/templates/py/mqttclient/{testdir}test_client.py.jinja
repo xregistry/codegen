@@ -105,7 +105,7 @@ async def test_{{groupName}}_{{messagename.split('.')[-1]}}_py(mosquitto_broker)
     received_data = []
     received_event = asyncio.Event()
     
-    async def on_{{messagename.split('.')[-1]}}(mqtt_msg, cloud_event, data: {{type_name}}):
+    async def on_{{messagename.split('.')[-1]}}(mqtt_msg, cloud_event, data: {{type_name}}, topic_params: dict):
         """Handler for {{ messageid }} messages."""
         received_data.append(data)
         {%- if "type" in message.envelopemetadata and "value" in message.envelopemetadata["type"] %}

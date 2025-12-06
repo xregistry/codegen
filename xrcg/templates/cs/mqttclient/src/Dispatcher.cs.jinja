@@ -9,6 +9,7 @@
 
 #nullable enable
 
+using System.Text.RegularExpressions;
 using MQTTnet;
 using MQTTnet.Client;
 using Microsoft.Extensions.Logging;
@@ -32,6 +33,9 @@ namespace {{ project_name | pascal }}
         public class {{ class_name }} : DispatcherBase, IDisposable
         {
             private readonly MqttSubscriber _subscriber;
+            private readonly Dictionary<string, string> _topicMappings;
+            private readonly Dictionary<string, Regex> _topicPatterns;
+            private static readonly Regex UriTemplateRegex = new Regex(@"\{([A-Za-z0-9_]+)\}", RegexOptions.Compiled);
             {%- for messageid, message in messagegroup.messages.items() -%}
             {%- set messagename = messageid | strip_namespace | pascal -%}
             {%- set message_body_type = util.body_type(data_project_name, root, message) -%}
@@ -45,22 +49,109 @@ namespace {{ project_name | pascal }}
             /// <summary>
             /// Event that is raised when a message of type {{ messagename }} is received.
             /// </summary>
-            public event Func<MqttApplicationMessage, {% if isCloudEvent %}CloudEvent?, {% endif %}{{ message_body_type }}?, Task>? {{ messagename | strip_namespace }}Async;
+            public event Func<MqttApplicationMessage, {% if isCloudEvent %}CloudEvent?, {% endif %}{{ message_body_type }}?, IDictionary<string, string>, Task>? {{ messagename | strip_namespace }}Async;
             {%- endfor %}
             /// <summary>
             /// Event that is raised when an unhandled message is received.
             /// </summary>
             public event Func<MqttApplicationMessage, Task>? UnhandledMessageAsync;
 
+            /// <summary>
+            /// Gets the default topic mappings for all messages in this group.
+            /// </summary>
+            /// <returns>A dictionary mapping message identifiers to their default topic patterns.</returns>
+            public static Dictionary<string, string> GetDefaultTopicMappings()
+            {
+                return new Dictionary<string, string>
+                {
+                    {%- for messageid, message in messagegroup.messages.items() %}
+                    { "{{ messageid }}", "{{ mqtt.GetDefaultTopic(message, messageid) }}" },
+                    {%- endfor %}
+                };
+            }
+
+            /// <summary>
+            /// Gets the default subscription topics with URI template placeholders replaced by MQTT wildcards (+).
+            /// </summary>
+            /// <param name="topicMappings">Optional topic mappings to use. If null, uses default mappings.</param>
+            /// <returns>A list of topic patterns suitable for MQTT subscription.</returns>
+            public static List<string> GetSubscriptionTopics(Dictionary<string, string>? topicMappings = null)
+            {
+                var mappings = topicMappings ?? GetDefaultTopicMappings();
+                var topics = new List<string>();
+                foreach (var mapping in mappings.Values)
+                {
+                    // Replace URI template placeholders with MQTT wildcard (+)
+                    var topic = UriTemplateRegex.Replace(mapping, "+");
+                    if (!topics.Contains(topic))
+                    {
+                        topics.Add(topic);
+                    }
+                }
+                return topics;
+            }
+
             /// <summary>   
             /// Initializes a new instance of the <see cref="{{ class_name }}"/> class.
             /// </summary>
             /// <param name="subscriber">The MQTT subscriber to use.</param>
+            /// <param name="topicMappings">Optional dictionary mapping message identifiers to topic patterns.
+            /// Topic patterns may be URI templates with placeholders like {placeholder}.
+            /// For consumers, placeholders are converted to MQTT wildcards (+) for subscription.
+            /// If not provided, uses default 1:1 mapping.</param>
             /// <param name="loggerFactory">The logger factory to use.</param>
-            public {{ class_name }}(MqttSubscriber subscriber, ILoggerFactory? loggerFactory = null) : base(loggerFactory?.CreateLogger<{{ class_name }}>() ?? new LoggerFactory().CreateLogger<{{ class_name }}>())
+            public {{ class_name }}(MqttSubscriber subscriber, Dictionary<string, string>? topicMappings = null, ILoggerFactory? loggerFactory = null) : base(loggerFactory?.CreateLogger<{{ class_name }}>() ?? new LoggerFactory().CreateLogger<{{ class_name }}>())
             {
                 _subscriber = subscriber;
                 _subscriber.Attach(this);
+                _topicMappings = topicMappings ?? GetDefaultTopicMappings();
+                _topicPatterns = BuildTopicPatterns(_topicMappings);
+            }
+
+            /// <summary>
+            /// Topic mappings configuration
+            /// </summary>
+            public IReadOnlyDictionary<string, string> TopicMappings => _topicMappings;
+
+            /// <summary>
+            /// Builds regex patterns from topic mappings for matching incoming messages.
+            /// </summary>
+            private static Dictionary<string, Regex> BuildTopicPatterns(Dictionary<string, string> topicMappings)
+            {
+                var patterns = new Dictionary<string, Regex>();
+                foreach (var kvp in topicMappings)
+                {
+                    // Convert URI template placeholders to named capture groups
+                    var pattern = "^" + UriTemplateRegex.Replace(
+                        Regex.Escape(kvp.Value).Replace("\\{", "{").Replace("\\}", "}"),
+                        match => $"(?<{match.Groups[1].Value}>[^/]+)"
+                    ) + "$";
+                    patterns[kvp.Key] = new Regex(pattern, RegexOptions.Compiled);
+                }
+                return patterns;
+            }
+
+            /// <summary>
+            /// Extracts URI template placeholder values from a topic.
+            /// </summary>
+            private IDictionary<string, string> ExtractTopicParameters(string topic, string messageId)
+            {
+                var parameters = new Dictionary<string, string>();
+                if (_topicPatterns.TryGetValue(messageId, out var pattern))
+                {
+                    var match = pattern.Match(topic);
+                    if (match.Success)
+                    {
+                        foreach (var groupName in pattern.GetGroupNames())
+                        {
+                            if (groupName != "0" && match.Groups[groupName].Success)
+                            {
+                                parameters[groupName] = match.Groups[groupName].Value;
+                            }
+                        }
+                    }
+                }
+                return parameters;
             }
 
             void IDisposable.Dispose()
@@ -124,12 +215,13 @@ namespace {{ project_name | pascal }}
                     {%- endif %}
                         if ({{ messagename | strip_namespace }}Async != null)
                         {
+                            var topicParams = ExtractTopicParameters(messageArgs.Topic, "{{ messageid }}");
                             await Task.WhenAll(Array.ConvertAll({{ messagename | strip_namespace }}Async.GetInvocationList(), e => (Task)(e.DynamicInvoke(messageArgs,
                             {%- if isCloudEvent %}cloudEvent, {%- endif %}
                             {%- if message_body_type != "byte[]" -%}{{ message_body_type }}.FromData(cloudEvent.Data, cloudEvent.DataContentType)
                             {%- else -%}
                             cloudEvent.Data is BinaryData binaryData ? binaryData.ToArray() : null
-                            {%- endif %}))));
+                            {%- endif %}, topicParams))));
                         }
                         return true;
                     {%- endfor %}
@@ -141,35 +233,37 @@ namespace {{ project_name | pascal }}
 
             {%- if uses_plain_mqtt_message %}
             /// <summary>
-            /// Dispatches a message to the appropriate handler.
+            /// Dispatches a message to the appropriate handler based on topic pattern matching.
             /// </summary>
             /// <param name="messageArgs">The message to dispatch.</param>
             protected virtual async Task<bool> DispatchMessageAsync(MqttApplicationMessage messageArgs)
             {
                 var messageTopic = messageArgs.Topic;
                 _logger.LogInformation($"Dispatching MQTT message on topic {messageTopic}");
-                switch (messageTopic)
-                {
+                
+                // Try to match topic against registered patterns
                 {% for messageid, message in messagegroup.messages.items() if ((message | exists( "protocol", "mqtt" )) and not (message | exists("envelope","CloudEvents/1.0"))) -%}
                 {%- set messagename = messageid | pascal %}
                 {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
                 {%- set message_body_type = util.body_type(data_project_name, root, message) -%}
-                    case "{{ message.protocoloptions.properties.topic.value }}":
-                        if ({{ messagename | strip_namespace }}Async != null)
-                        {
-                            await Task.WhenAll(Array.ConvertAll({{ messagename | strip_namespace }}Async.GetInvocationList(), e => (Task)(e.DynamicInvoke(messageArgs,
+                if (_topicPatterns.TryGetValue("{{ messageid }}", out var pattern{{ loop.index }}) && pattern{{ loop.index }}.IsMatch(messageTopic))
+                {
+                    if ({{ messagename | strip_namespace }}Async != null)
+                    {
+                        var topicParams = ExtractTopicParameters(messageTopic, "{{ messageid }}");
+                        await Task.WhenAll(Array.ConvertAll({{ messagename | strip_namespace }}Async.GetInvocationList(), e => (Task)(e.DynamicInvoke(messageArgs,
                         {%- if isCloudEvent %}null, {% endif %}
                         {%- if message_body_type != "byte[]" -%}
                         {{ message_body_type }}.FromData(messageArgs.Payload, messageArgs.ContentType)
                         {%- else -%}
                         messageArgs.Payload.ToObject<{{ message_body_type }}>()
-                        {%- endif %}) )));
-                        }
-                        return true;
-                {%- endfor %}
-                    default:
-                        return false;
+                        {%- endif %}, topicParams) )));
+                    }
+                    return true;
                 }
+                {%- endfor %}
+                
+                return false;
             }
             {%- endif %}
         }

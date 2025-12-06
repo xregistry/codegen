@@ -6,6 +6,46 @@ using MQTTnet.Packets;
 using MQTTnet.Protocol;
 {%- endmacro -%}
 
+{#- Helper macro to get the default topic for a message -#}
+{%- macro GetDefaultTopic(message, messageid) -%}
+{%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic -%}
+{{ message.protocoloptions.properties.topic.value }}
+{%- else -%}
+{{ messageid }}
+{%- endif -%}
+{%- endmacro -%}
+
+{#- Helper macro to get topic URI template placeholders -#}
+{%- macro GetTopicPlaceholders(message) -%}
+{%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic and message.protocoloptions.properties.topic.type == "uritemplate" -%}
+{%- set placeholders = message.protocoloptions.properties.topic.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if placeholders -%}{{ placeholders | join(',') }}{%- endif -%}
+{%- endif -%}
+{%- endmacro -%}
+
+{#- Helper macro to convert URI template to MQTT wildcard pattern for consumers -#}
+{%- macro TopicToMqttWildcard(topic) -%}
+{{ topic | regex_replace('\\{[A-Za-z0-9_]+\\}', '+') }}
+{%- endmacro -%}
+
+{#- Helper macro to declare topic template arguments for producers -#}
+{%- macro DeclareTopicTemplateArguments(message) -%}
+{%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic and message.protocoloptions.properties.topic.type == "uritemplate" -%}
+{%- for placeholder in message.protocoloptions.properties.topic.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+, string {{ placeholder }}
+{%- endfor -%}
+{%- endif -%}
+{%- endmacro -%}
+
+{#- Helper macro to apply topic template values -#}
+{%- macro ApplyTopicTemplate(topicVar, message) -%}
+{%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic and message.protocoloptions.properties.topic.type == "uritemplate" -%}
+{%- for placeholder in message.protocoloptions.properties.topic.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{{ topicVar }} = {{ topicVar }}.Replace("{{"{"}}{{ placeholder }}{{"}"}}", {{ placeholder }});
+{%- endfor -%}
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro CloudEventsUsings() -%}
 using CloudNative.CloudEvents;
 using CloudEvent = CloudNative.CloudEvents.CloudEvent;

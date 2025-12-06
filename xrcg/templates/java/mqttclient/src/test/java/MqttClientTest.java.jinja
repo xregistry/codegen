@@ -77,8 +77,8 @@ public class MqttClientTest {
         // Create consumer with test handler
         {{ group_package }}.{{ consumer_class }} messageConsumer = new {{ group_package }}.{{ consumer_class }}() {
             @Override
-            protected void on{{ messagename }}({{ message_body_type }} data, String topic) {
-                logger.info("Received {{ messagename }} message from topic {}", topic);
+            protected void on{{ messagename }}({{ message_body_type }} data, String topic, Map<String, String> topicParameters) {
+                logger.info("Received {{ messagename }} message from topic {} with params {}", topic, topicParameters);
                 receivedMessages.add(data);
                 latch.countDown();
             }
@@ -88,7 +88,7 @@ public class MqttClientTest {
             {%- set other_messagename = other_messageid | pascal | strip_namespace %}
             {%- set other_message_body_type = util.get_data_type(data_project_name, root, other_message) %}
             @Override
-            protected void on{{ other_messagename }}({{ other_message_body_type }} data, String topic) {
+            protected void on{{ other_messagename }}({{ other_message_body_type }} data, String topic, Map<String, String> topicParameters) {
                 logger.info("Received {{ other_messagename }} message (not expected in this test)");
             }
             {%- endif %}

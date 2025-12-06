@@ -44,11 +44,11 @@ describe('{{ test_class_name }}', () => {
         // Set a test handler to verify property exists
         {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
         {%- if isCloudEvent %}
-        client.{{ messagename }}Handler = async (cloudEvent: CloudEvent, data: {{ body_type }}) => {
+        client.{{ messagename }}Handler = async (cloudEvent: CloudEvent, data: {{ body_type }}, topicParams: Record<string, string>) => {
             // Test handler
         };
         {%- else %}
-        client.{{ messagename }}Handler = async (data: {{ body_type }}) => {
+        client.{{ messagename }}Handler = async (data: {{ body_type }}, topicParams: Record<string, string>) => {
             // Test handler
         };
         {%- endif %}
