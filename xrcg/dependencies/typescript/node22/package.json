@@ -12,7 +12,7 @@
     "kafkajs": "^2.2.4",
     "mqtt": "^5.0.0",
     "rhea": "^3.0.0",
-    "uuid": "^9.0.0"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@jest/globals": "^30.2.0",
