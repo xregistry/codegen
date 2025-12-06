@@ -98,8 +98,7 @@ class _ClientBase:
         except (json.JSONDecodeError, UnicodeDecodeError, KeyError, Exception):
             return None
 
-
-{%- for messagegroupid, messagegroup in messagegroups.items() -%}
+{% for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set parts = messagegroupid.split('.') -%}
 {%- set groupName = parts | join('_') | lower %}
 {%- set groupname = messagegroupid | pascal %}
@@ -112,7 +111,7 @@ class _ClientBase:
 {%- else -%}
 {{ messageid }}
 {%- endif -%}
-{%- endmacro -%}
+{%- endmacro %}
 
 def get_default_topic_mappings_{{ groupName }}() -> Dict[str, str]:
     """
