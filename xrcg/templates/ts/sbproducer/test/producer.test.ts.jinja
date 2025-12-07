@@ -160,6 +160,7 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
 {%- set messagename = messageid | strip_namespace | pascal %}
 {%- set message_snake = messageid | snake %}
 {%- set body_type = util.body_type(data_project_name, root, message) %}
+{%- set has_schema = message.dataschemauri or message.dataschema %}
         
         test('should send {{ messagename }} message', async () => {
             console.log('Testing {{ messagename }} message...');
@@ -168,8 +169,12 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
             const producer = new {{ class_name }}(serviceBusClient, QUEUE_NAME, 'binary');
             
             try {
-                // Create test data
+                // Create test data using generated test helper
+                {%- if has_schema %}
+                const testData = {{ body_type }}.createInstance();
+                {%- else %}
                 const testData = {} as {{ body_type }};
+                {%- endif %}
                 
                 // Send 5 messages to test proper message handling
                 for (let i = 0; i < 5; i++) {

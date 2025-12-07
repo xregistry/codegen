@@ -134,6 +134,7 @@ describeTest('{{ test_class_name }}', () => {
     {%- set messagename = messageid | strip_namespace | pascal %}
     {%- set body_type = util.body_type(data_project_name, root, message) %}
     {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
+    {%- set has_schema = message.dataschemauri or message.dataschema %}
     
     test('should receive and process {{ messagename }} message', async () => {
         const dispatcher = new {{ class_name }}();
@@ -170,7 +171,11 @@ describeTest('{{ test_class_name }}', () => {
         {%- else %}
         {%- set type_value = messageid %}
         {%- endif %}
-        const testData: {{ body_type }} = {} as {{ body_type }}; // Minimal test data
+        {%- if has_schema %}
+        const testData = {{ body_type }}.createInstance();
+        {%- else %}
+        const testData = {} as {{ body_type }};
+        {%- endif %}
         const testEvent = new CloudEvent({
             type: '{{ type_value }}',
             source: '/test/source',
@@ -187,7 +192,11 @@ describeTest('{{ test_class_name }}', () => {
         
         await sender.sendMessages(sbMessage);
         {%- else %}
-        const testData: {{ body_type }} = {} as {{ body_type }}; // Minimal test data
+        {%- if has_schema %}
+        const testData = {{ body_type }}.createInstance();
+        {%- else %}
+        const testData = {} as {{ body_type }};
+        {%- endif %}
         await sender.sendMessages({
             body: JSON.stringify(testData),
             contentType: 'application/json',

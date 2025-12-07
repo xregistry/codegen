@@ -41,6 +41,7 @@ describe('{{ test_class_name }}', () => {
     {%- for messageid, message in message_list[:3] %}
     {%- set messagename = messageid | strip_namespace | pascal %}
     {%- set body_type = util.body_type(data_project_name, root, message) %}
+    {%- set has_schema = message.dataschemauri or message.dataschema %}
     
     test('should send {{ messagename }} message successfully', async () => {
         // Mock Event Grid API endpoint to accept CloudEvents
@@ -51,8 +52,12 @@ describe('{{ test_class_name }}', () => {
         
         const producer = new {{ class_name }}(EVENT_GRID_ENDPOINT, EVENT_GRID_ACCESS_KEY);
         
-        // Create test data with minimal valid structure
+        // Create test data using generated test helper
+        {%- if has_schema %}
+        const testData = {{ body_type }}.createInstance();
+        {%- else %}
         const testData = {} as {{ body_type }};
+        {%- endif %}
         
         // Extract required parameters from message metadata
         {%- set has_uri_template_params = false %}
@@ -87,12 +92,20 @@ describe('{{ test_class_name }}', () => {
         
         const producer = new {{ class_name }}(EVENT_GRID_ENDPOINT, EVENT_GRID_ACCESS_KEY);
         
-        // Create test data array with minimal valid structure
+        // Create test data array using generated test helper
+        {%- if has_schema %}
+        const testDataArray = [
+            {{ body_type }}.createInstance(),
+            {{ body_type }}.createInstance(),
+            {{ body_type }}.createInstance()
+        ];
+        {%- else %}
         const testDataArray = [
             {} as {{ body_type }},
             {} as {{ body_type }},
             {} as {{ body_type }}
         ];
+        {%- endif %}
         
         // Extract required parameters from message metadata
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
