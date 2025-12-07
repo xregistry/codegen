@@ -16,9 +16,99 @@ import { v4 as uuidv4 } from 'uuid';
 // NOTE: In real usage, the data project should be a proper npm package dependency
 import * as {{ data_module_name }} from '../../{{ data_project_name }}/dist/index.js';
 
+/** URI template regex pattern */
+const URI_TEMPLATE_PATTERN = /\{([A-Za-z0-9_]+)\}/g;
+
+/**
+ * Converts a topic pattern with URI template placeholders to MQTT wildcard pattern.
+ * @param topic The topic pattern with placeholders like {placeholder}
+ * @returns The topic with placeholders replaced by MQTT wildcards (+)
+ */
+function topicToMqttWildcard(topic: string): string {
+    return topic.replace(URI_TEMPLATE_PATTERN, '+');
+}
+
+/**
+ * Applies template values to a topic pattern.
+ * @param topicPattern The topic pattern with placeholders
+ * @param templateValues Map of placeholder names to values
+ * @returns The topic with placeholders replaced by values
+ */
+function applyTopicTemplate(topicPattern: string, templateValues?: Record<string, string>): string {
+    if (!templateValues) {
+        return topicPattern;
+    }
+    return topicPattern.replace(URI_TEMPLATE_PATTERN, (match, placeholder) => {
+        return templateValues[placeholder] ?? match;
+    });
+}
+
+/**
+ * Builds a regex pattern for matching topics and extracting template values.
+ * @param topicPattern The topic pattern with placeholders
+ * @returns A regex pattern for matching topics
+ */
+function buildTopicRegex(topicPattern: string): RegExp {
+    const pattern = topicPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/\\{([A-Za-z0-9_]+)\\}/g, '(?<$1>[^/]+)');
+    return new RegExp('^' + pattern + '$');
+}
+
+/**
+ * Extracts URI template placeholder values from a topic.
+ * @param topic The actual topic
+ * @param pattern The regex pattern to match against
+ * @returns Map of placeholder names to values
+ */
+function extractTopicParameters(topic: string, pattern: RegExp): Record<string, string> {
+    const match = topic.match(pattern);
+    if (match?.groups) {
+        return { ...match.groups };
+    }
+    return {};
+}
+
 {% for messagegroupid, messagegroup in messagegroups.items() -%}
 {%- set groupname = messagegroupid | pascal -%}
 {%- set class_name = (groupname | strip_namespace) + "MqttClient" %}
+
+{#- Helper macro to get the default topic for a message -#}
+{%- macro get_default_topic(message, messageid) -%}
+{%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic -%}
+{{ message.protocoloptions.properties.topic.value }}
+{%- else -%}
+{{ messageid }}
+{%- endif -%}
+{%- endmacro -%}
+
+/**
+ * Gets the default topic mappings for the {{ messagegroupid }} message group.
+ * @returns A map of message identifiers to their default topic patterns
+ */
+export function getDefaultTopicMappings{{ groupname | strip_namespace }}(): Record<string, string> {
+    return {
+        {%- for messageid, message in messagegroup.messages.items() %}
+        '{{ messageid }}': '{{ get_default_topic(message, messageid) }}',
+        {%- endfor %}
+    };
+}
+
+/**
+ * Gets subscription topics with URI template placeholders replaced by MQTT wildcards (+).
+ * @param topicMappings Optional topic mappings. If not provided, uses default mappings.
+ * @returns List of topic patterns suitable for MQTT subscription
+ */
+export function getSubscriptionTopics{{ groupname | strip_namespace }}(topicMappings?: Record<string, string>): string[] {
+    const mappings = topicMappings ?? getDefaultTopicMappings{{ groupname | strip_namespace }}();
+    const topics: string[] = [];
+    for (const topic of Object.values(mappings)) {
+        const wildcardTopic = topicToMqttWildcard(topic);
+        if (!topics.includes(wildcardTopic)) {
+            topics.push(wildcardTopic);
+        }
+    }
+    return topics;
+}
 
 /**
  * MQTT client for the `{{ messagegroupid }}` message group.
@@ -27,6 +117,8 @@ export class {{ class_name }} {
     private client: mqtt.MqttClient;
     private mode: 'binary' | 'structured';
     private format: string;
+    private readonly topicMappings: Record<string, string>;
+    private readonly topicPatterns: Map<string, RegExp>;
     
     {%- for messageid, message in messagegroup.messages.items() %}
     {%- set messagename = messageid | strip_namespace | pascal %}
@@ -39,24 +131,34 @@ export class {{ class_name }} {
      * {{ message.description }}
      {%- endif %}
      */
-    public {{ messagename }}Handler?: ({% if isCloudEvent %}cloudEvent: CloudEvent, {% endif %}data: {{ message_body_type }}) => Promise<void>;
+    public {{ messagename }}Handler?: ({% if isCloudEvent %}cloudEvent: CloudEvent, {% endif %}data: {{ message_body_type }}, topicParams: Record<string, string>) => Promise<void>;
     {%- endfor %}
     
     /**
      * Constructor
      * @param brokerUrl The MQTT broker URL (e.g., 'mqtt://localhost:1883')
      * @param options MQTT connection options
+     * @param topicMappings Optional map of message identifiers to topic patterns.
+     *                      Topic patterns may be URI templates with placeholders like {placeholder}.
+     *                      For consumers, placeholders are converted to MQTT wildcards (+) for subscription.
+     *                      If not provided, uses default 1:1 mapping.
      * @param mode CloudEvents content mode: 'binary' or 'structured' (default: 'structured')
      * @param format Content type format for structured mode (default: 'application/json')
      */
     constructor(
         brokerUrl: string, 
         options?: mqtt.IClientOptions,
+        topicMappings?: Record<string, string>,
         mode: 'binary' | 'structured' = 'structured',
         format: string = 'application/json'
     ) {
         this.mode = mode;
         this.format = format;
+        this.topicMappings = topicMappings ?? getDefaultTopicMappings{{ groupname | strip_namespace }}();
+        this.topicPatterns = new Map();
+        for (const [messageId, pattern] of Object.entries(this.topicMappings)) {
+            this.topicPatterns.set(messageId, buildTopicRegex(pattern));
+        }
         this.client = mqtt.connect(brokerUrl, options);
         
         this.client.on('connect', () => {
@@ -71,19 +173,25 @@ export class {{ class_name }} {
             await this.handleMessage(topic, message);
         });
     }
+
+    /**
+     * Gets the current topic mappings.
+     * @returns A copy of the current topic mappings
+     */
+    getTopicMappings(): Record<string, string> {
+        return { ...this.topicMappings };
+    }
     
     /**
      * Subscribe to topics for all message types
+     * @param topics Optional list of topics to subscribe to. If not provided, subscribes to all 
+     *               default topics with URI template placeholders replaced by MQTT wildcards.
      */
-    async subscribe(): Promise<void> {
+    async subscribe(topics?: string[]): Promise<void> {
         return new Promise((resolve, reject) => {
-            const topics: string[] = [
-                {% for messageid, message in messagegroup.messages.items() -%}
-                '{{ messageid }}',
-                {% endfor %}
-            ];
+            const subscribeTopics = topics ?? getSubscriptionTopics{{ groupname | strip_namespace }}(this.topicMappings);
             
-            this.client.subscribe(topics, (err) => {
+            this.client.subscribe(subscribeTopics, (err) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -91,6 +199,20 @@ export class {{ class_name }} {
                 }
             });
         });
+    }
+
+    /**
+     * Extracts URI template placeholder values from a topic.
+     * @param topic The actual topic the message was received on
+     * @param messageId The message identifier to match against
+     * @returns Map of placeholder names to values
+     */
+    private extractTopicParams(topic: string, messageId: string): Record<string, string> {
+        const pattern = this.topicPatterns.get(messageId);
+        if (pattern) {
+            return extractTopicParameters(topic, pattern);
+        }
+        return {};
     }
     
     /**
@@ -103,7 +225,7 @@ export class {{ class_name }} {
             const result = HTTP.toEvent({ body: payload.toString(), headers: {} });
             const cloudEvent = Array.isArray(result) ? result[0] : result;
             if (cloudEvent) {
-                await this.dispatchCloudEvent(cloudEvent);
+                await this.dispatchCloudEvent(topic, cloudEvent);
                 return;
             }
         } catch {
@@ -119,7 +241,7 @@ export class {{ class_name }} {
     /**
      * Dispatch a CloudEvent message
      */
-    private async dispatchCloudEvent(cloudEvent: CloudEvent<unknown>): Promise<void> {
+    private async dispatchCloudEvent(topic: string, cloudEvent: CloudEvent<unknown>): Promise<void> {
         const cloudEventType = cloudEvent.type;
         
         switch (cloudEventType) {
@@ -131,7 +253,8 @@ export class {{ class_name }} {
             case '{{ messageid }}':
                 if (this.{{ messagename }}Handler && cloudEvent.data) {
                     const data = cloudEvent.data as unknown as {{ message_body_type }};
-                    await this.{{ messagename }}Handler(cloudEvent, data);
+                    const topicParams = this.extractTopicParams(topic, '{{ messageid }}');
+                    await this.{{ messagename }}Handler(cloudEvent, data, topicParams);
                 }
                 break;
             {%- endif %}
@@ -143,29 +266,31 @@ export class {{ class_name }} {
     {%- endif %}
     
     /**
-     * Dispatch a plain MQTT message
+     * Dispatch a plain MQTT message based on topic pattern matching
      */
     private async dispatchMessage(topic: string, payload: Buffer): Promise<void> {
-        switch (topic) {
-            {% for messageid, message in messagegroup.messages.items() if not cloudEvents.isCloudEvent(message) -%}
-            {%- set messagename = messageid | pascal | strip_namespace %}
-            {%- set message_body_type = util.body_type(data_project_name, root, message) %}
-            case '{{ messageid }}':
+        {% for messageid, message in messagegroup.messages.items() if not cloudEvents.isCloudEvent(message) -%}
+        {%- set messagename = messageid | pascal | strip_namespace %}
+        {%- set message_body_type = util.body_type(data_project_name, root, message) %}
+        {
+            const pattern = this.topicPatterns.get('{{ messageid }}');
+            if (pattern && pattern.test(topic)) {
                 if (this.{{ messagename }}Handler) {
                     const data = JSON.parse(payload.toString()) as {{ message_body_type }};
-                    await this.{{ messagename }}Handler(data);
+                    const topicParams = this.extractTopicParams(topic, '{{ messageid }}');
+                    await this.{{ messagename }}Handler(data, topicParams);
                 }
-                break;
-            {% endfor %}
-            default:
-                break;
+                return;
+            }
         }
+        {% endfor %}
     }
     
     {% for messageid, message in messagegroup.messages.items() -%}
     {%- set messagename = messageid | pascal | strip_namespace %}
     {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
     {%- set type_name = util.body_type(data_project_name, root, message) %}
+    {%- set default_topic = get_default_topic(message, messageid) %}
     
     /**
      * Publish the `{{ messagename }}` message
@@ -186,6 +311,7 @@ export class {{ class_name }} {
      * @param {{ attrname }} CloudEvent {{ attrname }} attribute{% if not attribute.required %} (optional){% endif %}
      {%- endfor %}
      {%- endif %}
+     * @param topic Optional topic override. If not provided, uses default topic '{{ default_topic }}'.
      * @returns Promise that resolves when the message is published
      */
     async publish{{ messagename }}(
@@ -203,8 +329,11 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
+        topic?: string,
     ): Promise<void> {
         return new Promise((resolve, reject) => {
+            const targetTopic = topic ?? '{{ default_topic }}';
+            
             {%- if isCloudEvent %}
             const cloudEvent = new CloudEvent({
             {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
@@ -269,7 +398,7 @@ export class {{ class_name }} {
             const properties: mqtt.IClientPublishOptions = {};
             {%- endif %}
             
-            this.client.publish('{{ messageid }}', payload, properties, (err) => {
+            this.client.publish(targetTopic, payload, properties, (err) => {
                 if (err) {
                     reject(err);
                 } else {

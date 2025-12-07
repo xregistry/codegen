@@ -61,6 +61,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         /// <summary>
         /// Constructor
         /// </summary>
+        /// <param name="client">The MQTT client instance.</param>
         public {{ class_name }}(IMqttClient client)
         {
             this.Client = client;
@@ -77,7 +78,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {% for messageid, message in messagegroup.messages.items() -%}
         {%- set messagename = messageid | pascal %}
         {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
-        {%- set isMqtt = not isCloudEvent and message.envelope.lower().startswith("mqtt") %}
+        {%- set isMqtt = not isCloudEvent and message.envelope and message.envelope.lower().startswith("mqtt") %}
         {%- set type_name = util.body_type(data_project_name, root, message) -%}
         {%- if isCloudEvent %}
         {%- set uriargs = cloudEvents.DeclareUriTemplateArguments(message) -%}
@@ -90,7 +91,6 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         /// Event description: "{{ message.description }}"
         {%- endif %}
         /// </summary>
-        /// <param name="topicName">The name of the topic to publish the event to.</param>
         /// <param name="data">The event data object.</param>
         {%- if uriargs %}
         {%- for arg in uriargs.split(',') if arg.strip() %}
@@ -98,16 +98,18 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         /// <param name="{{ splitarg[1] }}"> URI template argument</param>
         {%- endfor %}
         {%- endif %}
+        /// <param name="topic">Optional topic name override. If not provided, uses the default topic '{{ mqtt.GetDefaultTopic(message, messageid) }}'.</param>
         /// <param name="contentType">The desired content type of the message data.</param>
         {%- if isCloudEvent %}
         /// <param name="formatter">The CloudEvent formatter to use for structured mode, e.g. JsonEventFormatter.</param>
         {%- endif %}
         /// <returns>A `Task` object representing the asynchronous publish operation.</returns>
-        public async Task Send{{ messagename | strip_namespace }}Async(string topicName,
+        public async Task Send{{ messagename | strip_namespace }}Async(
         {{ type_name }} data
         {%- if uriargs -%}
         {{- uriargs -}}
         {%- endif -%}
+        , string? topic = null
         {%- if isCloudEvent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
         , string contentType = "{{ message.envelopemetadata["datacontenttype"]["value"] }}"
         {%- else -%}
@@ -115,6 +117,8 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {%- endif %}
         {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %})
         {
+            var topicName = topic ?? "{{ mqtt.GetDefaultTopic(message, messageid) }}";
+            
             var message = {{groupname | strip_namespace}}EventFactory.Create{{ messagename | strip_namespace }}Message(topicName, data,
                 {%- if uriargs %}
                 {%- for arg in uriargs.split(',') if arg.strip() %}

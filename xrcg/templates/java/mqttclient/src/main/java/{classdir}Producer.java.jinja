@@ -24,13 +24,32 @@ import {{ message_body_type.rsplit('.', 1)[0] }}.*;
 
 {%- set producer_class = (groupname | strip_namespace) ~ 'Producer' %}
 
+{#- Helper macro to get the default topic for a message -#}
+{%- macro get_default_topic(message, messageid) -%}
+{%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic -%}
+{{ message.protocoloptions.properties.topic.value }}
+{%- elif message.binding and message.binding.mqtt and message.binding.mqtt.topic -%}
+{{ message.binding.mqtt.topic }}
+{%- elif message.metadata and message.metadata.attributes and message.metadata.attributes["topic-name"] -%}
+{{ message.metadata.attributes["topic-name"].value }}
+{%- else -%}
+{{ messageid }}
+{%- endif -%}
+{%- endmacro -%}
+
 /**
  * MQTT Producer for {{ messagegroupid }} message group.
  */
 public class {{ producer_class }} implements AutoCloseable {
     private static final Logger logger = LogManager.getLogger({{ producer_class }}.class);
+    
     private final MqttClient mqttClient;
 
+    /**
+     * Creates a new producer.
+     * 
+     * @param mqttClient The MQTT client to use for publishing
+     */
     public {{ producer_class }}(MqttClient mqttClient) {
         this.mqttClient = mqttClient;
     }
@@ -38,25 +57,22 @@ public class {{ producer_class }} implements AutoCloseable {
     {%- for messageid, message in messagegroup.messages.items() %}
     {%- set messagename = messageid | pascal | strip_namespace %}
     {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
-    {%- if message.binding and message.binding.mqtt and message.binding.mqtt.topic %}
-    {%- set topic = message.binding.mqtt.topic %}
-    {%- elif message.metadata and message.metadata.attributes and message.metadata.attributes["topic-name"] %}
-    {%- set topic = message.metadata.attributes["topic-name"].value %}
-    {%- else %}
-    {%- set topic = messageid %}
-    {%- endif %}
+    {%- set default_topic = get_default_topic(message, messageid) %}
 
     /**
      * Send {{ messagename }} message to MQTT topic.
      * 
      * @param data The message data to send
+     * @param topic Optional topic override. If null, uses default topic '{{ default_topic }}'.
      * @param qos Quality of Service (0, 1, or 2)
      * @throws MqttException if publishing fails
      {%- if message_body_type != "byte[]" %}
      * @throws Exception if serialization fails
      {%- endif %}
      */
-    public void send{{ messagename }}({{ message_body_type }} data, int qos) throws {% if message_body_type != "byte[]" %}Exception{% else %}MqttException{% endif %} {
+    public void send{{ messagename }}({{ message_body_type }} data, String topic, int qos) throws {% if message_body_type != "byte[]" %}Exception{% else %}MqttException{% endif %} {
+        String targetTopic = (topic != null && !topic.isEmpty()) ? topic : "{{ default_topic }}";
+        
         {%- if message_body_type == "byte[]" %}
         byte[] payload = data;
         {%- else %}
@@ -64,15 +80,35 @@ public class {{ producer_class }} implements AutoCloseable {
         {%- endif %}
         MqttMessage message = new MqttMessage(payload);
         message.setQos(qos);
-        mqttClient.publish("{{ topic }}", message);
-        logger.debug("Published {{ messagename }} to topic {{ topic }}");
+        mqttClient.publish(targetTopic, message);
+        logger.debug("Published {{ messagename }} to topic {}", targetTopic);
+    }
+
+    /**
+     * Send {{ messagename }} message with QoS 1 to default topic.
+     * 
+     * @param data The message data to send
+     * @throws MqttException if publishing fails
+     {%- if message_body_type != "byte[]" %}
+     * @throws Exception if serialization fails
+     {%- endif %}
+     */
+    public void send{{ messagename }}({{ message_body_type }} data) throws {% if message_body_type != "byte[]" %}Exception{% else %}MqttException{% endif %} {
+        send{{ messagename }}(data, null, 1);
     }
 
     /**
      * Send {{ messagename }} message with QoS 1.
+     * 
+     * @param data The message data to send
+     * @param topic Optional topic override. If null, uses default topic '{{ default_topic }}'.
+     * @throws MqttException if publishing fails
+     {%- if message_body_type != "byte[]" %}
+     * @throws Exception if serialization fails
+     {%- endif %}
      */
-    public void send{{ messagename }}({{ message_body_type }} data) throws {% if message_body_type != "byte[]" %}Exception{% else %}MqttException{% endif %} {
-        send{{ messagename }}(data, 1);
+    public void send{{ messagename }}({{ message_body_type }} data, String topic) throws {% if message_body_type != "byte[]" %}Exception{% else %}MqttException{% endif %} {
+        send{{ messagename }}(data, topic, 1);
     }
     {%- endfor %}
 

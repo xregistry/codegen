@@ -12,6 +12,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -161,9 +162,18 @@ namespace {{ project_name | pascal }}.Test
             var factory = new MqttFactory();
             var client = factory.CreateMqttClient();
             client.ConnectAsync(options).Wait();
+            
+            // Use custom topic mappings for dispatcher - all messages are received on the test topic
+            var dispatcherTopicMappings = new Dictionary<string, string>
+            {
+                {%- for messageid, message in messagegroup.messages.items() %}
+                { "{{ messageid }}", _fixture.TopicName },
+                {%- endfor %}
+            };
+            
             _producer = new {{ producer_class_name }}(client);
             _subscriber = new MqttSubscriber(client, new string[] { _fixture.TopicName });
-            _dispatcher = new {{ dispatcher_class_name }}(_subscriber, _fixture.GetLoggerFactory());
+            _dispatcher = new {{ dispatcher_class_name }}(_subscriber, dispatcherTopicMappings, _fixture.GetLoggerFactory());
             _subscriber.SubscribeAsync().GetAwaiter().GetResult();
         }
 
@@ -172,7 +182,7 @@ namespace {{ project_name | pascal }}.Test
         {%- for messageid, message in messagegroup.messages.items() %}
         {%- set messagename = messageid | strip_namespace | pascal %}
         {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
-        {%- set isMqtt = not isCloudEvent and message.envelope.lower().startswith("mqtt") %}
+        {%- set isMqtt = (message | exists( "protocol", "mqtt" )) %}
         [Fact]
         public async Task Test{{ messagename }}Message()
         {
@@ -184,7 +194,7 @@ namespace {{ project_name | pascal }}.Test
                 var receivedCount = 0;
                 var receivedMessages = new System.Collections.Concurrent.ConcurrentBag<{{ message_body_type }}>();
                 
-                _dispatcher.{{ messagename }}Async += (mqtt, ce, data) =>
+                _dispatcher.{{ messagename }}Async += (mqtt, {% if isCloudEvent %}ce, {% endif %}data, topicParams) =>
                 {
                     receivedMessages.Add(data);
                     Interlocked.Increment(ref receivedCount);
@@ -204,23 +214,25 @@ namespace {{ project_name | pascal }}.Test
                 var eventDataInstance = eventDataTest.CreateInstance();
                 for (int i = 0; i < 5; i++)
                 {
-                    await _producer.Send{{ messagename }}Async(_fixture.TopicName, eventDataInstance
+                    await _producer.Send{{ messagename }}Async(eventDataInstance
                     {%- if uriargs -%}
                     {%- for arg in uriargs.split(',') if arg.strip() -%}
                     , {{ arg.strip().split(' ')[1] -}}: "test"
                     {%- endfor -%}
                     {%- endif -%}
+                    , topic: _fixture.TopicName
                     );
                 }
                 {%- else %}
                 for (int i = 0; i < 5; i++)
                 {
-                    await _producer.Send{{ messagename }}Async(_fixture.TopicName, new byte[0]
+                    await _producer.Send{{ messagename }}Async(new byte[0]
                     {%- if uriargs -%}
                     {%- for arg in uriargs.split(',') if arg.strip() -%}
                     , {{ arg.strip().split(' ')[1] -}}: "test"
                     {%- endfor -%}
                     {%- endif -%}
+                    , topic: _fixture.TopicName
                     );
                 }
                 {%- endif %}
