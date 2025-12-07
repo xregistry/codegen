@@ -118,11 +118,12 @@ func Test{{ class_name }}_{{ messagename }}(t *testing.T) {
 	})
 	defer reader.Close()
 
-	// Create test data
+	// Create test data using generated test helper
 	{%- if "[]" in message_body_type %}
 	testData := {{ message_body_type | replace(data_project_name | snake + ".", "") }}(nil)
 	{%- else %}
-	testData := {{ data_project_name | snake }}.{{ message_body_type | replace("*", "") | replace(data_project_name | snake + ".", "") }}{}
+	{%- set clean_type = message_body_type | replace("*", "") | replace(data_project_name | snake + ".", "") %}
+	testData := {{ data_project_name | snake }}.CreateInstance{{ clean_type }}()
 	{%- endif %}
 
 	// Send message

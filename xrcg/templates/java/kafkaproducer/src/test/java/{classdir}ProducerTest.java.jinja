@@ -80,46 +80,11 @@ public class {{ class_name | strip_namespace }} {
         {{ group_package }}.{{ producer_class }} producer = {{ group_package }}.{{ producer_class }}.create(bootstrapServers);
         
         try {
-            // Create test data
+            // Create test data using generated test helper
             {%- if message_body_type == "byte[]" %}
             {{ message_body_type }} testData = new byte[0];
             {%- else %}
-            {{ message_body_type }} testData = new {{ message_body_type }}();
-            {%- endif %}
-            {%- set schemaObj = schema_object(root, message.get('dataschemauri') or message.get('dataschema')) %}
-            {%- if schemaObj %}
-                {#- Get the actual schema from the versions structure -#}
-                {%- if schemaObj.versions %}
-                    {%- set version_key = schemaObj.defaultversionid if schemaObj.defaultversionid else (schemaObj.versions.keys() | list | last) %}
-                    {%- set avroSchema = schemaObj.versions[version_key].schema %}
-                {%- elif schemaObj.schema %}
-                    {%- set avroSchema = schemaObj.schema %}
-                {%- else %}
-                    {%- set avroSchema = schemaObj %}
-                {%- endif %}
-                {#- Now process the Avro schema fields -#}
-                {%- if avroSchema and avroSchema.type == "record" and avroSchema.fields %}
-                    {%- for field in avroSchema.fields %}
-                        {%- set fieldtype = field.type if field.type is string else field.type.type if field.type is mapping and field.type.type is defined else "unknown" %}
-                        {%- if fieldtype == "string" %}
-            testData.set{{ field.name | pascal }}("test-{{ field.name }}");
-                        {%- elif fieldtype == "int" or fieldtype == "integer" %}
-            testData.set{{ field.name | pascal }}(42);
-                        {%- elif fieldtype == "long" %}
-            testData.set{{ field.name | pascal }}(42L);
-                        {%- elif fieldtype == "boolean" %}
-            testData.set{{ field.name | pascal }}(true);
-                        {%- elif fieldtype == "double" %}
-            testData.set{{ field.name | pascal }}(42.0);
-                        {%- elif fieldtype == "float" %}
-            testData.set{{ field.name | pascal }}(42.0f);
-                        {%- elif fieldtype == "enum" %}
-                            {%- set enum_namespace = field.type.namespace if field.type.namespace else avroSchema.namespace %}
-                            {%- set normalized_namespace = (data_project_name | lower | replace('-', '_')) + '.' + (enum_namespace | lower | replace('.', '.') if enum_namespace else '') %}
-            testData.set{{ field.name | pascal }}({{ normalized_namespace }}.{{ field.type.name }}.{{ field.type.symbols[0] | upper }});
-                        {%- endif %}
-                    {%- endfor %}
-                {%- endif %}
+            {{ message_body_type }} testData = {{ message_body_type }}.createTestInstance();
             {%- endif %}
             
             // Send 5 messages to test proper message handling
