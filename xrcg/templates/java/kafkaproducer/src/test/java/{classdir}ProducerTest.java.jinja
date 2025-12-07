@@ -84,7 +84,7 @@ public class {{ class_name | strip_namespace }} {
             {%- if message_body_type == "byte[]" %}
             {{ message_body_type }} testData = new byte[0];
             {%- else %}
-            {{ message_body_type }} testData = {{ message_body_type }}Tests.createInstance();
+            {{ message_body_type }} testData = {{ message_body_type }}.createTestInstance();
             {%- endif %}
             
             // Send 5 messages to test proper message handling

@@ -210,7 +210,7 @@ public class ProducerTest {
         try {
             logger.info("Testing {{ messagename }} message");
             {%- if message_body_type != "byte[]" %}
-            {{ message_body_type }} testData = {{ message_body_type }}Tests.createInstance();
+            {{ message_body_type }} testData = {{ message_body_type }}.createTestInstance();
             {%- else %}
             byte[] testData = new byte[0];
             {%- endif %}
