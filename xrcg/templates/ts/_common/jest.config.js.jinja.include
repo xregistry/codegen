@@ -6,17 +6,20 @@ export default {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   transform: {
-    '^.+\\.tsx?$': [
+    '^.+\\.(ts|tsx|js|jsx)$': [
       'ts-jest',
       {
         useESM: true,
       },
     ],
   },
+  transformIgnorePatterns: [
+    '/node_modules/',
+  ],
   testMatch: ['**/test/**/*.test.ts'],
   collectCoverageFrom: ['src/**/*.ts'],
   coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       branches: 70,
       functions: 70,
