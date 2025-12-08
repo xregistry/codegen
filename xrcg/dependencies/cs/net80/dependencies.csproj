@@ -24,15 +24,15 @@
       <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.2.0" />
       <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.ServiceBus" Version="5.24.0" />
       <PackageReference Include="Microsoft.Azure.Messaging.EventGrid.CloudNativeCloudEvents" Version="1.0.0" />
-      <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
-      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
+      <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
       <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.1" />
       <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
       <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
       <PackageReference Include="Moq" Version="4.20.70" />
       <PackageReference Include="MQTTnet" Version="4.3.6.1152" />
       <PackageReference Include="System.Memory.Data" Version="8.0.1" />
-      <PackageReference Include="System.Text.Json" Version="8.0.5" />
+      <PackageReference Include="System.Text.Json" Version="10.0.0" />
       <PackageReference Include="Testcontainers" Version="3.10.0" />
       <PackageReference Include="Testcontainers.ActiveMq" Version="3.10.0" />
       <PackageReference Include="Testcontainers.Azurite" Version="3.10.0" />
