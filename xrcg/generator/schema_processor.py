@@ -253,6 +253,8 @@ class SchemaProcessor(ResourceProcessor):
             return "proto"
         elif format_lower.startswith("jsonschema"):
             return "json"
+        elif format_lower.startswith("jsonstructure"):
+            return "jstruct"
         elif format_lower.startswith("avro"):
             return "avro"
         return "unknown"
