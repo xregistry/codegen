@@ -108,6 +108,7 @@ def test_kafkaproducer_inkjet_go():
         run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'inkjet.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaproducer_inkjet_go", "kafkaproducer")
 
+@pytest.mark.skip(reason="JSON Structure converters in avrotize 2.21.0 have bugs with Go code generation - waiting for avrotize fix")
 def test_kafkaproducer_inkjet_jstruct_go():
     """Test the Kafka producer for Inkjet with JSON Structure schema."""
     with tempfile.TemporaryDirectory() as tmpdirname:

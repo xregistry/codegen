@@ -182,10 +182,10 @@ System.IO.IOException: Permission denied
 
 ## Summary
 
-**Total Tests:** 197  
-**Expected Passing:** 176 (172 + 4 Java sbconsumer now fixed)  
-**Expected Skipped:** 21 (17 pre-existing + 4 catalog)  
-**Last Updated:** 2025-11-25  
+**Total Tests:** 202  
+**Expected Passing:** 176  
+**Expected Skipped:** 26 (21 pre-existing + 5 JSON Structure)  
+**Last Updated:** 2025-12-11  
 **Last Successful CI Run (before fix):** https://github.com/xregistry/codegen/actions/runs/19112322037  
 **Last Failed CI Run (Investigation):** https://github.com/xregistry/codegen/actions/runs/19111112588
 
@@ -194,3 +194,29 @@ System.IO.IOException: Permission denied
 - **Catalog tests (4):** ⏳ Still skipped - Infrastructure issue with xrserver MySQL container initialization
 - **Python EventHubs/Kafka tests (16):** ✅ FIXED - Added `asyncio_mode = "auto"` to pyproject.toml templates
 - **Java Service Bus tests (4):** ✅ FIXED - Changed from `withCopyFileToContainer()` to `withFileSystemBind()`
+- **JSON Structure tests (5):** ⏭️ SKIPPED - Waiting for avrotize upstream fix
+
+---
+
+## JSON Structure (jstruct) Tests (5 tests) - Avrotize Upstream Issue
+
+**Status:** ⏭️ SKIPPED  
+**Issue:** Avrotize 2.21.0 JSON Structure converters have code generation bugs  
+**Affected Tests:**
+- `test/ts/test_typescript.py::test_kafkaproducer_inkjet_jstruct_ts`
+- `test/java/test_java.py::test_kafkaproducer_inkjet_jstruct_java`
+- `test/py/test_python.py::test_kafkaproducer_inkjet_jstruct_py`
+- `test/go/test_go.py::test_kafkaproducer_inkjet_jstruct_go`
+- `test/cs/test_dotnet.py::test_kafkaproducer_inkjet_jstruct_cs`
+
+**Root Cause:** The avrotize library's JSON Structure converters (`structuretots`, `structuretojava`, `structuretopython`, etc.) generate code with issues:
+1. **TypeScript:** Incorrect import paths for nested enum types (e.g., `../TestProjectData/testprojectdata/InkColorEnum.js` instead of correct relative path)
+2. **Java:** Missing `createTestInstance()` static method that test templates expect
+3. **Python:** Module naming issues causing import failures
+
+**Resolution:** 
+- Waiting for upstream fix in avrotize library
+- Tests will be re-enabled when avrotize is updated with fixes
+
+**Workaround:** Tests are skipped with `@pytest.mark.skip` until avrotize is fixed.
+
