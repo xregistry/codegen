@@ -201,7 +201,7 @@ System.IO.IOException: Permission denied
 ## JSON Structure (jstruct) Tests - Avrotize Upstream Issue
 
 **Status:** ⏭️ 1 SKIPPED (Python only), 4 PASSING  
-**Issue:** Avrotize 2.21.0 JSON Structure converters have code generation bugs in Python  
+**Issue:** Avrotize Python JSON Structure converter has datetime encoder bug  
 **Affected Tests:**
 - `test/ts/test_typescript.py::test_kafkaproducer_inkjet_jstruct_ts` ✅ PASSING
 - `test/java/test_java.py::test_kafkaproducer_inkjet_jstruct_java` ✅ PASSING  
@@ -209,12 +209,22 @@ System.IO.IOException: Permission denied
 - `test/go/test_go.py::test_kafkaproducer_inkjet_jstruct_go` ✅ PASSING
 - `test/cs/test_dotnet.py::test_kafkaproducer_inkjet_jstruct_cs` ✅ PASSING
 
-**Root Cause:** The avrotize library's Python JSON Structure converter (`structuretopython`) generates module imports that don't match the actual module structure:
-- Generated import: `from test_kafkaproducer_inkjet_jstruct_py_data.struct import InkColorEnum`
-- Error: `ModuleNotFoundError: No module named 'test_kafkaproducer_inkjet_jstruct_py_data.struct'`
+**Root Cause:** The avrotize library's Python JSON Structure converter (`structuretopython`) generates incorrect datetime encoder code in dataclass fields:
+
+```python
+# Generated (WRONG) - calls isoformat as unbound method on string:
+encoder=lambda d: datetime.datetime.isoformat(d) if d else None
+
+# Correct:
+encoder=lambda d: d.isoformat() if d else None
+```
+
+When deserializing from JSON, the datetime field is already a string. The encoder then fails when trying to serialize again because it calls `datetime.datetime.isoformat()` (an unbound method descriptor) with a string argument instead of calling `d.isoformat()` on the datetime object.
+
+**Test Results:** 73 passed, 4 failed (only round-trip tests that deserialize and re-serialize fail)
 
 **Resolution:** 
-- Waiting for upstream fix in avrotize library for Python converter
+- Waiting for upstream fix in avrotize library (`structuretopython.py`)
 - Python test will be re-enabled when avrotize is updated with fix
 
 **Workaround:** Python jstruct test is skipped with `@pytest.mark.skip` until avrotize is fixed.
