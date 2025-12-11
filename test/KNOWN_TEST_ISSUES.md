@@ -194,38 +194,33 @@ System.IO.IOException: Permission denied
 - **Catalog tests (4):** ⏳ Still skipped - Infrastructure issue with xrserver MySQL container initialization
 - **Python EventHubs/Kafka tests (16):** ✅ FIXED - Added `asyncio_mode = "auto"` to pyproject.toml templates
 - **Java Service Bus tests (4):** ✅ FIXED - Changed from `withCopyFileToContainer()` to `withFileSystemBind()`
-- **JSON Structure tests (4/5):** ✅ FIXED - TypeScript, Java, Go, C# now pass; Python still has avrotize module naming bug
+- **JSON Structure tests (5/5):** ✅ ALL PASSING - TypeScript, Java, Go, C#, Python all pass
 
 ---
 
-## JSON Structure (jstruct) Tests - Avrotize Upstream Issue
+## JSON Structure (jstruct) Tests - Previously Blocked by Template Bug
 
-**Status:** ⏭️ 1 SKIPPED (Python only), 4 PASSING  
-**Issue:** Avrotize Python JSON Structure converter has datetime encoder bug  
+**Status:** ✅ ALL 5 PASSING  
+**Issue:** RESOLVED - Template bug in xrcg was causing import errors  
 **Affected Tests:**
 - `test/ts/test_typescript.py::test_kafkaproducer_inkjet_jstruct_ts` ✅ PASSING
 - `test/java/test_java.py::test_kafkaproducer_inkjet_jstruct_java` ✅ PASSING  
-- `test/py/test_python.py::test_kafkaproducer_inkjet_jstruct_py` ⏭️ SKIPPED
+- `test/py/test_python.py::test_kafkaproducer_inkjet_jstruct_py` ✅ PASSING
 - `test/go/test_go.py::test_kafkaproducer_inkjet_jstruct_go` ✅ PASSING
 - `test/cs/test_dotnet.py::test_kafkaproducer_inkjet_jstruct_cs` ✅ PASSING
 
-**Root Cause:** The avrotize library's Python JSON Structure converter (`structuretopython`) generates incorrect datetime encoder code in dataclass fields:
+**Root Cause (FIXED):** The xrcg Python Kafka producer test template (`{testdir}test_producer.py.jinja`) was generating incorrect test module import paths:
+- **Before (wrong):** `from test_test_kafkaproducer_inkjet_jstruct_py_data_printjobstartedeventdata import ...`  
+- **After (correct):** `from test_printjobstartedeventdata import ...`
 
-```python
-# Generated (WRONG) - calls isoformat as unbound method on string:
-encoder=lambda d: datetime.datetime.isoformat(d) if d else None
-
-# Correct:
-encoder=lambda d: d.isoformat() if d else None
+**Fix Applied:** Changed template line from:
+```jinja
+{%- set test_module_name = "test_" + (type_name | dotunderscore | lower) %}
+```
+to:
+```jinja
+{%- set test_module_name = "test_" + (type_name | pascal | strip_namespace | lower) %}
 ```
 
-When deserializing from JSON, the datetime field is already a string. The encoder then fails when trying to serialize again because it calls `datetime.datetime.isoformat()` (an unbound method descriptor) with a string argument instead of calling `d.isoformat()` on the datetime object.
-
-**Test Results:** 73 passed, 4 failed (only round-trip tests that deserialize and re-serialize fail)
-
-**Resolution:** 
-- Waiting for upstream fix in avrotize library (`structuretopython.py`)
-- Python test will be re-enabled when avrotize is updated with fix
-
-**Workaround:** Python jstruct test is skipped with `@pytest.mark.skip` until avrotize is fixed.
+**Resolution:** All JSON Structure tests now pass across all 5 languages.
 
