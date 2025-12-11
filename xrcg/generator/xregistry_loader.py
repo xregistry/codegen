@@ -284,9 +284,18 @@ class DependencyResolver:
                 if not isinstance(ep, dict):
                     continue
                 
-                # Normalize message references in endpoint configurations
-                # This is a placeholder for endpoint-specific normalization if needed
-                pass
+                # Normalize dataschemauri in endpoint messages
+                if "messages" in ep and isinstance(ep["messages"], dict):
+                    for msg_id, msg in ep["messages"].items():
+                        if not isinstance(msg, dict):
+                            continue
+                        
+                        # Normalize dataschemauri if present
+                        if "dataschemauri" in msg:
+                            schema_uri = msg["dataschemauri"]
+                            if isinstance(schema_uri, str) and schema_uri.startswith("/"):
+                                # Convert relative URI to JSON pointer
+                                msg["dataschemauri"] = "#" + schema_uri
     
     def _restructure_single_resource(self, version_obj: Dict[str, Any], group_type: str, resource_id: str) -> Dict[str, Any]:
         """Restructure a single message/schema version object into proper group structure.
@@ -1036,6 +1045,9 @@ class XRegistryLoader:
             if isinstance(document, dict):
                 self.message_resolver.resolve_all_basemessages(document)
             
+            # Normalize schema references from relative URIs to JSON pointers
+            self.dependency_resolver._normalize_schema_references(document)
+            
             # Apply message group filtering if needed
             if messagegroup_filter and isinstance(document, dict):
                 document = self._apply_messagegroup_filter(document, messagegroup_filter)
@@ -1110,6 +1122,9 @@ class XRegistryLoader:
             # Resolve basemessage references in the final stacked document
             if isinstance(stacked_document, dict):
                 self.message_resolver.resolve_all_basemessages(stacked_document)
+            
+            # Normalize schema references from relative URIs to JSON pointers
+            self.dependency_resolver._normalize_schema_references(stacked_document)
             
             # Apply filters to the final stacked document
             if messagegroup_filter and isinstance(stacked_document, dict):
