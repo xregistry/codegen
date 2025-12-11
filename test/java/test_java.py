@@ -311,7 +311,6 @@ def test_kafkaproducer_inkjet_java():
     )
 
 
-@pytest.mark.skip(reason="JSON Structure converters in avrotize 2.21.0 lack createTestInstance() method - waiting for avrotize fix")
 def test_kafkaproducer_inkjet_jstruct_java():
     """Test the Kafka producer for Inkjet with JSON Structure schema."""
     tmpdirname = tempfile.mkdtemp()

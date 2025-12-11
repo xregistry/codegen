@@ -183,8 +183,8 @@ System.IO.IOException: Permission denied
 ## Summary
 
 **Total Tests:** 202  
-**Expected Passing:** 176  
-**Expected Skipped:** 26 (21 pre-existing + 5 JSON Structure)  
+**Expected Passing:** 180  
+**Expected Skipped:** 22 (21 pre-existing + 1 JSON Structure Python)  
 **Last Updated:** 2025-12-11  
 **Last Successful CI Run (before fix):** https://github.com/xregistry/codegen/actions/runs/19112322037  
 **Last Failed CI Run (Investigation):** https://github.com/xregistry/codegen/actions/runs/19111112588
@@ -194,29 +194,28 @@ System.IO.IOException: Permission denied
 - **Catalog tests (4):** ⏳ Still skipped - Infrastructure issue with xrserver MySQL container initialization
 - **Python EventHubs/Kafka tests (16):** ✅ FIXED - Added `asyncio_mode = "auto"` to pyproject.toml templates
 - **Java Service Bus tests (4):** ✅ FIXED - Changed from `withCopyFileToContainer()` to `withFileSystemBind()`
-- **JSON Structure tests (5):** ⏭️ SKIPPED - Waiting for avrotize upstream fix
+- **JSON Structure tests (4/5):** ✅ FIXED - TypeScript, Java, Go, C# now pass; Python still has avrotize module naming bug
 
 ---
 
-## JSON Structure (jstruct) Tests (5 tests) - Avrotize Upstream Issue
+## JSON Structure (jstruct) Tests - Avrotize Upstream Issue
 
-**Status:** ⏭️ SKIPPED  
-**Issue:** Avrotize 2.21.0 JSON Structure converters have code generation bugs  
+**Status:** ⏭️ 1 SKIPPED (Python only), 4 PASSING  
+**Issue:** Avrotize 2.21.0 JSON Structure converters have code generation bugs in Python  
 **Affected Tests:**
-- `test/ts/test_typescript.py::test_kafkaproducer_inkjet_jstruct_ts`
-- `test/java/test_java.py::test_kafkaproducer_inkjet_jstruct_java`
-- `test/py/test_python.py::test_kafkaproducer_inkjet_jstruct_py`
-- `test/go/test_go.py::test_kafkaproducer_inkjet_jstruct_go`
-- `test/cs/test_dotnet.py::test_kafkaproducer_inkjet_jstruct_cs`
+- `test/ts/test_typescript.py::test_kafkaproducer_inkjet_jstruct_ts` ✅ PASSING
+- `test/java/test_java.py::test_kafkaproducer_inkjet_jstruct_java` ✅ PASSING  
+- `test/py/test_python.py::test_kafkaproducer_inkjet_jstruct_py` ⏭️ SKIPPED
+- `test/go/test_go.py::test_kafkaproducer_inkjet_jstruct_go` ✅ PASSING
+- `test/cs/test_dotnet.py::test_kafkaproducer_inkjet_jstruct_cs` ✅ PASSING
 
-**Root Cause:** The avrotize library's JSON Structure converters (`structuretots`, `structuretojava`, `structuretopython`, etc.) generate code with issues:
-1. **TypeScript:** Incorrect import paths for nested enum types (e.g., `../TestProjectData/testprojectdata/InkColorEnum.js` instead of correct relative path)
-2. **Java:** Missing `createTestInstance()` static method that test templates expect
-3. **Python:** Module naming issues causing import failures
+**Root Cause:** The avrotize library's Python JSON Structure converter (`structuretopython`) generates module imports that don't match the actual module structure:
+- Generated import: `from test_kafkaproducer_inkjet_jstruct_py_data.struct import InkColorEnum`
+- Error: `ModuleNotFoundError: No module named 'test_kafkaproducer_inkjet_jstruct_py_data.struct'`
 
 **Resolution:** 
-- Waiting for upstream fix in avrotize library
-- Tests will be re-enabled when avrotize is updated with fixes
+- Waiting for upstream fix in avrotize library for Python converter
+- Python test will be re-enabled when avrotize is updated with fix
 
-**Workaround:** Tests are skipped with `@pytest.mark.skip` until avrotize is fixed.
+**Workaround:** Python jstruct test is skipped with `@pytest.mark.skip` until avrotize is fixed.
 

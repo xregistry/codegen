@@ -128,7 +128,6 @@ def test_kafkaproducer_inkjet_cs():
             '/', os.sep)), tmpdirname, "TestProject", "kafkaproducer")
 
 
-@pytest.mark.skip(reason="JSON Structure converters in avrotize 2.21.0 have bugs with C# code generation - waiting for avrotize fix")
 def test_kafkaproducer_inkjet_jstruct_cs():
     """ Test the Kafka producer for Inkjet with JSON Structure schema."""
     tmpdirname = tempfile.mkdtemp()
