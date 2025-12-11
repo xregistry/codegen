@@ -9,6 +9,7 @@ import sys
 from xrcg.commands import catalog
 from xrcg.commands.catalog import CatalogSubcommands, ManifestSubcommands
 from xrcg.commands.config import add_config_subcommands
+from xrcg._version import __version__
 
 logging.basicConfig(level=logging.DEBUG if sys.gettrace() is not None else logging.ERROR, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -23,6 +24,13 @@ def main():
 
     # Create an ArgumentParser object
     parser = argparse.ArgumentParser()
+    
+    # Add version argument
+    parser.add_argument(
+        "--version", "-v",
+        action="version",
+        version=f"xrcg version {__version__}"
+    )
     
     # Add global model path argument
     parser.add_argument(
