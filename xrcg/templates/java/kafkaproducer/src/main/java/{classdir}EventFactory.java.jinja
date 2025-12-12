@@ -184,6 +184,7 @@ public class {{ class_name }} {
      */
     private static byte[] serializeData(Object data) throws Exception {
         return new com.fasterxml.jackson.databind.ObjectMapper()
+            .findAndRegisterModules()
             .writeValueAsBytes(data);
     }
 }
