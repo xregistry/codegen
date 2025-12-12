@@ -43,7 +43,16 @@ from {{main_project_name}}.dispatcher import {{class_name}}
 {{ import_statement }}
 {%- endif %}
 {%- set test_class_name = "Test_" + (type_name | pascal | strip_namespace) %}
+{%- if message.dataschemaformat and "JSONStructure" in message.dataschemaformat %}
 {%- set test_module_name = "test_" + (type_name | pascal | strip_namespace | lower) %}
+{%- else %}
+{%- set flat_package = (type_name | dotunderscore | lower) %}
+{%- if flat_package.startswith('test_') %}
+{%- set test_module_name = flat_package %}
+{%- else %}
+{%- set test_module_name = "test_" + flat_package %}
+{%- endif %}
+{%- endif %}
 {%- set test_import_statement = "from " + test_module_name + " import " + test_class_name %}
 {%- if test_import_statement not in test_imports %}
 {%- set _ = test_imports.append(test_import_statement) %}
