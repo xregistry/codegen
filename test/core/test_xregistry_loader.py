@@ -513,6 +513,115 @@ class TestXRegistryLoader(unittest.TestCase):
         self.loader.set_current_url(None)
         self.assertIsNone(self.loader.current_url)
 
+    def test_normalize_dataschemauri_in_messagegroups(self):
+        """Test that dataschemauri is normalized with # prefix in messagegroups."""
+        # Create a fresh loader without patching for this test
+        loader = XRegistryLoader()
+        
+        doc = {
+            "specversion": "0.5",
+            "messagegroups": {
+                "testgroup": {
+                    "messages": {
+                        "msg1": {
+                            "messageid": "msg1",
+                            "dataschemauri": "/schemagroups/test/schemas/TestSchema"
+                        }
+                    }
+                }
+            }
+        }
+        
+        loader.dependency_resolver._normalize_schema_references(doc)
+        
+        # Check that the URI now has a # prefix
+        self.assertEqual(
+            doc["messagegroups"]["testgroup"]["messages"]["msg1"]["dataschemauri"],
+            "#/schemagroups/test/schemas/TestSchema"
+        )
+
+    def test_normalize_dataschemauri_in_endpoints(self):
+        """Test that dataschemauri is normalized with # prefix in endpoint messages."""
+        # Create a fresh loader without patching for this test
+        loader = XRegistryLoader()
+        
+        doc = {
+            "specversion": "0.5",
+            "endpoints": {
+                "test-endpoint": {
+                    "endpointid": "test-endpoint",
+                    "messages": {
+                        "msg1": {
+                            "messageid": "msg1",
+                            "dataschemauri": "/schemagroups/Airport.Baggage/schemas/Airport.Passenger.CheckinEventData"
+                        }
+                    }
+                }
+            }
+        }
+        
+        loader.dependency_resolver._normalize_schema_references(doc)
+        
+        # Check that the URI now has a # prefix
+        self.assertEqual(
+            doc["endpoints"]["test-endpoint"]["messages"]["msg1"]["dataschemauri"],
+            "#/schemagroups/Airport.Baggage/schemas/Airport.Passenger.CheckinEventData"
+        )
+
+    def test_normalize_dataschemauri_preserves_hash_prefix(self):
+        """Test that dataschemauri already with # prefix is not modified."""
+        # Create a fresh loader without patching for this test
+        loader = XRegistryLoader()
+        
+        doc = {
+            "specversion": "0.5",
+            "messagegroups": {
+                "testgroup": {
+                    "messages": {
+                        "msg1": {
+                            "messageid": "msg1",
+                            "dataschemauri": "#/schemagroups/test/schemas/TestSchema"
+                        }
+                    }
+                }
+            }
+        }
+        
+        loader.dependency_resolver._normalize_schema_references(doc)
+        
+        # Check that the URI still has the # prefix and wasn't duplicated
+        self.assertEqual(
+            doc["messagegroups"]["testgroup"]["messages"]["msg1"]["dataschemauri"],
+            "#/schemagroups/test/schemas/TestSchema"
+        )
+
+    def test_normalize_dataschemauri_handles_external_urls(self):
+        """Test that external URLs (http://, https://) are not modified."""
+        # Create a fresh loader without patching for this test
+        loader = XRegistryLoader()
+        
+        doc = {
+            "specversion": "0.5",
+            "messagegroups": {
+                "testgroup": {
+                    "messages": {
+                        "msg1": {
+                            "messageid": "msg1",
+                            "dataschemauri": "https://example.com/schemas/TestSchema.json"
+                        }
+                    }
+                }
+            }
+        }
+        
+        loader.dependency_resolver._normalize_schema_references(doc)
+        
+        # Check that the external URL was not modified
+        self.assertEqual(
+            doc["messagegroups"]["testgroup"]["messages"]["msg1"]["dataschemauri"],
+            "https://example.com/schemas/TestSchema.json"
+        )
+
 
 class TestIntegration(unittest.TestCase):
     """Integration tests for the complete loader system."""

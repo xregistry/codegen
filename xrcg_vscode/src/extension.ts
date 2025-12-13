@@ -7,10 +7,20 @@ const currentVersionMajor = 0;
 const currentVersionMinor = 13;
 const currentVersionPatch = 0;
 
+// Cache for tool availability check
+let toolAvailabilityCache: { available: boolean; timestamp: number } | null = null;
+const CACHE_DURATION_MS = 60000; // 1 minute
+
 async function checkXRegistryTool(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel): Promise<boolean> {
+    // Check cache first
+    const now = Date.now();
+    if (toolAvailabilityCache && (now - toolAvailabilityCache.timestamp) < CACHE_DURATION_MS) {
+        return toolAvailabilityCache.available;
+    }
+
     // Check if xregistry CLI is available
     try {
-        return await execShellCommand('xrcg --version', outputChannel)
+        const result = await execShellCommand('xrcg --version', outputChannel)
             .then((stdout) => {
                 const versionMatch = stdout.match(/(\d+)\.(\d+)\.(\d+)/);
                 if (!versionMatch) {
@@ -31,10 +41,16 @@ async function checkXRegistryTool(context: vscode.ExtensionContext, outputChanne
                 if (installOption === 'Yes') {
                     await execShellCommand('pip install xrcg', outputChannel);
                     vscode.window.showInformationMessage('xregistry tool has been installed successfully.');
+                    // Invalidate cache after installation
+                    toolAvailabilityCache = null;
                     return true;
                 }
                 return false;
             });
+        
+        // Update cache
+        toolAvailabilityCache = { available: result, timestamp: now };
+        return result;
     } catch (error) {
         vscode.window.showErrorMessage('Error checking xregistry tool availability: ' + error);
         return false;
@@ -61,31 +77,66 @@ function execShellCommand(cmd: string, outputChannel?: vscode.OutputChannel): Pr
     });
 }
 
-function executeCommand(command: string, outputPath: vscode.Uri | null, outputChannel: vscode.OutputChannel) {
-    exec(command, (error, stdout, stderr) => {
-        if (error) {
-            outputChannel.appendLine(`Error: ${error.message}`);
-            vscode.window.showErrorMessage(`Error: ${stderr}`);
-        } else {
-            outputChannel.appendLine(stdout);
-            if (outputPath) {
-                if (fs.existsSync(outputPath.fsPath)) {
-                    const stats = fs.statSync(outputPath.fsPath);
-                    if (stats.isFile()) {
-                        vscode.workspace.openTextDocument(outputPath).then((document) => {
+function executeCommand(command: string, outputPath: vscode.Uri | null, outputChannel: vscode.OutputChannel): Thenable<void> {
+    // Show progress with cancellation support
+    return vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: "Generating code with xrcg...",
+        cancellable: false
+    }, async (progress) => {
+        progress.report({ increment: 0, message: "Starting code generation..." });
+        
+        return new Promise<void>((resolve, reject) => {
+            const process = exec(command, (error, stdout, stderr) => {
+                if (error) {
+                    outputChannel.appendLine(`Error: ${error.message}`);
+                    vscode.window.showErrorMessage(`Code generation failed: ${stderr}`);
+                    reject(error);
+                } else {
+                    outputChannel.appendLine(stdout);
+                    if (outputPath) {
+                        if (fs.existsSync(outputPath.fsPath)) {
+                            const stats = fs.statSync(outputPath.fsPath);
+                            if (stats.isFile()) {
+                                vscode.workspace.openTextDocument(outputPath).then((document) => {
+                                    vscode.window.showTextDocument(document);
+                                });
+                            } else if (stats.isDirectory()) {
+                                vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(outputPath.fsPath), true);
+                            }
+                        }
+                    } else {
+                        vscode.workspace.openTextDocument({ content: stdout }).then((document) => {
                             vscode.window.showTextDocument(document);
                         });
-                    } else if (stats.isDirectory()) {
-                        vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(outputPath.fsPath), true);
                     }
+                    vscode.window.showInformationMessage(`Code generation completed successfully!`);
+                    resolve();
                 }
-            } else {
-                vscode.workspace.openTextDocument({ content: stdout }).then((document) => {
-                    vscode.window.showTextDocument(document);
+            });
+            
+            // Show incremental progress as output is received
+            let progressValue = 10;
+            if (process.stdout) {
+                process.stdout.on('data', (data) => {
+                    outputChannel.append(data.toString());
+                    // Increment progress gradually (max 90%)
+                    if (progressValue < 90) {
+                        progressValue += 5;
+                        progress.report({ increment: 5, message: "Generating..." });
+                    }
                 });
             }
-            vscode.window.showInformationMessage(`Success: ${stdout}`);
-        }
+            if (process.stderr) {
+                process.stderr.on('data', (data) => {
+                    outputChannel.append(data.toString());
+                });
+            }
+            
+            process.on('close', () => {
+                progress.report({ increment: 100, message: "Complete" });
+            });
+        });
     });
 }
 
@@ -101,7 +152,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style amqpconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-amqpproducer', async (uri: vscode.Uri) => {
@@ -111,7 +162,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style amqpproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-egproducer', async (uri: vscode.Uri) => {
@@ -121,7 +172,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style egproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-ehconsumer', async (uri: vscode.Uri) => {
@@ -131,7 +182,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style ehconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-ehproducer', async (uri: vscode.Uri) => {
@@ -141,7 +192,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style ehproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-kafkaconsumer', async (uri: vscode.Uri) => {
@@ -151,7 +202,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style kafkaconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-kafkaproducer', async (uri: vscode.Uri) => {
@@ -161,7 +212,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style kafkaproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-mqttclient', async (uri: vscode.Uri) => {
@@ -171,7 +222,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style mqttclient --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-sbconsumer', async (uri: vscode.Uri) => {
@@ -181,7 +232,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style sbconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-sbproducer', async (uri: vscode.Uri) => {
@@ -191,7 +242,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style sbproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-openapi-producer', async (uri: vscode.Uri) => {
@@ -201,7 +252,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language openapi --style producer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-openapi-subscriber', async (uri: vscode.Uri) => {
@@ -211,7 +262,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language openapi --style subscriber --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-py-amqpconsumer', async (uri: vscode.Uri) => {
@@ -221,7 +272,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language py --style amqpconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-py-amqpproducer', async (uri: vscode.Uri) => {
@@ -231,7 +282,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language py --style amqpproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-py-ehconsumer', async (uri: vscode.Uri) => {
@@ -241,7 +292,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language py --style ehconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-py-ehproducer', async (uri: vscode.Uri) => {
@@ -251,7 +302,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language py --style ehproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-py-kafkaconsumer', async (uri: vscode.Uri) => {
@@ -261,7 +312,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language py --style kafkaconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-py-kafkaproducer', async (uri: vscode.Uri) => {
@@ -271,7 +322,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language py --style kafkaproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-py-mqttclient', async (uri: vscode.Uri) => {
@@ -281,7 +332,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language py --style mqttclient --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-py-sbconsumer', async (uri: vscode.Uri) => {
@@ -291,7 +342,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language py --style sbconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-py-sbproducer', async (uri: vscode.Uri) => {
@@ -301,7 +352,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language py --style sbproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-dashboard', async (uri: vscode.Uri) => {
@@ -311,7 +362,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style dashboard --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-ehconsumer', async (uri: vscode.Uri) => {
@@ -321,7 +372,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style ehconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-kafkaconsumer', async (uri: vscode.Uri) => {
@@ -331,7 +382,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style kafkaconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-kafkaproducer', async (uri: vscode.Uri) => {
@@ -341,7 +392,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style kafkaproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-egazfn', async (uri: vscode.Uri) => {
@@ -351,7 +402,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style egazfn --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-ehazfn', async (uri: vscode.Uri) => {
@@ -361,7 +412,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style ehazfn --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-cs-sbazfn', async (uri: vscode.Uri) => {
@@ -371,7 +422,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language cs --style sbazfn --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-asaql-dispatch', async (uri: vscode.Uri) => {
@@ -381,7 +432,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language asaql --style dispatch --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-asaql-dispatchpayload', async (uri: vscode.Uri) => {
@@ -391,7 +442,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language asaql --style dispatchpayload --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-asyncapi-consumer', async (uri: vscode.Uri) => {
@@ -401,7 +452,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language asyncapi --style consumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-asyncapi-producer', async (uri: vscode.Uri) => {
@@ -411,7 +462,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language asyncapi --style producer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-amqpconsumer', async (uri: vscode.Uri) => {
@@ -421,7 +472,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style amqpconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-amqpjmsproducer', async (uri: vscode.Uri) => {
@@ -431,7 +482,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style amqpjmsproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-amqpproducer', async (uri: vscode.Uri) => {
@@ -441,7 +492,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style amqpproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-ehconsumer', async (uri: vscode.Uri) => {
@@ -451,7 +502,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style ehconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-ehproducer', async (uri: vscode.Uri) => {
@@ -461,7 +512,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style ehproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-kafkaconsumer', async (uri: vscode.Uri) => {
@@ -471,7 +522,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style kafkaconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-kafkaproducer', async (uri: vscode.Uri) => {
@@ -481,7 +532,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style kafkaproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-mqttclient', async (uri: vscode.Uri) => {
@@ -491,7 +542,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style mqttclient --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-producer', async (uri: vscode.Uri) => {
@@ -501,7 +552,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style producer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-sbconsumer', async (uri: vscode.Uri) => {
@@ -511,7 +562,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style sbconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-java-sbproducer', async (uri: vscode.Uri) => {
@@ -521,7 +572,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language java --style sbproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-py-producer', async (uri: vscode.Uri) => {
@@ -531,7 +582,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language py --style producer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-amqpconsumer', async (uri: vscode.Uri) => {
@@ -541,7 +592,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style amqpconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-amqpproducer', async (uri: vscode.Uri) => {
@@ -551,7 +602,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style amqpproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-egproducer', async (uri: vscode.Uri) => {
@@ -561,7 +612,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style egproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-ehproducer', async (uri: vscode.Uri) => {
@@ -571,7 +622,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style ehproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-mqttclient', async (uri: vscode.Uri) => {
@@ -581,7 +632,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style mqttclient --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-producerhttp', async (uri: vscode.Uri) => {
@@ -591,7 +642,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style producerhttp --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-sbconsumer', async (uri: vscode.Uri) => {
@@ -601,7 +652,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style sbconsumer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         disposables.push(vscode.commands.registerCommand('xrcg.generate-ts-sbproducer', async (uri: vscode.Uri) => {
@@ -611,7 +662,7 @@ export function activate(context: vscode.ExtensionContext) {
             const outputPath = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(outputPathSuggestion), saveLabel: 'Save Output', filters : { 'All Files': ['*'] } });
             if (!outputPath) { return; }
             const command = `xrcg generate --projectname ${path.basename(outputPath.fsPath)} --language ts --style sbproducer --definitions ${filePath} --output ${outputPath.fsPath}`;
-            executeCommand(command, outputPath, outputChannel);
+            await executeCommand(command, outputPath, outputChannel);
         }));
 
         context.subscriptions.push(...disposables);
