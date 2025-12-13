@@ -182,10 +182,10 @@ System.IO.IOException: Permission denied
 
 ## Summary
 
-**Total Tests:** 197  
-**Expected Passing:** 176 (172 + 4 Java sbconsumer now fixed)  
-**Expected Skipped:** 21 (17 pre-existing + 4 catalog)  
-**Last Updated:** 2025-11-25  
+**Total Tests:** 202  
+**Expected Passing:** 180  
+**Expected Skipped:** 22 (21 pre-existing + 1 JSON Structure Python)  
+**Last Updated:** 2025-12-11  
 **Last Successful CI Run (before fix):** https://github.com/xregistry/codegen/actions/runs/19112322037  
 **Last Failed CI Run (Investigation):** https://github.com/xregistry/codegen/actions/runs/19111112588
 
@@ -194,3 +194,33 @@ System.IO.IOException: Permission denied
 - **Catalog tests (4):** ⏳ Still skipped - Infrastructure issue with xrserver MySQL container initialization
 - **Python EventHubs/Kafka tests (16):** ✅ FIXED - Added `asyncio_mode = "auto"` to pyproject.toml templates
 - **Java Service Bus tests (4):** ✅ FIXED - Changed from `withCopyFileToContainer()` to `withFileSystemBind()`
+- **JSON Structure tests (5/5):** ✅ ALL PASSING - TypeScript, Java, Go, C#, Python all pass
+
+---
+
+## JSON Structure (jstruct) Tests - Previously Blocked by Template Bug
+
+**Status:** ✅ ALL 5 PASSING  
+**Issue:** RESOLVED - Template bug in xrcg was causing import errors  
+**Affected Tests:**
+- `test/ts/test_typescript.py::test_kafkaproducer_inkjet_jstruct_ts` ✅ PASSING
+- `test/java/test_java.py::test_kafkaproducer_inkjet_jstruct_java` ✅ PASSING  
+- `test/py/test_python.py::test_kafkaproducer_inkjet_jstruct_py` ✅ PASSING
+- `test/go/test_go.py::test_kafkaproducer_inkjet_jstruct_go` ✅ PASSING
+- `test/cs/test_dotnet.py::test_kafkaproducer_inkjet_jstruct_cs` ✅ PASSING
+
+**Root Cause (FIXED):** The xrcg Python Kafka producer test template (`{testdir}test_producer.py.jinja`) was generating incorrect test module import paths:
+- **Before (wrong):** `from test_test_kafkaproducer_inkjet_jstruct_py_data_printjobstartedeventdata import ...`  
+- **After (correct):** `from test_printjobstartedeventdata import ...`
+
+**Fix Applied:** Changed template line from:
+```jinja
+{%- set test_module_name = "test_" + (type_name | dotunderscore | lower) %}
+```
+to:
+```jinja
+{%- set test_module_name = "test_" + (type_name | pascal | strip_namespace | lower) %}
+```
+
+**Resolution:** All JSON Structure tests now pass across all 5 languages.
+

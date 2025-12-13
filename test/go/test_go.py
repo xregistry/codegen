@@ -108,6 +108,12 @@ def test_kafkaproducer_inkjet_go():
         run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'inkjet.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaproducer_inkjet_go", "kafkaproducer")
 
+def test_kafkaproducer_inkjet_jstruct_go():
+    """Test the Kafka producer for Inkjet with JSON Structure schema."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'inkjet-jstruct.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_kafkaproducer_inkjet_jstruct_go", "kafkaproducer")
+
 def test_kafkaproducer_lightbulb_go():
     with tempfile.TemporaryDirectory() as tmpdirname:
         run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(

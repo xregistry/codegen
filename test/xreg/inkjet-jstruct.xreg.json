@@ -1,0 +1,372 @@
+{
+  "messagegroups": {
+    "Fabrikam.InkJetPrinter": {
+      "envelope": "CloudEvents/1.0",
+      "description": "Operational events for a Fabrikam inkjet printer",
+      "messages": {
+        "Fabrikam.InkJetPrinter.PrintJobStarted": {
+          "description": "Event for when a print job starts",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.PrintJobStarted",
+              "description": "Event raised when a print job is initiated"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "identifier of the print job"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "JSONStructure/draft-02",
+          "dataschemauri": "#/schemagroups/Fabrikam.InkJetPrinter/schemas/Fabrikam.InkJetPrinter.PrintJobStartedEventData"
+        },
+        "Fabrikam.InkJetPrinter.PrintJobCompleted": {
+          "description": "Event for when a print job is completed",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.PrintJobCompleted",
+              "description": "Event raised when a print job is completed"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "identifier of the print job"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "JSONStructure/draft-02",
+          "dataschemauri": "#/schemagroups/Fabrikam.InkJetPrinter/schemas/Fabrikam.InkJetPrinter.PrintJobCompletedEventData"
+        },
+        "Fabrikam.InkJetPrinter.InkLow": {
+          "description": "Event for when ink levels are low",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.InkLow",
+              "description": "Event raised when ink levels are detected to be low"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "identifier of the affected ink cartridge"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "JSONStructure/draft-02",
+          "dataschemauri": "#/schemagroups/Fabrikam.InkJetPrinter/schemas/Fabrikam.InkJetPrinter.InkLowEventData"
+        },
+        "Fabrikam.InkJetPrinter.PaperJam": {
+          "description": "Event for when a paper jam occurs",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.PaperJam",
+              "description": "Event raised when a paper jam is detected"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "identifier of the affected paper tray"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "JSONStructure/draft-02",
+          "dataschemauri": "#/schemagroups/Fabrikam.InkJetPrinter/schemas/Fabrikam.InkJetPrinter.PaperJamEventData"
+        },
+        "Fabrikam.InkJetPrinter.MaintenanceRequired": {
+          "description": "Event for when maintenance is required",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.MaintenanceRequired",
+              "description": "Event raised when maintenance is required for the printer"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "description of the maintenance required"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "JSONStructure/draft-02",
+          "dataschemauri": "#/schemagroups/Fabrikam.InkJetPrinter/schemas/Fabrikam.InkJetPrinter.MaintenanceRequiredEventData"
+        }
+      }
+    }
+  },
+  "schemagroups": {
+    "Fabrikam.InkJetPrinter": {
+      "schemas": {
+        "Fabrikam.InkJetPrinter.PrintJobStartedEventData": {
+          "format": "JSONStructure/draft-02",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "JSONStructure/draft-02",
+              "schema": {
+                "$schema": "https://json-structure.org/meta/core/v0/#",
+                "$id": "https://fabrikam.com/inkjet/PrintJobStartedEventData",
+                "name": "PrintJobStartedEventData",
+                "description": "Data schema for starting a print job",
+                "type": "object",
+                "properties": {
+                  "tenantid": {
+                    "type": "string",
+                    "description": "Tenant identifier"
+                  },
+                  "deviceid": {
+                    "type": "string",
+                    "description": "Device identifier"
+                  },
+                  "jobId": {
+                    "type": "string",
+                    "description": "Unique identifier for the print job"
+                  },
+                  "documentName": {
+                    "type": "string",
+                    "description": "Name of the document being printed"
+                  },
+                  "startTime": {
+                    "type": "datetime",
+                    "description": "Timestamp when the print job started"
+                  }
+                },
+                "required": ["tenantid", "deviceid", "jobId", "documentName", "startTime"]
+              }
+            }
+          }
+        },
+        "Fabrikam.InkJetPrinter.PrintJobCompletedEventData": {
+          "format": "JSONStructure/draft-02",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "JSONStructure/draft-02",
+              "schema": {
+                "$schema": "https://json-structure.org/meta/core/v0/#",
+                "$id": "https://fabrikam.com/inkjet/PrintJobCompletedEventData",
+                "name": "PrintJobCompletedEventData",
+                "description": "Data schema for a completed print job",
+                "type": "object",
+                "properties": {
+                  "tenantid": {
+                    "type": "string",
+                    "description": "Tenant identifier"
+                  },
+                  "deviceid": {
+                    "type": "string",
+                    "description": "Device identifier"
+                  },
+                  "jobId": {
+                    "type": "string",
+                    "description": "Unique identifier for the completed print job"
+                  },
+                  "documentName": {
+                    "type": "string",
+                    "description": "Name of the document printed"
+                  },
+                  "completionTime": {
+                    "type": "datetime",
+                    "description": "Timestamp when the print job was completed"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": ["Successful", "Failed", "Cancelled"],
+                    "description": "Outcome of the print job (successful, failed, cancelled)"
+                  }
+                },
+                "required": ["tenantid", "deviceid", "jobId", "documentName", "completionTime", "outcome"],
+                "definitions": {
+                  "PrintJobOutcome": {
+                    "type": "string",
+                    "enum": ["Successful", "Failed", "Cancelled"],
+                    "description": "Possible outcomes for a print job"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Fabrikam.InkJetPrinter.InkLowEventData": {
+          "format": "JSONStructure/draft-02",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "JSONStructure/draft-02",
+              "schema": {
+                "$schema": "https://json-structure.org/meta/core/v0/#",
+                "$id": "https://fabrikam.com/inkjet/InkLowEventData",
+                "name": "InkLowEventData",
+                "description": "Data schema for low ink level event",
+                "type": "object",
+                "properties": {
+                  "tenantid": {
+                    "type": "string",
+                    "description": "Tenant identifier"
+                  },
+                  "deviceid": {
+                    "type": "string",
+                    "description": "Device identifier"
+                  },
+                  "cartridgeId": {
+                    "type": "string",
+                    "description": "Identifier of the low ink cartridge"
+                  },
+                  "inkColor": {
+                    "type": "string",
+                    "enum": ["Black", "Cyan", "Magenta", "Yellow"],
+                    "description": "Color of the ink that is low"
+                  },
+                  "remainingLevel": {
+                    "type": "int32",
+                    "description": "Remaining ink level percentage"
+                  }
+                },
+                "required": ["tenantid", "deviceid", "cartridgeId", "inkColor", "remainingLevel"],
+                "definitions": {
+                  "InkColor": {
+                    "type": "string",
+                    "enum": ["Black", "Cyan", "Magenta", "Yellow"],
+                    "description": "Available ink colors"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Fabrikam.InkJetPrinter.PaperJamEventData": {
+          "format": "JSONStructure/draft-02",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "JSONStructure/draft-02",
+              "schema": {
+                "$schema": "https://json-structure.org/meta/core/v0/#",
+                "$id": "https://fabrikam.com/inkjet/PaperJamEventData",
+                "name": "PaperJamEventData",
+                "description": "Data schema for a paper jam event",
+                "type": "object",
+                "properties": {
+                  "tenantid": {
+                    "type": "string",
+                    "description": "Tenant identifier"
+                  },
+                  "deviceid": {
+                    "type": "string",
+                    "description": "Device identifier"
+                  },
+                  "jamLocation": {
+                    "type": "string",
+                    "description": "Location within the printer where the jam occurred"
+                  },
+                  "cleared": {
+                    "type": "boolean",
+                    "description": "Whether the jam has been cleared (true/false)"
+                  }
+                },
+                "required": ["tenantid", "deviceid", "jamLocation", "cleared"]
+              }
+            }
+          }
+        },
+        "Fabrikam.InkJetPrinter.MaintenanceRequiredEventData": {
+          "format": "JSONStructure/draft-02",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "JSONStructure/draft-02",
+              "schema": {
+                "$schema": "https://json-structure.org/meta/core/v0/#",
+                "$id": "https://fabrikam.com/inkjet/MaintenanceRequiredEventData",
+                "name": "MaintenanceRequiredEventData",
+                "description": "Data schema for maintenance required event",
+                "type": "object",
+                "properties": {
+                  "tenantid": {
+                    "type": "string",
+                    "description": "Tenant identifier"
+                  },
+                  "deviceid": {
+                    "type": "string",
+                    "description": "Device identifier"
+                  },
+                  "maintenanceType": {
+                    "type": "string",
+                    "enum": ["Cleaning", "MechanicalAdjustment"],
+                    "description": "Type of maintenance required (e.g., 'cleaning', 'mechanical adjustment')"
+                  },
+                  "urgency": {
+                    "type": "string",
+                    "enum": ["Immediate", "Routine"],
+                    "description": "Urgency of the maintenance required (e.g., 'immediate', 'routine')"
+                  }
+                },
+                "required": ["tenantid", "deviceid", "maintenanceType", "urgency"],
+                "definitions": {
+                  "MaintenanceType": {
+                    "type": "string",
+                    "enum": ["Cleaning", "MechanicalAdjustment"],
+                    "description": "Types of maintenance"
+                  },
+                  "Urgency": {
+                    "type": "string",
+                    "enum": ["Immediate", "Routine"],
+                    "description": "Urgency levels"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

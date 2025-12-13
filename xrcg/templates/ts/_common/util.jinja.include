@@ -8,7 +8,18 @@
 {%- macro body_type(data_project_name, root, message) -%}
 {%- set data_module_name = data_project_name | strip_invalid_identifier_characters -%}
 {%- if message.dataschemauri or message.dataschema -%}
-{{ data_module_name }}.{{ (message.dataschemauri if message.dataschemauri else message.dataschema) | schema_type( data_project_name, root, message.dataschemaformat) | pascal | replace(".", "_") }}
+{%- set schema_format = message.dataschemaformat | default('') | lower -%}
+{%- set type_ref = (message.dataschemauri if message.dataschemauri else message.dataschema) | schema_type(data_project_name, root, message.dataschemaformat) -%}
+{%- if schema_format.startswith('jsonstructure') or schema_format.startswith('jstruct') -%}
+{#- JSONStructure: avrotize exports with lowercased-then-capitalized prefix, e.g., Testprojectdata_ClassName -#}
+{%- set type_parts = type_ref.split('.') -%}
+{%- set prefix_raw = type_parts[0] | lower -%}
+{%- set prefix = prefix_raw[0] | upper ~ prefix_raw[1:] -%}
+{%- set class_name = type_parts[1] if type_parts | length > 1 else type_parts[0] -%}
+{{ data_module_name }}.{{ prefix }}_{{ class_name }}
+{%- else -%}
+{{ data_module_name }}.{{ type_ref | pascal | replace(".", "_") }}
+{%- endif -%}
 {%- else -%}
 Record<string, unknown>
 {%- endif %} 

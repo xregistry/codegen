@@ -125,6 +125,13 @@ def test_kafkaproducer_inkjet_py():
             '/', os.sep)), tmpdirname, "test_kafkaproducer_inkjet_py", "kafkaproducer")
 
 
+def test_kafkaproducer_inkjet_jstruct_py():
+    """ Test the Kafka producer for Inkjet with JSON Structure schema."""
+    tmpdirname = tempfile.mkdtemp()
+    run_python_test(os.path.join(project_root, "test/xreg/inkjet-jstruct.xreg.json".replace(
+            '/', os.sep)), tmpdirname, "test_kafkaproducer_inkjet_jstruct_py", "kafkaproducer")
+
+
 def test_kafkaproducer_lightbulb_py():
     """ Test the Kafka producer for Lightbulb."""
     tmpdirname = tempfile.mkdtemp()

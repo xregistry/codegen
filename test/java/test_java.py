@@ -311,6 +311,17 @@ def test_kafkaproducer_inkjet_java():
     )
 
 
+def test_kafkaproducer_inkjet_jstruct_java():
+    """Test the Kafka producer for Inkjet with JSON Structure schema."""
+    tmpdirname = tempfile.mkdtemp()
+    run_java_test(
+        os.path.join(project_root, "test/xreg/inkjet-jstruct.xreg.json"),
+        tmpdirname,
+        "TestProject",
+        "kafkaproducer"
+    )
+
+
 def test_kafkaproducer_lightbulb_java():
     """Test the Kafka producer for Lightbulb."""
     tmpdirname = tempfile.mkdtemp()

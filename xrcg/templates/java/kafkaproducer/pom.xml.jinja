@@ -49,6 +49,13 @@
     {{ dep('cloudevents-json-jackson') }}
     {{ dep('jackson-databind') }}
     {{ dep('jackson-core') }}
+    {{ dep('jackson-datatype-jsr310') }}
+    {%- endif %}
+    
+    <!-- Jackson JSR-310 module for java.time serialization (used by JSONStructure types) -->
+    {%- if not uses_cloudevents %}
+    {{ dep('jackson-databind') }}
+    {{ dep('jackson-datatype-jsr310') }}
     {%- endif %}
     
     {%- if uses_avro %}

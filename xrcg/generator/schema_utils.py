@@ -223,6 +223,18 @@ class SchemaUtils:
                     else:
                         raise RuntimeError("Proto: Top-level message object not found in Proto schema: ")
             raise RuntimeError("Proto: Top-level message object not found in Proto schema: ")
+        elif schema_format.startswith("jstruct") or schema_format.startswith("jsonstructure"):
+            # JSON Structure schemas don't use namespace prefixes in generated code
+            # avrotize generates flat class names without schema group prefixes
+            if class_name:
+                # Strip the schema group prefix if present (e.g., "Fabrikam.InkJetPrinter.PrintJobStartedEventData" -> "PrintJobStartedEventData")
+                simple_class_name = class_name.split('.')[-1]
+                return f"{project_name}.{simple_class_name}"
+            path_elements = schema_ref.split('/')
+            if path_elements[-2] == "versions":
+                return path_elements[-3]
+            else:
+                return path_elements[-1]
         else:
             if class_name:
                 return f"{project_name}.{class_name}"

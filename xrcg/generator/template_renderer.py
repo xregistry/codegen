@@ -210,7 +210,7 @@ class TemplateRenderer:
             # Check if this schema should be processed with avrotize
             if self.should_use_avrotize(schema_info):
                 # Convert JSON Schema to Avro if needed
-                if schema_info["format_short"] == "jsonschema":
+                if schema_info["format_short"] == "json":
                     self.convert_json_to_avro_if_needed(schema_info)
                 # Convert Proto to Avro if needed
                 elif schema_info["format_short"] == "proto":
@@ -226,50 +226,85 @@ class TemplateRenderer:
                 )        
         # Process avrotize queue using the refactored approach
         if len(avrotize_queue) > 0:
-            avro_enabled = self.template_args.get("avro-encoding", "false") == "true" or any("avro" in a["format_short"] for a in avrotize_queue)
-            json_enabled = self.template_args.get("json-encoding", "true") == "true"
-            merged_schema = []
-            for schema_info in avrotize_queue:
-                content = schema_info["content"]
-                if isinstance(content, list):
-                    merged_schema.extend(content)
-                else:
-                    merged_schema.append(content)
+            # Separate JSON Structure schemas from Avro/other schemas
+            jstruct_schemas = [s for s in avrotize_queue if s.get("format_short") == "jstruct"]
+            avro_schemas = [s for s in avrotize_queue if s.get("format_short") != "jstruct"]
             
-            if len(merged_schema) == 1:
-                merged_schema = merged_schema[0]
+            avro_enabled = self.template_args.get("avro-encoding", "false") == "true" or any("avro" in a["format_short"] for a in avro_schemas)
+            json_enabled = self.template_args.get("json-encoding", "true") == "true"
+            
+            # Helper to get unique key for a schema
+            def get_schema_key(schema_content: JsonNode) -> str:
+                if isinstance(schema_content, dict):
+                    # Use $id, name, or hash of content
+                    return schema_content.get("$id") or schema_content.get("name") or str(hash(json.dumps(schema_content, sort_keys=True)))
+                return str(hash(str(schema_content)))
+            
+            # Process JSON Structure schemas with dedicated converters
+            if jstruct_schemas:
+                jstruct_merged = []
+                seen_keys: set[str] = set()
+                for schema_info in jstruct_schemas:
+                    content = schema_info["content"]
+                    contents = content if isinstance(content, list) else [content]
+                    for c in contents:
+                        key = get_schema_key(c)
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            jstruct_merged.append(c)
+                
+                if len(jstruct_merged) == 1:
+                    jstruct_merged = jstruct_merged[0]
+                
+                self._process_jstruct_schemas(jstruct_merged, project_data_dir, json_enabled)
+            
+            # Process Avro/converted schemas
+            if avro_schemas:
+                merged_schema = []
+                seen_keys: set[str] = set()
+                for schema_info in avro_schemas:
+                    content = schema_info["content"]
+                    contents = content if isinstance(content, list) else [content]
+                    for c in contents:
+                        key = get_schema_key(c)
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            merged_schema.append(c)
+                
+                if len(merged_schema) == 1:
+                    merged_schema = merged_schema[0]
 
-            if self.language == "py":
-                avrotize.convert_avro_schema_to_python(
-                    merged_schema, project_data_dir, package_name=self.data_project_name,
-                    dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled
-                )
-            elif self.language == "cs":
-                avrotize.convert_avro_schema_to_csharp(
-                    merged_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
-                    pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled
-                )
-            elif self.language == "java":
-                # Java: use lowercase package name to match Maven artifact conventions
-                java_package_name = self.data_project_name.lower().replace('-', '_')
-                avrotize.convert_avro_schema_to_java(
-                    merged_schema, project_data_dir, package_name=java_package_name,
-                    jackson_annotation=json_enabled, avro_annotation=avro_enabled
-                )
-            elif self.language == "js":
-                avrotize.convert_avro_schema_to_javascript(
-                    merged_schema, project_data_dir, package_name=self.data_project_name, avro_annotation=avro_enabled
-                )
-            elif self.language == "ts":
-                avrotize.convert_avro_schema_to_typescript(
-                    merged_schema, project_data_dir, package_name=self.data_project_name,
-                    avro_annotation=avro_enabled, typedjson_annotation=json_enabled
-                )
-            elif self.language == "go":
-                avrotize.convert_avro_schema_to_go(
-                    merged_schema, project_data_dir, package_name=self.data_project_name,
-                    avro_annotation=avro_enabled, json_annotation=json_enabled
-                )
+                if self.language == "py":
+                    avrotize.convert_avro_schema_to_python(
+                        merged_schema, project_data_dir, package_name=self.data_project_name,
+                        dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled
+                    )
+                elif self.language == "cs":
+                    avrotize.convert_avro_schema_to_csharp(
+                        merged_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
+                        pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled
+                    )
+                elif self.language == "java":
+                    # Java: use lowercase package name to match Maven artifact conventions
+                    java_package_name = self.data_project_name.lower().replace('-', '_')
+                    avrotize.convert_avro_schema_to_java(
+                        merged_schema, project_data_dir, package_name=java_package_name,
+                        jackson_annotation=json_enabled, avro_annotation=avro_enabled
+                    )
+                elif self.language == "js":
+                    avrotize.convert_avro_schema_to_javascript(
+                        merged_schema, project_data_dir, package_name=self.data_project_name, avro_annotation=avro_enabled
+                    )
+                elif self.language == "ts":
+                    avrotize.convert_avro_schema_to_typescript(
+                        merged_schema, project_data_dir, package_name=self.data_project_name,
+                        avro_annotation=avro_enabled, typedjson_annotation=json_enabled
+                    )
+                elif self.language == "go":
+                    avrotize.convert_avro_schema_to_go(
+                        merged_schema, project_data_dir, package_name=self.data_project_name,
+                        avro_annotation=avro_enabled, json_annotation=json_enabled
+                    )
         self.render_code_templates(
             self.project_name, self.main_project_name, self.data_project_name, self.style, project_dir, xregistry_document,
             code_template_dirs, code_env, True, self.template_args, self.suppress_code_output
@@ -283,6 +318,53 @@ class TemplateRenderer:
                 None, self.main_project_name, None, self.language,
                 project_dir, xreg_file, xregistry_document, schema_template_dirs, schema_env,
                 self.template_args, self.suppress_schema_output
+            )
+
+    def _process_jstruct_schemas(self, jstruct_schema: JsonNode, project_data_dir: str, json_enabled: bool) -> None:
+        """Process JSON Structure schemas using dedicated Avrotize converters.
+        
+        Args:
+            jstruct_schema: The JSON Structure schema(s) to process
+            project_data_dir: Directory for generated data classes
+            json_enabled: Whether to enable JSON serialization annotations
+        """
+        from avrotize.structuretocsharp import convert_structure_schema_to_csharp
+        from avrotize.structuretojava import convert_structure_schema_to_java
+        from avrotize.structuretopython import convert_structure_schema_to_python
+        from avrotize.structuretogo import convert_structure_schema_to_go
+        from avrotize.structuretots import convert_structure_schema_to_typescript
+        
+        logger.debug("Processing JSON Structure schemas with Avrotize")
+        
+        # Ensure output directory exists
+        os.makedirs(project_data_dir, exist_ok=True)
+        
+        if self.language == "py":
+            convert_structure_schema_to_python(
+                jstruct_schema, project_data_dir, package_name=self.data_project_name,
+                dataclasses_json_annotation=json_enabled
+            )
+        elif self.language == "cs":
+            convert_structure_schema_to_csharp(
+                jstruct_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
+                pascal_properties=True, system_text_json_annotation=json_enabled
+            )
+        elif self.language == "java":
+            # Java: use lowercase package name to match Maven artifact conventions
+            java_package_name = self.data_project_name.lower().replace('-', '_')
+            convert_structure_schema_to_java(
+                jstruct_schema, project_data_dir, package_name=java_package_name,
+                jackson_annotation=json_enabled
+            )
+        elif self.language == "ts":
+            convert_structure_schema_to_typescript(
+                jstruct_schema, project_data_dir, package_name=self.data_project_name,
+                typedjson_annotation=json_enabled
+            )
+        elif self.language == "go":
+            convert_structure_schema_to_go(
+                jstruct_schema, project_data_dir, package_name=self.data_project_name,
+                json_annotation=json_enabled
             )
 
     def convert_proto_to_avro(self, schema_reference: str, schema_root: str) -> JsonNode:
@@ -888,7 +970,7 @@ class TemplateRenderer:
                     current_path = f"{path}/{key}" if path else key
                     
                     # Look for schema reference properties
-                    if key in ["dataschema", "schema", "schemaurl"] and isinstance(value, str):
+                    if key in ["dataschema", "schema", "schemaurl", "dataschemaurl", "dataschemauri"] and isinstance(value, str):
                         schema_refs.add(value)
                     
                     # Look for inline schemas
@@ -998,7 +1080,12 @@ class TemplateRenderer:
     def _extract_from_raw_schema(self, schema_ref: str, schema_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Extract info from a raw schema document."""
         # Try to infer format from content
-        if "$schema" in schema_dict or ("type" in schema_dict and "properties" in schema_dict):
+        schema_uri = schema_dict.get("$schema", "")
+        
+        # Check for JSON Structure - has $schema pointing to json-structure.org
+        if "json-structure.org" in schema_uri:
+            format_type = "JSONStructure/draft-02"
+        elif "$schema" in schema_dict or ("type" in schema_dict and "properties" in schema_dict):
             format_type = "jsonschema/draft-07"
         elif schema_dict.get("type") == "record" and "fields" in schema_dict:
             format_type = "avro/1.11.0"
@@ -1014,7 +1101,7 @@ class TemplateRenderer:
             "reference": schema_ref,
             "content": schema_dict,
             "format": format_type,
-            "format_short": format_type.split("/")[0],
+            "format_short": self._get_format_short(format_type),
             "class_name": class_name,
             "namespace": namespace
         }
@@ -1102,6 +1189,8 @@ class TemplateRenderer:
             return "proto"
         elif format_lower.startswith("jsonschema"):
             return "json"
+        elif format_lower.startswith("jsonstructure"):
+            return "jstruct"
         elif format_lower.startswith("avro"):
             return "avro"
         return "unknown"
@@ -1119,7 +1208,7 @@ class TemplateRenderer:
 
     def convert_json_to_avro_if_needed(self, schema_info: Dict[str, Any]) -> None:
         """Convert JSON schema to Avro if needed."""
-        if schema_info["format_short"] == "jsonschema":
+        if schema_info["format_short"] == "json":
             namespace = schema_info.get("namespace", "")
             schema_info["content"] = self._convert_json_to_avro(
                 schema_info["content"], schema_info["class_name"], namespace
