@@ -184,7 +184,7 @@ jobs:
         echo "📦 Extension packaged successfully and available as artifact"
 
     - name: Upload extension artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: vscode-extension
         path: xrcg_vscode/*.vsix

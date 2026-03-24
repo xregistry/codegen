@@ -11,15 +11,15 @@
       <PackageReference Include="Azure.Messaging.EventHubs" Version="5.12.2" />
       <PackageReference Include="Azure.Messaging.EventHubs.Processor" Version="5.12.2" />
       <PackageReference Include="Azure.Messaging.ServiceBus" Version="7.20.1" />
-      <PackageReference Include="Azure.Storage.Blobs" Version="12.26.0" />
+      <PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
       <PackageReference Include="CloudNative.CloudEvents" Version="2.8.0" />
       <PackageReference Include="CloudNative.CloudEvents.Amqp" Version="2.8.0" />
       <PackageReference Include="CloudNative.CloudEvents.AspNetCore" Version="2.8.0" />
       <PackageReference Include="CloudNative.CloudEvents.Avro" Version="2.8.0" />
       <PackageReference Include="CloudNative.CloudEvents.Protobuf" Version="2.8.0" />
       <PackageReference Include="CloudNative.CloudEvents.SystemTextJson" Version="2.8.0" />
-      <PackageReference Include="Confluent.Kafka" Version="2.12.0" />
-      <PackageReference Include="Google.Protobuf" Version="3.33.2" />
+      <PackageReference Include="Confluent.Kafka" Version="2.13.0" />
+      <PackageReference Include="Google.Protobuf" Version="3.33.5" />
       <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
       <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.3.0" />
       <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.ServiceBus" Version="5.24.0" />
@@ -31,8 +31,8 @@
       <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
       <PackageReference Include="Moq" Version="4.20.72" />
       <PackageReference Include="MQTTnet" Version="5.0.1.1416" />
-      <PackageReference Include="System.Memory.Data" Version="10.0.1" />
-      <PackageReference Include="System.Text.Json" Version="10.0.1" />
+      <PackageReference Include="System.Memory.Data" Version="10.0.2" />
+      <PackageReference Include="System.Text.Json" Version="10.0.3" />
       <PackageReference Include="Testcontainers" Version="3.10.0" />
       <PackageReference Include="Testcontainers.ActiveMq" Version="3.10.0" />
       <PackageReference Include="Testcontainers.Azurite" Version="3.10.0" />
