@@ -1,7 +1,7 @@
 {
   "description": "Python Azure Event Hubs Producer",
   "priority": 1,
-  "main_project_name": "{project_name|dotunderscore|lower}_eventhubs_producer",
-  "data_project_name": "{project_name|dotunderscore|lower}_data",
+  "main_project_name": "{project_name|dashdot|dotunderscore|lower}_eventhubs_producer",
+  "data_project_name": "{project_name|dashdot|dotunderscore|lower}_data",
   "src_layout": false
 }
