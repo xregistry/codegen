@@ -12,7 +12,6 @@
 using CloudNative.CloudEvents;
 using CloudNative.CloudEvents.SystemTextJson;
 using MQTTnet;
-using MQTTnet.Client;
 using MQTTnet.Packets;
 
 {% for messagegroupid, messagegroup in messagegroups.items() -%}
@@ -46,7 +45,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
                 {% endif %}
                 .WithCleanSession()
                 .Build();
-            var factory = new MqttFactory();
+            var factory = new MqttClientFactory();
             var client = factory.CreateMqttClient();
             return client;
         {%- endmacro %}

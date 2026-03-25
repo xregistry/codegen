@@ -299,14 +299,14 @@ protected CloudEvent CloudEventFromMessage(MqttApplicationMessage message)
       {
          _logger.LogInformation($"Using structured mode for CloudEvent with content type {contentType}.");
          formatter = contentType.EndsWith("+proto") ? protoFormatter : contentType.EndsWith("+avro") ? avroFormatter : jsonFormatter;
-         return formatter.DecodeStructuredModeMessage(message.PayloadSegment, new System.Net.Mime.ContentType(contentType), null);
+         return formatter.DecodeStructuredModeMessage(message.Payload.ToArray(), new System.Net.Mime.ContentType(contentType), null);
       }
       else
       {
          _logger.LogInformation("Using binary mode for CloudEvent.");
          var cloudEvent = new CloudEvent
          {
-            Data = message.PayloadSegment != null ? message.PayloadSegment.ToArray():null,
+            Data = message.Payload.Length > 0 ? message.Payload.ToArray() : null,
             DataContentType = contentType,
          };
          string? specVersion = GetCloudEventAttribute(message, "specversion");
