@@ -9,11 +9,11 @@
 #nullable enable
 
 using System;
+using System.Buffers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MQTTnet;
-using MQTTnet.Client;
 using Microsoft.Extensions.Logging;
 
 {%- if uses_cloudevents_message %}

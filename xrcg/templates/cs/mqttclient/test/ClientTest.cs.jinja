@@ -20,7 +20,6 @@ using System.Threading;
 using Xunit;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MQTTnet.Client;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Builders;
 
@@ -159,7 +158,7 @@ namespace {{ project_name | pascal }}.Test
                 .WithCredentials("test", "password")
                 .WithCleanSession()
                 .Build();
-            var factory = new MqttFactory();
+            var factory = new MqttClientFactory();
             var client = factory.CreateMqttClient();
             client.ConnectAsync(options).Wait();
             
