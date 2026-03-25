@@ -1,31 +1,33 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
+    <EnablePackagePruning>false</EnablePackagePruning>
   </PropertyGroup>
 
   <ItemGroup>
-    {{- dependency( 'cs','net90', 'Moq') }}
-    {{- dependency( 'cs','net90', 'xunit') }}
+    {{- dependency( 'cs','net100', 'Moq') }}
+    {{- dependency( 'cs','net100', 'xunit') }}
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.1">
     <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    {{- dependency( 'cs','net90', 'Microsoft.NET.Test.Sdk') }}
-    {{- dependency( 'cs','net90', 'Testcontainers') }}
-    {{- dependency( 'cs','net90', 'Testcontainers.Azurite') }}
-    {{- dependency( 'cs','net90', 'CloudNative.CloudEvents') }}
-    {{- dependency( 'cs','net90', 'CloudNative.CloudEvents.SystemTextJson') }}
-    {{- dependency( 'cs','net90', 'CloudNative.CloudEvents.Protobuf') }}
-    {{- dependency( 'cs','net90', 'CloudNative.CloudEvents.Avro') }}
-    {{- dependency( 'cs','net90', 'Azure.Messaging.EventHubs.Processor') }}
-    {{- dependency( 'cs','net90', 'Azure.Storage.Blobs') }}
-    {{- dependency( 'cs','net90', 'Microsoft.Extensions.Logging') }}
-    {{- dependency( 'cs','net90', 'Microsoft.Extensions.Logging.Console') }}
-    {{- dependency( 'cs','net90', 'Microsoft.Extensions.Logging.Debug') }}
-    {{- dependency( 'cs','net90', 'System.Memory.Data') }}
+    {{- dependency( 'cs','net100', 'Microsoft.NET.Test.Sdk') }}
+    {{- dependency( 'cs','net100', 'Microsoft.Extensions.DependencyModel') }}
+    {{- dependency( 'cs','net100', 'Testcontainers') }}
+    {{- dependency( 'cs','net100', 'Testcontainers.Azurite') }}
+    {{- dependency( 'cs','net100', 'CloudNative.CloudEvents') }}
+    {{- dependency( 'cs','net100', 'CloudNative.CloudEvents.SystemTextJson') }}
+    {{- dependency( 'cs','net100', 'CloudNative.CloudEvents.Protobuf') }}
+    {{- dependency( 'cs','net100', 'CloudNative.CloudEvents.Avro') }}
+    {{- dependency( 'cs','net100', 'Azure.Messaging.EventHubs.Processor') }}
+    {{- dependency( 'cs','net100', 'Azure.Storage.Blobs') }}
+    {{- dependency( 'cs','net100', 'Microsoft.Extensions.Logging') }}
+    {{- dependency( 'cs','net100', 'Microsoft.Extensions.Logging.Console') }}
+    {{- dependency( 'cs','net100', 'Microsoft.Extensions.Logging.Debug') }}
+    {{- dependency( 'cs','net100', 'System.Memory.Data') }}
   </ItemGroup>
 
   <ItemGroup>

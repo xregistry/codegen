@@ -66,15 +66,12 @@ namespace {{ project_name | pascal }}.Test
         }
 
         private string? mosquittoConfigFilePath = null;
-        private string? mosquittoPasswdPath = null;
         private static string mosquittoConfig =
                         "listener 1883\n" +
                         "log_timestamp true\n" +
                         "log_timestamp_format %d-%m-%YT%H:%M:%S\n" +
                         "persistence false\n" +
-                        "allow_anonymous true\n" +
-                        "password_file /mosquitto/config/mosquitto.passwd\n";
-        private static string mosquittoPasswd = "test:$7$101$R3gkC7cVgL8X9vKv$xPZ10eJS1RCp7DE4A2ZHQVRmDP1oB6hV8gFIeyIw7oPNAIO6WaXaKcRaRtiSTeqoKMnrnTR9zKKGaoV3acXlHg==";
+                        "allow_anonymous true\n";
         
         public async Task InitializeAsync()
         {
@@ -83,14 +80,12 @@ namespace {{ project_name | pascal }}.Test
             {
                 mosquittoConfigFilePath = Path.GetTempFileName();
                 File.WriteAllText(mosquittoConfigFilePath, mosquittoConfig);
-                mosquittoPasswdPath = Path.GetTempFileName();
-                File.WriteAllText(mosquittoPasswdPath, mosquittoPasswd);
 
                 MosquittoContainerInstance = new ContainerBuilder()
                     .WithImage("eclipse-mosquitto:2.0")
                     .WithBindMount(mosquittoConfigFilePath, "/mosquitto/config/mosquitto.conf")
-                    .WithBindMount(mosquittoPasswdPath, "/mosquitto/config/mosquitto.passwd")
                     .WithPortBinding(1883, true)
+                    .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(1883))
                     .Build();
 
                 await MosquittoContainerInstance.StartAsync();
@@ -119,6 +114,7 @@ namespace {{ project_name | pascal }}.Test
                 {
                     File.Delete(mosquittoConfigFilePath);
                 }
+                _loggerFactory?.Dispose();
             }
             catch (Exception ex)
             {
@@ -155,7 +151,6 @@ namespace {{ project_name | pascal }}.Test
                 .WithTcpServer(_fixture.MosquittoBrokerHost, _fixture.MosquittoBrokerPort)
                 .WithProtocolVersion(MQTTnet.Formatter.MqttProtocolVersion.V500)
                 .WithClientId("{{ producer_test_class_name }}Client")
-                .WithCredentials("test", "password")
                 .WithCleanSession()
                 .Build();
             var factory = new MqttClientFactory();

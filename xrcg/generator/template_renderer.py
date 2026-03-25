@@ -284,6 +284,7 @@ class TemplateRenderer:
                         merged_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
                         pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled
                     )
+                    self._update_csproj_target_framework(project_data_dir)
                 elif self.language == "java":
                     # Java: use lowercase package name to match Maven artifact conventions
                     java_package_name = self.data_project_name.lower().replace('-', '_')
@@ -432,6 +433,42 @@ class TemplateRenderer:
                 avro_file.close()
                 os.unlink(avro_file.name)
         return schema_root
+
+    def _get_target_framework(self) -> str:
+        """Get the target framework from the highest-versioned C# dependency directory."""
+        deps_base = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dependencies', 'cs')
+        if not os.path.isdir(deps_base):
+            return 'net10.0'
+        net_dirs = sorted(
+            [d for d in os.listdir(deps_base) if d.startswith('net') and d[3:].isdigit()],
+            key=lambda d: int(d[3:]), reverse=True
+        )
+        if not net_dirs:
+            return 'net10.0'
+        csproj_path = os.path.join(deps_base, net_dirs[0], 'dependencies.csproj')
+        if os.path.isfile(csproj_path):
+            with open(csproj_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            m = re.search(r'<TargetFramework>(.*?)</TargetFramework>', content)
+            if m:
+                return m.group(1)
+        return 'net10.0'
+
+    def _update_csproj_target_framework(self, project_data_dir: str) -> None:
+        """Update Avrotize-generated .csproj files to match our target framework."""
+        target_fw = self._get_target_framework()
+        for csproj_path in glob.glob(os.path.join(project_data_dir, '**', '*.csproj'), recursive=True):
+            with open(csproj_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            updated = re.sub(
+                r'<TargetFramework>net\d+\.\d+</TargetFramework>',
+                f'<TargetFramework>{target_fw}</TargetFramework>',
+                content
+            )
+            if updated != content:
+                with open(csproj_path, 'w', encoding='utf-8') as f:
+                    f.write(updated)
+                logger.debug("Updated TargetFramework to %s in %s", target_fw, csproj_path)
 
     def render_code_templates(
             self, code_project_name: str, main_project_name: str, data_project_name: str,

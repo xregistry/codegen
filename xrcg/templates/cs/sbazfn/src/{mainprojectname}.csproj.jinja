@@ -1,7 +1,7 @@
-{%- macro dep(name) -%}{{- dependency( 'cs', 'net90', name) -}}{%- endmacro -%}
+{%- macro dep(name) -%}{{- dependency( 'cs', 'net100', name) -}}{%- endmacro -%}
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
