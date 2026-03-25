@@ -1,10 +1,11 @@
-{%- macro dep(name) -%}{{- dependency( 'cs', 'net90', name) -}}{%- endmacro -%}
+{%- macro dep(name) -%}{{- dependency( 'cs', 'net100', name) -}}{%- endmacro -%}
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
+    <EnablePackagePruning>false</EnablePackagePruning>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,6 +13,7 @@
     {{- dep( 'xunit' )}}
     {{- dep( 'xunit.runner.visualstudio' )}}
     {{- dep( 'Microsoft.NET.Test.Sdk' )}}
+    {{- dep( 'Microsoft.Extensions.DependencyModel' )}}
     {{- dep( 'Testcontainers' )}}
     {{- dep( 'Testcontainers.Azurite' )}}
     {{- dep( 'CloudNative.CloudEvents' )}}

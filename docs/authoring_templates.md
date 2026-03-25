@@ -825,7 +825,7 @@ Central dependency files are located at:
 
 **Parameters:**
 - `language`: The language identifier (`cs`, `java`, `py`, `ts`)
-- `runtime_version`: The runtime version identifier (e.g., `net90`, `jdk21`)
+- `runtime_version`: The runtime version identifier (e.g., `net100`, `jdk21`)
 - `dependency_name`: The dependency identifier (artifact ID for Java, package name for others)
 
 **Java: GroupId:ArtifactId Syntax**
@@ -854,7 +854,7 @@ For Java dependencies, you can use `groupId:artifactId` syntax to disambiguate d
 **C# Example:**
 
 ```jinja
-{%- macro dep(name) -%}{{ dependency('cs', 'net90', name) }}{%- endmacro -%}
+{%- macro dep(name) -%}{{ dependency('cs', 'net100', name) }}{%- endmacro -%}
 
 <ItemGroup>
     {{ dep('CloudNative.CloudEvents') }}

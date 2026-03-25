@@ -28,6 +28,20 @@ updates:
       - "dependencies"
       - "github-actions"
 
+  # C# dependencies (.NET 10.0 central dependency file)
+  - package-ecosystem: "nuget"
+    directory: "/xrcg/dependencies/cs/net100"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "csharp"
+      - "net100"
+    open-pull-requests-limit: 5
+
   # C# dependencies (.NET 9.0 central dependency file)
   - package-ecosystem: "nuget"
     directory: "/xrcg/dependencies/cs/net90"

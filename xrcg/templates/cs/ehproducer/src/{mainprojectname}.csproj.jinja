@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ProjectName>{{project_name | pascal }}</ProjectName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -10,12 +10,12 @@
     <ProjectReference Include="..\..\{{ data_project_name }}\src\{{data_project_name}}.csproj" />
   </ItemGroup>
   <ItemGroup>
-    {{- dependency( 'cs','net90', 'CloudNative.CloudEvents') }}
-    {{- dependency( 'cs','net90', 'CloudNative.CloudEvents.SystemTextJson') }}
-    {{- dependency( 'cs','net90', 'CloudNative.CloudEvents.Avro') }}
-    {{- dependency( 'cs','net90', 'CloudNative.CloudEvents.Protobuf') }}
-    {{- dependency( 'cs','net90', 'Azure.Messaging.EventHubs') }}    
-    {{- dependency( 'cs','net90', 'System.Memory.Data') }}    
-    {{- dependency( 'cs','net90', 'System.Text.Json') }}
+    {{- dependency( 'cs','net100', 'CloudNative.CloudEvents') }}
+    {{- dependency( 'cs','net100', 'CloudNative.CloudEvents.SystemTextJson') }}
+    {{- dependency( 'cs','net100', 'CloudNative.CloudEvents.Avro') }}
+    {{- dependency( 'cs','net100', 'CloudNative.CloudEvents.Protobuf') }}
+    {{- dependency( 'cs','net100', 'Azure.Messaging.EventHubs') }}    
+    {{- dependency( 'cs','net100', 'System.Memory.Data') }}    
+    {{- dependency( 'cs','net100', 'System.Text.Json') }}
   </ItemGroup>  
 </Project>
