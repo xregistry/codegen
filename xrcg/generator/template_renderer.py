@@ -762,7 +762,7 @@ class TemplateRenderer:
     def resolve_string(template: str, replacements: Dict[str, str]):
         """Resolve a string template with placeholders using the given replacements."""
         # Regex to find placeholders with optional filter using | or !
-        pattern = re.compile(r'\{(\w+)((?:~[\w\.]+)*)(?:\s*([|!]\s*\w+\s*)*)\}')
+        pattern = re.compile(r'\{(\w+)((?:~[\w\.]+)*)((?:\s*[|!]\s*\w+\s*)*)\}')
 
         # Function to replace match with the correct value
         def replace_match(match):
