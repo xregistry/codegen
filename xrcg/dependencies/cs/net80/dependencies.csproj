@@ -33,9 +33,9 @@
       <PackageReference Include="MQTTnet" Version="5.0.1.1416" />
       <PackageReference Include="System.Memory.Data" Version="10.0.5" />
       <PackageReference Include="System.Text.Json" Version="10.0.5" />
-      <PackageReference Include="Testcontainers" Version="3.10.0" />
+      <PackageReference Include="Testcontainers" Version="4.11.0" />
       <PackageReference Include="Testcontainers.ActiveMq" Version="3.10.0" />
-      <PackageReference Include="Testcontainers.Azurite" Version="3.10.0" />
+      <PackageReference Include="Testcontainers.Azurite" Version="4.11.0" />
       <PackageReference Include="Testcontainers.Kafka" Version="3.10.0" />
       <PackageReference Include="xunit" Version="2.9.2" />
       <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
