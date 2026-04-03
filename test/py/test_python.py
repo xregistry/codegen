@@ -139,6 +139,13 @@ def test_kafkaproducer_lightbulb_py():
                         tmpdirname, "test_kafkaproducer_lightbulb_py", "kafkaproducer")
 
 
+def test_kafkaproducer_dwd_py():
+    """ Test the Kafka producer for DWD weather data with endpoint-level Kafka key templates."""
+    tmpdirname = tempfile.mkdtemp()
+    run_python_test(os.path.join(project_root, "test/xreg/dwd.xreg.json".replace(
+            '/', os.sep)), tmpdirname, "test_kafkaproducer_dwd_py", "kafkaproducer")
+
+
 def test_kafkaconsumer_contoso_erp_py():
     """ Test the Kafka consumer for Contoso ERP."""
     tmpdirname = tempfile.mkdtemp()

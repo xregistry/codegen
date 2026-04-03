@@ -1,0 +1,343 @@
+{
+  "endpoints": {
+    "DE.DWD.CDC.Kafka": {
+      "usage": [
+        "producer"
+      ],
+      "protocol": "KAFKA",
+      "envelope": "CloudEvents/1.0",
+      "envelopeoptions": {
+        "mode": "structured",
+        "format": "application/cloudevents+json"
+      },
+      "protocoloptions": {
+        "deployed": false,
+        "options": {
+          "topic": "dwd",
+          "key": "{station_id}"
+        }
+      },
+      "messagegroups": [
+        "#/messagegroups/DE.DWD.CDC"
+      ]
+    },
+    "DE.DWD.Weather.Kafka": {
+      "usage": [
+        "producer"
+      ],
+      "protocol": "KAFKA",
+      "envelope": "CloudEvents/1.0",
+      "envelopeoptions": {
+        "mode": "structured",
+        "format": "application/cloudevents+json"
+      },
+      "protocoloptions": {
+        "deployed": false,
+        "options": {
+          "topic": "dwd",
+          "key": "{identifier}"
+        }
+      },
+      "messagegroups": [
+        "#/messagegroups/DE.DWD.Weather"
+      ]
+    }
+  },
+  "messagegroups": {
+    "DE.DWD.CDC": {
+      "messages": {
+        "DE.DWD.CDC.StationMetadata": {
+          "name": "StationMetadata",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "type": {
+              "value": "DE.DWD.CDC.StationMetadata"
+            },
+            "source": {
+              "value": "https://opendata.dwd.de"
+            },
+            "subject": {
+              "value": "{station_id}",
+              "type": "uritemplate"
+            }
+          },
+          "dataschemaformat": "JSONStructure/draft-02",
+          "dataschemauri": "#/schemagroups/DE.DWD.CDC.jstruct/schemas/DE.DWD.CDC.StationMetadata"
+        },
+        "DE.DWD.CDC.AirTemperature10Min": {
+          "name": "AirTemperature10Min",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "type": {
+              "value": "DE.DWD.CDC.AirTemperature10Min"
+            },
+            "source": {
+              "value": "https://opendata.dwd.de"
+            },
+            "subject": {
+              "value": "{station_id}",
+              "type": "uritemplate"
+            }
+          },
+          "dataschemaformat": "JSONStructure/draft-02",
+          "dataschemauri": "#/schemagroups/DE.DWD.CDC.jstruct/schemas/DE.DWD.CDC.AirTemperature10Min"
+        },
+        "DE.DWD.CDC.Precipitation10Min": {
+          "name": "Precipitation10Min",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "type": {
+              "value": "DE.DWD.CDC.Precipitation10Min"
+            },
+            "source": {
+              "value": "https://opendata.dwd.de"
+            },
+            "subject": {
+              "value": "{station_id}",
+              "type": "uritemplate"
+            }
+          },
+          "dataschemaformat": "JSONStructure/draft-02",
+          "dataschemauri": "#/schemagroups/DE.DWD.CDC.jstruct/schemas/DE.DWD.CDC.Precipitation10Min"
+        }
+      }
+    },
+    "DE.DWD.Weather": {
+      "messages": {
+        "DE.DWD.Weather.Alert": {
+          "name": "Alert",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "type": {
+              "value": "DE.DWD.Weather.Alert"
+            },
+            "source": {
+              "value": "https://opendata.dwd.de"
+            },
+            "subject": {
+              "value": "{identifier}",
+              "type": "uritemplate"
+            }
+          },
+          "dataschemaformat": "JSONStructure/draft-02",
+          "dataschemauri": "#/schemagroups/DE.DWD.CDC.jstruct/schemas/DE.DWD.Weather.Alert"
+        }
+      }
+    }
+  },
+  "schemagroups": {
+    "DE.DWD.CDC.jstruct": {
+      "schemas": {
+        "DE.DWD.CDC.StationMetadata": {
+          "name": "StationMetadata",
+          "format": "JSONStructure/draft-02",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "JSONStructure/draft-02",
+              "schema": {
+                "$schema": "https://json-structure.org/meta/extended/v0/#",
+                "type": "object",
+                "required": [
+                  "station_id",
+                  "station_name",
+                  "latitude",
+                  "longitude",
+                  "elevation"
+                ],
+                "name": "StationMetadata",
+                "properties": {
+                  "station_id": {
+                    "type": "string"
+                  },
+                  "station_name": {
+                    "type": "string"
+                  },
+                  "latitude": {
+                    "type": "double"
+                  },
+                  "longitude": {
+                    "type": "double"
+                  },
+                  "elevation": {
+                    "type": "double"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "from_date": {
+                    "type": "string"
+                  },
+                  "to_date": {
+                    "type": "string"
+                  }
+                },
+                "$id": "https://example.com/DE/DWD/CDC/StationMetadata.schema.json",
+                "description": "StationMetadata"
+              }
+            }
+          }
+        },
+        "DE.DWD.CDC.AirTemperature10Min": {
+          "name": "AirTemperature10Min",
+          "format": "JSONStructure/draft-02",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "JSONStructure/draft-02",
+              "schema": {
+                "$schema": "https://json-structure.org/meta/extended/v0/#",
+                "type": "object",
+                "required": [
+                  "station_id",
+                  "timestamp"
+                ],
+                "name": "AirTemperature10Min",
+                "properties": {
+                  "station_id": {
+                    "type": "string"
+                  },
+                  "timestamp": {
+                    "type": "string"
+                  },
+                  "quality_level": {
+                    "type": "int32"
+                  },
+                  "pressure_station_level": {
+                    "type": "double"
+                  },
+                  "air_temperature_2m": {
+                    "type": "double"
+                  },
+                  "air_temperature_5cm": {
+                    "type": "double"
+                  },
+                  "relative_humidity": {
+                    "type": "double"
+                  },
+                  "dew_point_temperature": {
+                    "type": "double"
+                  }
+                },
+                "$id": "https://example.com/DE/DWD/CDC/AirTemperature10Min.schema.json",
+                "description": "AirTemperature10Min"
+              }
+            }
+          }
+        },
+        "DE.DWD.CDC.Precipitation10Min": {
+          "name": "Precipitation10Min",
+          "format": "JSONStructure/draft-02",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "JSONStructure/draft-02",
+              "schema": {
+                "$schema": "https://json-structure.org/meta/extended/v0/#",
+                "type": "object",
+                "required": [
+                  "station_id",
+                  "timestamp"
+                ],
+                "name": "Precipitation10Min",
+                "properties": {
+                  "station_id": {
+                    "type": "string"
+                  },
+                  "timestamp": {
+                    "type": "string"
+                  },
+                  "quality_level": {
+                    "type": "int32"
+                  },
+                  "precipitation_height": {
+                    "type": "double"
+                  },
+                  "precipitation_indicator": {
+                    "type": "int32"
+                  }
+                },
+                "$id": "https://example.com/DE/DWD/CDC/Precipitation10Min.schema.json",
+                "description": "Precipitation10Min"
+              }
+            }
+          }
+        },
+        "DE.DWD.Weather.Alert": {
+          "name": "Alert",
+          "format": "JSONStructure/draft-02",
+          "defaultversionid": "1",
+          "versions": {
+            "1": {
+              "format": "JSONStructure/draft-02",
+              "schema": {
+                "$schema": "https://json-structure.org/meta/extended/v0/#",
+                "type": "object",
+                "required": [
+                  "identifier",
+                  "sender",
+                  "sent",
+                  "severity",
+                  "event"
+                ],
+                "name": "Alert",
+                "properties": {
+                  "identifier": {
+                    "type": "string"
+                  },
+                  "sender": {
+                    "type": "string"
+                  },
+                  "sent": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "msg_type": {
+                    "type": "string"
+                  },
+                  "severity": {
+                    "type": "string"
+                  },
+                  "urgency": {
+                    "type": "string"
+                  },
+                  "certainty": {
+                    "type": "string"
+                  },
+                  "event": {
+                    "type": "string"
+                  },
+                  "headline": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "effective": {
+                    "type": "string"
+                  },
+                  "onset": {
+                    "type": "string"
+                  },
+                  "expires": {
+                    "type": "string"
+                  },
+                  "area_desc": {
+                    "type": "string"
+                  },
+                  "geocodes": {
+                    "type": "string"
+                  }
+                },
+                "$id": "https://example.com/DE/DWD/Weather/Alert.schema.json",
+                "description": "Alert"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

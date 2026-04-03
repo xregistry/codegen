@@ -20,12 +20,13 @@ from confluent_kafka import Producer, Consumer, KafkaError, Message
 
 # Generates a list of arguments for "send" methods that correspond to placeholders in uritemplates
 {%- macro DeclareUriTemplateArguments(message) -%}
-{%- if message.protocoloptions["header"] -%}{{ EmitArguments(message.protocoloptions["header"]) }}{%- endif -%}
-{%- if message.protocoloptions["footer"] -%}{{ EmitArguments(message.protocoloptions["footer"]) }}{%- endif -%}
-{%- if message.protocoloptions["message_annotations"] -%}{{ EmitArguments(message.protocoloptions["message_annotations"]) }}{%- endif -%}
-{%- if message.protocoloptions["delivery_annotations"] -%}{{ EmitArguments(message.protocoloptions["delivery_annotations"]) }}{%- endif -%}
-{%- if message.protocoloptions["properties"] -%}{{ EmitArguments(message.protocoloptions["properties"]) }}{%- endif -%}
-{%- if message.protocoloptions["application_properties"] -%}{{ EmitArguments(message.protocoloptions["application_properties"]) }}{%- endif -%}
+{%- if message.protocoloptions is defined and message.protocoloptions -%}
+{%- if message.protocoloptions["headers"] is defined and message.protocoloptions["headers"] -%}{{ EmitArguments(message.protocoloptions["headers"]) }}{%- endif -%}
+{%- if message.protocoloptions["key"] is defined and message.protocoloptions["key"] -%}{{ EmitArguments(message.protocoloptions["key"]) }}{%- endif -%}
+{%- if message.protocoloptions["partition"] is defined and message.protocoloptions["partition"] -%}{{ EmitArguments(message.protocoloptions["partition"]) }}{%- endif -%}
+{%- if message.protocoloptions["topic"] is defined and message.protocoloptions["topic"] -%}{{ EmitArguments(message.protocoloptions["topic"]) }}{%- endif -%}
+{%- if message.protocoloptions["timestamp"] is defined and message.protocoloptions["timestamp"] -%}{{ EmitArguments(message.protocoloptions["timestamp"]) }}{%- endif -%}
+{%- endif -%}
 {%- endmacro %}
 
 # Helper macro for assigning properties
@@ -50,31 +51,29 @@ from confluent_kafka import Producer, Consumer, KafkaError, Message
 
 # Generates Kafka message objects from kafkaDefinition as message
 {%- macro DeclareMessage(variable, message) -%}
-{%- set header = message.protocoloptions["header"] %}
-{%- set footer = message.protocoloptions["footer"] %}
-{%- set messageAnnotations = message.protocoloptions["message_annotations"] %}
-{%- set deliveryAnnotations = message.protocoloptions["delivery_annotations"] %}
-{%- set properties = message.protocoloptions["properties"] %}
-{%- set applicationProperties = message.protocoloptions["application_properties"] %}
+{%- if message.protocoloptions is defined and message.protocoloptions -%}
+{%- set headers = message.protocoloptions["headers"] if "headers" in message.protocoloptions else None %}
+{%- set key = message.protocoloptions["key"] if "key" in message.protocoloptions else None %}
+{%- set partition = message.protocoloptions["partition"] if "partition" in message.protocoloptions else None %}
+{%- set topic = message.protocoloptions["topic"] if "topic" in message.protocoloptions else None %}
+{%- set timestamp = message.protocoloptions["timestamp"] if "timestamp" in message.protocoloptions else None %}
 message = Producer()
-{%- if header %}
-{{- AssignProps("message.headers", header, True) }}
+{%- if headers %}
+{{- AssignProps("message.headers", headers, True) }}
 {%- endif %}
-{%- if footer %}
-{{- AssignProps("message.headers", footer, True) }}
+{%- if key %}
+{{- AssignProps("message.key", key) }}
 {%- endif %}
-{%- if messageAnnotations %}
-{{- AssignProps("message.headers", messageAnnotations, True) }}
+{%- if partition %}
+{{- AssignProps("message.partition", partition) }}
 {%- endif %}
-{%- if deliveryAnnotations %}
-{{- AssignProps("message.headers", deliveryAnnotations, True) }}
+{%- if topic %}
+{{- AssignProps("message.topic", topic) }}
 {%- endif %}
-{%- if properties %}
-{{- AssignProps("message.headers", properties, True) }}
+{%- if timestamp %}
+{{- AssignProps("message.timestamp", timestamp) }}
 {%- endif %}
-{%- if applicationProperties %}
-{{- AssignProps("message.headers", applicationProperties, True) }}
-{%- endif %}
+{%- endif -%}
 {%- endmacro -%}
 
 {%- macro DeclareDispatchObjectField(project_name, messagegroups, withType) -%}
