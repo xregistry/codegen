@@ -14,7 +14,7 @@ python-qpid-proton>=0.39.0
 
 # Development dependencies
 flake8>=7.1.0
-mypy>=1.10.0
+mypy>=1.20.2
 pylint>=3.2.3
 pytest>=8.2.2
 pytest-asyncio>=0.23.7
