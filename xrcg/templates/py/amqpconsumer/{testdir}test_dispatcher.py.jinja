@@ -5,13 +5,17 @@
 """
 Tests for {{ main_project_name }}
 """
+import base64
 import os
 import sys
 import asyncio
 import tempfile
+import urllib.error
+import urllib.request
 import pytest
 import time
 from typing import Optional
+from urllib.parse import quote_plus
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
 from proton import Message
@@ -54,6 +58,47 @@ from {{ main_project_name|dotunderscore|lower }} import *
 {%- endif %}
 {%- endfor %}
 {%- endfor %}
+
+
+
+def _rabbitmq_queue_address(queue_name: str) -> str:
+    return f"/queues/{queue_name}" if os.environ.get("RABBITMQ_VERSION", "4") != "3" else queue_name
+
+
+def _declare_rabbitmq_queue(host: str, mgmt_port: int, queue_name: str):
+    url = f"http://{host}:{mgmt_port}/api/queues/%2F/{queue_name}"
+    payload = b'{"auto_delete": false, "durable": true, "arguments": {}}'
+    auth = base64.b64encode(b"guest:guest").decode("ascii")
+    last_error = None
+    for _ in range(30):
+        request = urllib.request.Request(
+            url,
+            data=payload,
+            method="PUT",
+            headers={
+                "Authorization": f"Basic {auth}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                if response.status in (201, 204):
+                    return
+                last_error = RuntimeError(f"RabbitMQ queue declaration returned {response.status}")
+        except urllib.error.HTTPError as exc:
+            if exc.code in (201, 204):
+                return
+            last_error = exc
+        except Exception as exc:
+            last_error = exc
+        time.sleep(1)
+    raise RuntimeError(f"Timed out declaring RabbitMQ queue {queue_name}") from last_error
+
+
+def _connection_url(host: str, port: int, username: Optional[str] = None, password: Optional[str] = None) -> str:
+    if username and password:
+        return f"amqp://{quote_plus(username)}:{quote_plus(password)}@{host}:{port}"
+    return f"amqp://{host}:{port}"
 
 ARTEMIS_BROKER_XML = """<?xml version='1.0'?>
 <configuration xmlns="urn:activemq"
@@ -116,13 +161,16 @@ def amqp_broker():
         container.start()
         # Wait for RabbitMQ to be ready
         wait_for_logs(container, "Server startup complete", timeout=120)
+        host = container.get_container_host_ip()
+        if rabbitmq_version != "3":
+            _declare_rabbitmq_queue(host, int(container.get_exposed_port(15672)), "test-queue")
         
         yield {
-            "host": container.get_container_host_ip(),
+            "host": host,
             "port": container.get_exposed_port(5672),
             "username": "guest",
             "password": "guest",
-            "address": "test-queue"
+            "address": _rabbitmq_queue_address("test-queue")
         }
         
         container.stop()
@@ -208,7 +256,12 @@ def send_message_to_broker(broker_config: dict, message: Message, timeout: float
         message: The proton.Message to send
         timeout: Timeout in seconds
     """
-    url = f"{broker_config['host']}:{broker_config['port']}"
+    url = _connection_url(
+        broker_config['host'],
+        broker_config['port'],
+        broker_config.get('username'),
+        broker_config.get('password')
+    )
     sender = SimpleSender(url, broker_config['address'], 
                          username=broker_config.get('username'),
                          password=broker_config.get('password'))
@@ -335,7 +388,12 @@ class Test{{ class_name }}:
                     event.receiver.close()
                     event.connection.close()
         
-        connection_url = f"{artemis_container['host']}:{artemis_container['port']}"
+        connection_url = _connection_url(
+            artemis_container['host'],
+            artemis_container['port'],
+            artemis_container.get('username'),
+            artemis_container.get('password')
+        )
         receiver = SimpleReceiver(connection_url, artemis_container['address'],
                                  username=artemis_container.get('username'),
                                  password=artemis_container.get('password'))

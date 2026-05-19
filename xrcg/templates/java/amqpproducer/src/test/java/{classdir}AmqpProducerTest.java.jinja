@@ -30,6 +30,10 @@ import java.util.concurrent.CountDownLatch;
 {%- endif %}
 
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -96,6 +100,49 @@ public class {{ class_name | strip_namespace }} {
         brokerUrl = new URI(String.format("amqp://%s:%d", host, mappedPort));
         logger.info("{} broker container started at {}", AMQP_BROKER, brokerUrl);
     }
+
+    private boolean isRabbitMq4() {
+        return "rabbitmq".equalsIgnoreCase(AMQP_BROKER) && !"3".equals(System.getenv().getOrDefault("RABBITMQ_VERSION", "4"));
+    }
+
+    private String getQueueAddress(String queueName) {
+        return isRabbitMq4() ? "/queues/" + queueName : queueName;
+    }
+
+    private URI getEndpointUri(String queueName) throws Exception {
+        String queueAddress = getQueueAddress(queueName);
+        return new URI("amqp://" + brokerUrl.getHost() + ":" + brokerUrl.getPort() + (queueAddress.startsWith("/") ? queueAddress : "/" + queueAddress));
+    }
+
+    private void declareRabbitMqQueue(String queueName) throws Exception {
+        String host = brokerContainer.getHost();
+        Integer managementPort = brokerContainer.getMappedPort(15672);
+        String credentials = Base64.getEncoder().encodeToString("guest:guest".getBytes(StandardCharsets.UTF_8));
+        HttpClient httpClient = HttpClient.newHttpClient();
+        URI queueUri = new URI("http://" + host + ":" + managementPort + "/api/queues/%2F/" + queueName);
+        Exception lastException = null;
+
+        for (int attempt = 0; attempt < 30; attempt++) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder(queueUri)
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .header("Authorization", "Basic " + credentials)
+                    .header("Content-Type", "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString("{\"auto_delete\":false,\"durable\":true,\"arguments\":{}}"))
+                    .build();
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() == 201 || response.statusCode() == 204) {
+                    return;
+                }
+                lastException = new IllegalStateException("RabbitMQ queue declaration returned " + response.statusCode() + ": " + response.body());
+            } catch (Exception ex) {
+                lastException = ex;
+            }
+            Thread.sleep(1000);
+        }
+
+        throw new IllegalStateException("Timed out declaring RabbitMQ queue " + queueName, lastException);
+    }
     
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
     {%- set pascal_group_name = messagegroupid | pascal %}
@@ -113,16 +160,20 @@ public class {{ class_name | strip_namespace }} {
         // Use unique queue name per test to avoid message accumulation
         String queueName = "test-queue-{{ messagename | lower }}";
         
+        if (isRabbitMq4()) {
+            declareRabbitMqQueue(queueName);
+        }
+        String queueAddress = getQueueAddress(queueName);
         PlainEndpointCredential credential = new PlainEndpointCredential("guest", "guest");
         Map<String, String> options = new HashMap<>();
-        options.put("node", queueName);
+        options.put("node", isRabbitMq4() ? "/" + queueAddress : queueAddress);
         {{ class_name }} producer = {{ class_name }}.createProducer(
             credential,
             {%- if cloudEvents.isCloudEvent(message) %}
             null, // No beforeSend callback for test
             {%- endif %}
             options,
-            new ArrayList<>(List.of(brokerUrl))
+            new ArrayList<>(List.of(getEndpointUri(queueName)))
         );
         
         List<Message<?>> messagesReceived = new ArrayList<>();
@@ -139,7 +190,7 @@ public class {{ class_name | strip_namespace }} {
                 connOptions.password("guest");
                 
                 connection = client.connect(brokerUrl.getHost(), brokerUrl.getPort(), connOptions);
-                Receiver receiver = connection.openReceiver(queueName);
+                Receiver receiver = connection.openReceiver(queueAddress);
                 
                 // Wait for 5 messages with timeout
                 int attempts = 0;
