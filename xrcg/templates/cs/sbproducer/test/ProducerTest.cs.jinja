@@ -98,7 +98,7 @@ namespace {{ project_name | pascal }}.Test
                     .WithEnvironment("MSSQL_SA_PASSWORD", "StrongPassword!1")
                     .WithNetwork(Network)
                     .WithNetworkAliases("sqledge")
-                    .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(1431))
+                    .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("SQL Server is now ready for client connections"))
                     .WithOutputConsumer(outputConsumer)
                     .WithStartupCallback((container, ct) => Task.Delay(2000, ct)) // Extra settling time
                     .Build();

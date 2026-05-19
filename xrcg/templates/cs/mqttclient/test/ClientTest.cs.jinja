@@ -85,7 +85,7 @@ namespace {{ project_name | pascal }}.Test
                     .WithImage("eclipse-mosquitto:2.0")
                     .WithBindMount(mosquittoConfigFilePath, "/mosquitto/config/mosquitto.conf")
                     .WithPortBinding(1883, true)
-                    .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(1883))
+                    .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("mosquitto version .* running"))
                     .Build();
 
                 await MosquittoContainerInstance.StartAsync();
