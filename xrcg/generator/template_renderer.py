@@ -256,7 +256,7 @@ class TemplateRenderer:
                 if len(jstruct_merged) == 1:
                     jstruct_merged = jstruct_merged[0]
                 
-                self._process_jstruct_schemas(jstruct_merged, project_data_dir, json_enabled)
+                self._process_jstruct_schemas(jstruct_merged, project_data_dir, json_enabled, avro_enabled)
             
             # Process Avro/converted schemas
             if avro_schemas:
@@ -321,13 +321,16 @@ class TemplateRenderer:
                 self.template_args, self.suppress_schema_output
             )
 
-    def _process_jstruct_schemas(self, jstruct_schema: JsonNode, project_data_dir: str, json_enabled: bool) -> None:
+    def _process_jstruct_schemas(self, jstruct_schema: JsonNode, project_data_dir: str, json_enabled: bool, avro_enabled: bool = False) -> None:
         """Process JSON Structure schemas using dedicated Avrotize converters.
         
         Args:
             jstruct_schema: The JSON Structure schema(s) to process
             project_data_dir: Directory for generated data classes
             json_enabled: Whether to enable JSON serialization annotations
+            avro_enabled: Whether to enable Avro serialization annotations (only honored
+                where avrotize's structure-to-language wrapper supports it; structuretojava
+                has no Avro emitter, so this flag is ignored for Java).
         """
         from avrotize.structuretocsharp import convert_structure_schema_to_csharp
         from avrotize.structuretojava import convert_structure_schema_to_java
@@ -343,15 +346,16 @@ class TemplateRenderer:
         if self.language == "py":
             convert_structure_schema_to_python(
                 jstruct_schema, project_data_dir, package_name=self.data_project_name,
-                dataclasses_json_annotation=json_enabled
+                dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled
             )
         elif self.language == "cs":
             convert_structure_schema_to_csharp(
                 jstruct_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
-                pascal_properties=True, system_text_json_annotation=json_enabled
+                pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled
             )
         elif self.language == "java":
-            # Java: use lowercase package name to match Maven artifact conventions
+            # Java: use lowercase package name to match Maven artifact conventions.
+            # avrotize.structuretojava has no Avro emitter, so avro_enabled is intentionally not forwarded here.
             java_package_name = self.data_project_name.lower().replace('-', '_')
             convert_structure_schema_to_java(
                 jstruct_schema, project_data_dir, package_name=java_package_name,
@@ -360,12 +364,12 @@ class TemplateRenderer:
         elif self.language == "ts":
             convert_structure_schema_to_typescript(
                 jstruct_schema, project_data_dir, package_name=self.data_project_name,
-                typedjson_annotation=json_enabled
+                typedjson_annotation=json_enabled, avro_annotation=avro_enabled
             )
         elif self.language == "go":
             convert_structure_schema_to_go(
                 jstruct_schema, project_data_dir, package_name=self.data_project_name,
-                json_annotation=json_enabled
+                json_annotation=json_enabled, avro_annotation=avro_enabled
             )
 
     def convert_proto_to_avro(self, schema_reference: str, schema_root: str) -> JsonNode:
