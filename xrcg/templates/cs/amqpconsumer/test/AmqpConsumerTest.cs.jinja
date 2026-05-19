@@ -8,6 +8,9 @@
 
 using System;
 using System.IO;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -107,6 +110,7 @@ namespace {{ project_name | pascal }}.Test
         public ArtemisContainer? ArtemisContainerInstance { get; protected set; }
         public IContainer? RabbitMqContainerInstance { get; protected set; }
         public Uri? BrokerUrl { get; protected set; }
+        public Uri? EndpointUri { get; protected set; }
         protected ILoggerFactory _loggerFactory;
         protected ILogger _logger;
 
@@ -121,6 +125,46 @@ namespace {{ project_name | pascal }}.Test
             {
                 return "exampleQueue";
             }
+        }
+
+        public virtual string QueueAddress
+        {
+            get
+            {
+                return QueueName;
+            }
+        }
+
+        protected async Task DeclareRabbitMqQueueAsync(string host, int managementPort)
+        {
+            using var httpClient = new HttpClient();
+            var authBytes = Encoding.ASCII.GetBytes("guest:guest");
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+            var queueUri = new Uri($"http://{host}:{managementPort}/api/queues/%2F/{QueueName}");
+            Exception? lastException = null;
+
+            for (var attempt = 0; attempt < 30; attempt++)
+            {
+                try
+                {
+                    using var content = new StringContent("{\"auto_delete\":false,\"durable\":true,\"arguments\":{}}", Encoding.UTF8, "application/json");
+                    using var response = await httpClient.PutAsync(queueUri, content);
+                    if ((int)response.StatusCode == 201 || (int)response.StatusCode == 204)
+                    {
+                        return;
+                    }
+
+                    lastException = new InvalidOperationException($"RabbitMQ queue declaration returned {(int)response.StatusCode} {response.ReasonPhrase}");
+                }
+                catch (Exception ex)
+                {
+                    lastException = ex;
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(1));
+            }
+
+            throw new InvalidOperationException($"Timed out declaring RabbitMQ queue '{QueueName}'", lastException);
         }
 
         public AmqpBrokerFixture()
@@ -161,6 +205,7 @@ namespace {{ project_name | pascal }}.Test
                 await ArtemisContainerInstance.StartAsync();
                 _logger.LogDebug("Artemis container started.");
                 BrokerUrl = new UriBuilder(ArtemisContainerInstance.GetBrokerAddress()){ Scheme = "amqp"}.Uri;
+                EndpointUri = new Uri(BrokerUrl, QueueName);
                 _logger.LogDebug($"Artemis broker URL: {BrokerUrl}");
             }
             catch (Exception ex)
@@ -217,6 +262,7 @@ namespace {{ project_name | pascal }}.Test
                 var host = RabbitMqContainerInstance.Hostname;
                 var port = RabbitMqContainerInstance.GetMappedPublicPort(5672);
                 BrokerUrl = new Uri($"amqp://{host}:{port}");
+                EndpointUri = new Uri(BrokerUrl, QueueName);
                 _logger.LogDebug($"RabbitMQ 3.x broker URL: {BrokerUrl}");
             }
             catch (Exception ex)
@@ -248,6 +294,14 @@ namespace {{ project_name | pascal }}.Test
     // Fixture for RabbitMQ 4.0+ (native AMQP 1.0 support)
     public class RabbitMq4Fixture : AmqpBrokerFixture
     {
+        public override string QueueAddress
+        {
+            get
+            {
+                return $"/queues/{QueueName}";
+            }
+        }
+
         public override async Task InitializeAsync()
         {
             try
@@ -271,7 +325,10 @@ namespace {{ project_name | pascal }}.Test
                 
                 var host = RabbitMqContainerInstance.Hostname;
                 var port = RabbitMqContainerInstance.GetMappedPublicPort(5672);
+                var managementPort = RabbitMqContainerInstance.GetMappedPublicPort(15672);
+                await DeclareRabbitMqQueueAsync(host, managementPort);
                 BrokerUrl = new Uri($"amqp://{host}:{port}");
+                EndpointUri = new Uri($"amqp://{host}:{port}/queues/{QueueName}");
                 _logger.LogDebug($"RabbitMQ 4.0+ broker URL: {BrokerUrl}");
             }
             catch (Exception ex)
@@ -347,7 +404,7 @@ namespace {{ project_name | pascal }}.Test
             {
                 var plainEndpointCredential = new PlainEndpointCredential("guest", "guest");
                 var dispatcher = {{ class_name }}.CreateBuilder()
-                    .WithEndpoint(new Uri(_fixture.BrokerUrl, _fixture.QueueName))
+                    .WithEndpoint(_fixture.EndpointUri)
                     .WithCredential(plainEndpointCredential)
                     .WithLogger(_fixture.GetLoggerFactory())
                     .Build();
@@ -390,7 +447,7 @@ namespace {{ project_name | pascal }}.Test
                         var session = new Session(connection);
                         try
                         {
-                            var sender = new SenderLink(session, "sender-link", "/" + _fixture.QueueName);
+                            var sender = new SenderLink(session, "sender-link", _fixture.QueueAddress);
                             try
                             {
                                 {%- if message_body_type != "byte[]" %}
@@ -485,7 +542,7 @@ namespace {{ project_name | pascal }}.Test
             {
                 var plainEndpointCredential = new PlainEndpointCredential("guest", "guest");
                 var dispatcher = {{ class_name }}.CreateBuilder()
-                    .WithEndpoint(new Uri(_fixture.BrokerUrl, _fixture.QueueName))
+                    .WithEndpoint(_fixture.EndpointUri)
                     .WithCredential(plainEndpointCredential)
                     .WithLogger(_fixture.GetLoggerFactory())
                     .Build();
@@ -527,7 +584,7 @@ namespace {{ project_name | pascal }}.Test
                         var session = new Session(connection);
                         try
                         {
-                            var sender = new SenderLink(session, "test-sender", _fixture.QueueName);
+                            var sender = new SenderLink(session, "test-sender", _fixture.QueueAddress);
                             for (int i = 0; i < 5; i++)
                             {
                                 {%- if message_body_type == "byte[]" %}
@@ -607,7 +664,7 @@ namespace {{ project_name | pascal }}.Test
             {
                 var plainEndpointCredential = new PlainEndpointCredential("guest", "guest");
                 var dispatcher = {{ class_name }}.CreateBuilder()
-                    .WithEndpoint(new Uri(_fixture.BrokerUrl, _fixture.QueueName))
+                    .WithEndpoint(_fixture.EndpointUri)
                     .WithCredential(plainEndpointCredential)
                     .WithLogger(_fixture.GetLoggerFactory())
                     .Build();
@@ -649,7 +706,7 @@ namespace {{ project_name | pascal }}.Test
                         var session = new Session(connection);
                         try
                         {
-                            var sender = new SenderLink(session, "test-sender", _fixture.QueueName);
+                            var sender = new SenderLink(session, "test-sender", _fixture.QueueAddress);
                             for (int i = 0; i < 5; i++)
                             {
                                 {%- if message_body_type == "byte[]" %}

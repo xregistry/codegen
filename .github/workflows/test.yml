@@ -124,13 +124,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AMQP_BROKER: rabbitmq
-      # Pin to RabbitMQ 3.x: the templates use AMQP 1.0 v1 address format
-      # (amqp://host:port/queueName) which is only supported by the legacy
-      # rabbitmq_amqp1_0 plugin in 3.x. RabbitMQ 4.x rewrote the AMQP 1.0
-      # implementation and only accepts v2 addresses (/queues/<name>,
-      # /exchanges/<name>/<key>) -- enabling v1 addressing under 4.x would
-      # require updating the generated client templates to emit v2 addresses.
-      RABBITMQ_VERSION: "3"
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
