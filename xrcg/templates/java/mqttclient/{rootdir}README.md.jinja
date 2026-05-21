@@ -7,6 +7,8 @@
 
 Auto-generated Java MQTT client for publish/subscribe with QoS support.
 
+> **BREAKING CHANGE:** This template now targets Eclipse Paho MQTT v5 (`org.eclipse.paho.mqttv5.client`) and MQTT/5.0 CloudEvents binary mode. Existing code using Paho v3 types such as `org.eclipse.paho.client.mqttv3.MqttClient` or `MqttConnectOptions` must migrate to the Paho v5 APIs.
+
 ## Overview
 
 Type-safe MQTT 5.0 client for {{ groupname }} message group using Eclipse Paho Java SDK with CloudEvents support.

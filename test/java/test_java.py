@@ -436,6 +436,17 @@ def test_mqttclient_lightbulb_java():
     )
 
 
+def test_mqttclient_protocoloptions_java():
+    """Test the MQTT client with protocoloptions (qos/retain/topic_name) for Fabrikam Lumen MQTT."""
+    tmpdirname = tempfile.mkdtemp()
+    run_java_test(
+        os.path.join(project_root, "test/xreg/mqtt-protocoloptions.xreg.json"),
+        tmpdirname,
+        "TestProject",
+        "mqttclient"
+    )
+
+
 # Service Bus Consumer Tests
 
 def test_sbconsumer_contoso_erp_java():

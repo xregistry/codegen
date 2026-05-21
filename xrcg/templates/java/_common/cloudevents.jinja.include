@@ -88,11 +88,11 @@ EventFormatProvider.getInstance().resolveFormat(JsonFormat.CONTENT_TYPE).deseria
 {%- if message.envelopemetadata and "datacontenttype" in message.envelopemetadata and 'value' in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
 "{{ message.envelopemetadata.datacontenttype.value }}"
 {%- elif message.dataschemaformat -%}
-{%- if message.dataschemaformat.startswith("Avro/") -%}
-"application/avro"
-{%- elif message.dataschemaformat.startswith("Protobuf/") -%}
+{%- if (message.dataschemaformat | lower).startswith("avro/") -%}
+"avro/binary"
+{%- elif (message.dataschemaformat | lower).startswith("protobuf/") -%}
 "application/protobuf"
-{%- elif message.dataschemaformat.startswith("JSONSchema/") -%}
+{%- elif (message.dataschemaformat | lower).startswith("jsonschema/") -%}
 "application/json"
 {%- else -%}
 "application/octet-stream"

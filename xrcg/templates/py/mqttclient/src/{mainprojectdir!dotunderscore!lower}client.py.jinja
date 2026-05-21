@@ -7,6 +7,15 @@ import typing
 from typing import Callable, Awaitable, Optional, Dict, List
 import asyncio
 import paho.mqtt.client as mqtt
+try:
+    # paho-mqtt 2.x exposes MQTT5 Properties for the PUBLISH packet type.
+    from paho.mqtt.properties import Properties as _MqttProperties
+    from paho.mqtt.packettypes import PacketTypes as _MqttPacketTypes
+    _MQTT5_AVAILABLE = True
+except Exception:  # pragma: no cover - paho < 2 fallback
+    _MqttProperties = None  # type: ignore
+    _MqttPacketTypes = None  # type: ignore
+    _MQTT5_AVAILABLE = False
 from cloudevents.conversion import to_binary, to_structured
 from cloudevents.http import CloudEvent
 import {{ data_project_name | dotunderscore | lower }}
@@ -65,32 +74,119 @@ def _extract_topic_parameters(topic: str, pattern: re.Pattern) -> Dict[str, str]
     return {}
 
 
+def _ce_headers_to_mqtt5_properties(headers: Dict[str, str]):
+    """Map CloudEvents binary-mode HTTP-style headers onto MQTT 5 PUBLISH properties.
+
+    Per the CloudEvents MQTT 5 protocol binding (binary mode):
+      * ``datacontenttype`` becomes the MQTT 5 Content Type property.
+      * Every other CloudEvents attribute becomes a User Property whose name
+        is the bare attribute name (no ``ce-`` prefix).
+
+    Returns ``None`` when paho's MQTT 5 properties API is unavailable so the
+    caller can degrade gracefully without crashing.
+    """
+    if not _MQTT5_AVAILABLE or _MqttProperties is None or _MqttPacketTypes is None:
+        return None
+    props = _MqttProperties(_MqttPacketTypes.PUBLISH)
+    user_properties: List[tuple] = []
+    for raw_key, raw_value in (headers or {}).items():
+        if raw_value is None:
+            continue
+        key = str(raw_key).lower()
+        value = raw_value if isinstance(raw_value, str) else str(raw_value)
+        if key in ("content-type", "datacontenttype"):
+            try:
+                props.ContentType = value
+            except Exception:
+                user_properties.append(("datacontenttype", value))
+            continue
+        if key.startswith("ce-"):
+            key = key[3:]
+        if key in ("data", "data_base64"):
+            continue
+        user_properties.append((key, value))
+    if user_properties:
+        props.UserProperty = user_properties
+    return props
+
+
+def _mqtt5_properties_to_ce_headers(properties) -> Dict[str, str]:
+    """Inverse of :func:`_ce_headers_to_mqtt5_properties` for the receive path."""
+    headers: Dict[str, str] = {}
+    if properties is None:
+        return headers
+    content_type = getattr(properties, "ContentType", None)
+    if content_type:
+        headers["content-type"] = content_type
+    user_props = getattr(properties, "UserProperty", None) or []
+    for entry in user_props:
+        try:
+            k, v = entry
+        except Exception:
+            continue
+        headers["ce-" + str(k).lower()] = str(v)
+    return headers
+
+
 class _ClientBase:
     """Base class for MQTT client with CloudEvent detection."""
     
     @staticmethod
     def _is_cloud_event(message: mqtt.MQTTMessage) -> bool:
-        """Check if the MQTT message contains a CloudEvent."""
+        """Check if the MQTT message contains a CloudEvent (structured or binary)."""
+        # Binary mode: MQTT 5 User Properties carry the CE attributes.
+        try:
+            props = getattr(message, "properties", None)
+            user_props = getattr(props, "UserProperty", None) if props is not None else None
+            if user_props:
+                keys = {str(k).lower() for k, _ in user_props}
+                if {"specversion", "type", "source", "id"}.issubset(keys):
+                    return True
+        except Exception:
+            pass
+        # Structured mode: JSON body with CE fields.
         try:
             if message.payload:
-                # Check for structured mode (JSON with CloudEvent fields)
                 if isinstance(message.payload, bytes):
                     payload_str = message.payload.decode('utf-8')
                     data = json.loads(payload_str)
                     return all(k in data for k in ['specversion', 'type', 'source', 'id'])
-                # Check for binary mode would require inspecting user properties (MQTT 5.0)
-                # For now, we focus on structured mode detection
             return False
         except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
             return False
-    
+
     @staticmethod
     def _cloud_event_from_message(message: mqtt.MQTTMessage) -> Optional[CloudEvent]:
-        """Extract CloudEvent from MQTT message (structured mode)."""
+        """Extract CloudEvent from MQTT message (structured or binary mode)."""
+        # Binary mode first - rebuild a CloudEvent from MQTT 5 user properties.
+        try:
+            props = getattr(message, "properties", None)
+            user_props = getattr(props, "UserProperty", None) if props is not None else None
+            if user_props:
+                attributes: Dict[str, str] = {}
+                for entry in user_props:
+                    try:
+                        k, v = entry
+                    except Exception:
+                        continue
+                    attributes[str(k).lower()] = str(v)
+                if {"specversion", "type", "source", "id"}.issubset(attributes.keys()):
+                    content_type = getattr(props, "ContentType", None)
+                    if content_type:
+                        attributes["datacontenttype"] = content_type
+                    payload = message.payload
+                    if isinstance(payload, bytes) and (content_type or "").lower().startswith("application/json"):
+                        try:
+                            payload = json.loads(payload.decode("utf-8"))
+                        except Exception:
+                            pass
+                    return CloudEvent(attributes, payload)
+        except Exception:
+            pass
+        # Fall back to structured mode (CE JSON in payload).
         try:
             if isinstance(message.payload, bytes):
                 payload_str = message.payload.decode('utf-8')
-                # Use CloudEvents library's from_json to properly deserialize
                 from cloudevents.http import from_json
                 event = from_json(payload_str)
                 return event
@@ -106,8 +202,15 @@ class _ClientBase:
 
 {#- Helper macro to get the default topic for a message -#}
 {%- macro get_default_topic(message, messageid) -%}
-{%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic -%}
-{{ message.protocoloptions.properties.topic.value }}
+{#- Per xRegistry message-spec MQTT/5.0 binding, protocoloptions exposes scalars directly:
+    {"qos": 1, "retain": false, "topic_name": "mytopic"}. We also accept "topic-name" and "topic"
+    spellings as backward-compatible fallbacks. -#}
+{%- if message.protocoloptions and message.protocoloptions.topic_name -%}
+{{ message.protocoloptions.topic_name }}
+{%- elif message.protocoloptions and message.protocoloptions['topic-name'] -%}
+{{ message.protocoloptions['topic-name'] }}
+{%- elif message.protocoloptions and message.protocoloptions.topic -%}
+{{ message.protocoloptions.topic }}
 {%- else -%}
 {{ messageid }}
 {%- endif -%}
@@ -304,6 +407,40 @@ class {{ class_name }}(_ClientBase):
             {%- endif %}
         {%- endif %}
     {%- endfor %}
+    {#- Also include URI template placeholders that appear in the message-level
+        MQTT topic uritemplate (protocoloptions.topic_name per spec) so the
+        publish method exposes every variable the topic requires. -#}
+    {%- set _topic_value = none -%}
+    {%- if message.protocoloptions and message.protocoloptions.topic_name -%}
+        {%- set _topic_value = message.protocoloptions.topic_name -%}
+    {%- elif message.protocoloptions and message.protocoloptions['topic-name'] -%}
+        {%- set _topic_value = message.protocoloptions['topic-name'] -%}
+    {%- elif message.protocoloptions and message.protocoloptions.topic -%}
+        {%- set _topic_value = message.protocoloptions.topic -%}
+    {%- endif -%}
+    {%- if _topic_value -%}
+        {%- set topic_phs = _topic_value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+        {%- if topic_phs %}
+            {%- for placeholder in topic_phs %}
+                {%- if placeholder not in uri_template_vars %}
+                    {%- set _ = uri_template_vars.append(placeholder) %}
+                {%- endif %}
+            {%- endfor %}
+        {%- endif %}
+    {%- endif %}
+    {#- Per-message QoS and retain defaults pulled from protocoloptions (direct scalars per spec). -#}
+    {%- set default_qos = 1 %}
+    {%- if message.protocoloptions and message.protocoloptions.qos is not none -%}
+        {%- set default_qos = message.protocoloptions.qos %}
+    {%- endif %}
+    {%- set default_retain = "False" %}
+    {%- if message.protocoloptions and message.protocoloptions.retain is not none -%}
+        {%- if message.protocoloptions.retain -%}
+            {%- set default_retain = "True" %}
+        {%- else -%}
+            {%- set default_retain = "False" %}
+        {%- endif %}
+    {%- endif %}
     async def publish_{{messagename.split('.')[-1]}}(self,
         {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.value -%}
         {%- if attribute.type != "uritemplate" -%}
@@ -315,6 +452,8 @@ class {{ class_name }}(_ClientBase):
         {%- endfor %}
         data: {{type_name}},
         topic: Optional[str] = None,
+        qos: Optional[int] = None,
+        retain: Optional[bool] = None,
         content_type: str = "application/json") -> None:
         """
         Publish the '{{ messageid }}' event to an MQTT topic.
@@ -328,12 +467,22 @@ class {{ class_name }}(_ClientBase):
         {%- for var in uri_template_vars %}
             {{ var | snake }}: URI template variable for '{{var}}'
         {%- endfor %}
-            data: The event data to be published
-            topic: Optional topic override. If not provided, uses default topic '{{ get_default_topic(message, messageid) }}'.
-            content_type: The content type for the event data
+            data: The event data to be published.
+            topic: Optional topic override. If not provided, uses default topic '{{ get_default_topic(message, messageid) }}'
+                with URI template placeholders substituted from the keyword arguments.
+            qos: Optional MQTT QoS override. If not provided, uses the message default ({{ default_qos }}).
+            retain: Optional MQTT retain flag override. If not provided, uses the message default ({{ default_retain }}).
+            content_type: The content type for the event data.
         """
         target_topic = topic if topic is not None else "{{ get_default_topic(message, messageid) }}"
-        
+        _topic_template_values: Dict[str, str] = {
+        {%- for var in uri_template_vars %}
+            "{{ var }}": str({{ var | snake }}),
+        {%- endfor %}
+        }
+        if _topic_template_values:
+            target_topic = _apply_topic_template(target_topic, _topic_template_values)
+
         attributes = {
         {%- for attrname, attribute in message.envelopemetadata.items() %}
              "{{ attrname }}":
@@ -359,17 +508,26 @@ class {{ class_name }}(_ClientBase):
         attributes["datacontenttype"] = content_type
         byte_data = data.to_byte_array(content_type) if data is not None else b''
         event = CloudEvent(attributes, byte_data)
-        
+
+        _effective_qos = {{ default_qos }} if qos is None else qos
+        _effective_retain = {{ default_retain }} if retain is None else retain
+
+        publish_kwargs: Dict[str, typing.Any] = {
+            "qos": _effective_qos,
+            "retain": _effective_retain,
+        }
+
         if self.content_mode == "structured":
-            headers, body = to_structured(event)
+            _headers, body = to_structured(event)
             payload = body
         else:
             headers, body = to_binary(event)
             payload = body
-            # Binary mode headers would go into MQTT 5.0 user properties
-            # For MQTT 3.1.1, we'll use structured mode
-        
-        self.client.publish(target_topic, payload, qos=1)
+            mqtt5_props = _ce_headers_to_mqtt5_properties(dict(headers or {}))
+            if mqtt5_props is not None:
+                publish_kwargs["properties"] = mqtt5_props
+
+        self.client.publish(target_topic, payload, **publish_kwargs)
 
     {% endfor %}
 {% endfor %}

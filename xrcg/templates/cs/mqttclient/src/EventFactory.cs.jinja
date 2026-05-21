@@ -198,47 +198,58 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {%- else -%}
         , string contentType = System.Net.Mime.MediaTypeNames.Application.Json
         {%- endif %}
-        {%- if is_cloudevent %}, CloudEventFormatter? formatter = null{% endif %})
+        {%- if is_cloudevent %}, CloudEventFormatter? formatter = null{% endif %}
+        , int? qosOverride = null
+        , bool? retainOverride = null)
         {
             {%- set is_mqtt_message = message.protocol and message.protocol.startswith("MQTT") and message.protocoloptions %}
             {%- set qos = message.protocoloptions['qos'] if is_mqtt_message else 0 %}
             {%- set retain = message.protocoloptions['retain'] if is_mqtt_message else false %}
-            {%- set topic_name = message.protocoloptions['topic-name'] if is_mqtt_message else "" %}
-            {%- set payload_format = message.protocoloptions['payload-format'] if is_mqtt_message else 0 %}
-            {%- set message_expiry_interval = message.protocoloptions['message-expiry-interval'] if is_mqtt_message else 0 %}
-            {%- set response_topic = message.protocoloptions['response-topic'] if is_mqtt_message else "" %}
-            {%- set correlation_data = message.protocoloptions['correlation-data'] if is_mqtt_message else "null" %}
-            {%- set content_type = message.protocoloptions['content-type'] if is_mqtt_message else "" %}
-            {%- set user_properties = message.protocoloptions['user-properties'] if is_mqtt_message else [] %}
+            {#- Prefer flat spec key topic_name, fall back to hyphenated topic-name, then legacy nested -#}
+            {%- set _tns = namespace(val="") %}
+            {%- if is_mqtt_message %}
+            {%- if message.protocoloptions.topic_name %}
+                {%- set _tns.val = message.protocoloptions.topic_name %}
+            {%- elif message.protocoloptions['topic-name'] %}
+                {%- set _tns.val = message.protocoloptions['topic-name'] %}
+            {%- elif message.protocoloptions.properties and message.protocoloptions.properties.topic %}
+                {%- set _tns.val = message.protocoloptions.properties.topic.value %}
+            {%- endif %}
+            {%- endif %}
+            {%- set payload_format = (message.protocoloptions['payload-format'] | default(0, true)) if is_mqtt_message else 0 %}
+            {%- set message_expiry_interval = (message.protocoloptions['message-expiry-interval'] | default(0, true)) if is_mqtt_message else 0 %}
+            {%- set response_topic = (message.protocoloptions['response-topic'] | default('', true)) if is_mqtt_message else "" %}
+            {%- set correlation_data = (message.protocoloptions['correlation-data'] | default('null', true)) if is_mqtt_message else "null" %}
+            {%- set user_properties = (message.protocoloptions.user_properties or message.protocoloptions['user_properties'] or message.protocoloptions['user-properties'] or []) if is_mqtt_message else [] %}
             var userProperties = new List<(string, string)>
             {%- if user_properties -%}
             {
-                {%- for prop in props -%}
-                {{"(" + prop[0] + ", " + prop[1] + ")"}}, 
+                {%- for prop in user_properties -%}
+                ("{{ prop.name }}", "{{ prop.value }}"),
                 {%- endfor -%}
             };
             {%- else -%}
             { };
             {%- endif -%}
-            {%- if topic_name %}
-            topicName = string.IsNullOrEmpty(topicName)?"{{ topic_name }}":topicName+"/{{ topic_name }}";
-            {%- endif %}
+            {#- topicName is supplied already-substituted by Producer; do not override here -#}
+            int effectiveQos = qosOverride ?? {{ qos }};
+            bool effectiveRetain = retainOverride ?? {{ "true" if retain else "false" }};
             {% if type_name != "byte[]" %}
             Serialize<{{ type_name }}>? bodySerializer = (formatter != null) ? null : ({{ type_name }} data, string contentType) => {
                 return data.ToByteArray(contentType);
             };
             {%- if is_cloudevent %}
             {{ cloudEvents.DeclareCloudNativeCloudEvent("cloudEvent", message) | indent(12) }}
-            return CreateMessage(topicName, {{ qos }}, {{ "true" if retain else "false" }}, {{ payload_format }}, {{ message_expiry_interval }}, "{{ response_topic }}", {{ correlation_data }}, {{ user_properties }}, cloudEvent, data, contentType, bodySerializer, formatter);
+            return CreateMessage(topicName, effectiveQos, effectiveRetain, {{ payload_format }}, {{ message_expiry_interval }}, "{{ response_topic }}", {{ correlation_data }}, userProperties, cloudEvent, data, contentType, bodySerializer, formatter);
             {%- elif is_raw_mqtt %}
-            return CreateMessage(topicName, {{ qos }}, {{ "true" if retain else "false" }}, {{ payload_format }}, {{ message_expiry_interval }}, "{{ response_topic }}", {{ correlation_data }}, {{ user_properties }}, null, data, contentType, bodySerializer, null);
+            return CreateMessage(topicName, effectiveQos, effectiveRetain, {{ payload_format }}, {{ message_expiry_interval }}, "{{ response_topic }}", {{ correlation_data }}, userProperties, null, data, contentType, bodySerializer, null);
             {%- endif %}
             {% else %}
             {%- if is_cloudevent %}
             {{ cloudEvents.DeclareCloudNativeCloudEvent("cloudEvent", message) | indent(12) }}
-            return CreateMessage(topicName, {{ qos }}, {{ "true" if retain else "false" }}, {{ payload_format }}, {{ message_expiry_interval }}, "{{ response_topic }}", {{ correlation_data }}, {{ user_properties }}, cloudEvent, data, contentType, null, formatter);
+            return CreateMessage(topicName, effectiveQos, effectiveRetain, {{ payload_format }}, {{ message_expiry_interval }}, "{{ response_topic }}", {{ correlation_data }}, userProperties, cloudEvent, data, contentType, null, formatter);
             {%- elif is_raw_mqtt %}
-            return CreateMessage(topicName, {{ qos }}, {{ "true" if retain else "false" }}, {{ payload_format }}, {{ message_expiry_interval }}, "{{ response_topic }}", {{ correlation_data }}, {{ user_properties }}, null, data, contentType, null, null);
+            return CreateMessage(topicName, effectiveQos, effectiveRetain, {{ payload_format }}, {{ message_expiry_interval }}, "{{ response_topic }}", {{ correlation_data }}, userProperties, null, data, contentType, null, null);
             {%- endif %}
             {% endif %}
         }

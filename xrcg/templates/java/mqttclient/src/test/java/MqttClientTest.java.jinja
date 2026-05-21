@@ -1,5 +1,4 @@
 {%- import "cloudevents.jinja.include" as cloudEvents -%}
-{%- import "mqtt.jinja.include" as mqtt -%}
 {%- import "util.jinja.include" as util -%}
 {{ util.CommonFileHeader() }}
 
@@ -14,33 +13,44 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-import org.eclipse.paho.client.mqttv3.*;
+import org.eclipse.paho.mqttv5.client.IMqttToken;
+import org.eclipse.paho.mqttv5.client.MqttCallback;
+import org.eclipse.paho.mqttv5.client.MqttClient;
+import org.eclipse.paho.mqttv5.client.MqttConnectionOptions;
+import org.eclipse.paho.mqttv5.client.MqttDisconnectResponse;
+import org.eclipse.paho.mqttv5.common.MqttException;
+import org.eclipse.paho.mqttv5.common.MqttMessage;
+import org.eclipse.paho.mqttv5.common.packet.MqttProperties;
+import org.eclipse.paho.mqttv5.common.packet.UserProperty;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Integration tests for MQTT client using Testcontainers with Eclipse Mosquitto
+ * Integration tests for MQTT 5.0 client using Testcontainers with Eclipse Mosquitto.
  */
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class MqttClientTest {
     private static final Logger logger = LogManager.getLogger(MqttClientTest.class);
-    
+
     @Container
     private static final GenericContainer<?> mosquittoContainer = new GenericContainer<>(DockerImageName.parse("eclipse-mosquitto:2.0"))
         .withExposedPorts(1883)
         .withCommand("mosquitto", "-c", "/mosquitto-no-auth.conf")
         .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(30)));
-    
+
     private String brokerUrl;
-    
+
     @BeforeAll
     public void setUp() {
         String host = mosquittoContainer.getHost();
@@ -48,103 +58,336 @@ public class MqttClientTest {
         brokerUrl = String.format("tcp://%s:%d", host, port);
         logger.info("Mosquitto broker started at {}", brokerUrl);
     }
-    
+
+    {%- macro get_default_topic(message, messageid) -%}
+    {%- if message.protocoloptions and message.protocoloptions.topic_name -%}
+    {{ message.protocoloptions.topic_name }}
+    {%- elif message.protocoloptions and message.protocoloptions['topic-name'] -%}
+    {{ message.protocoloptions['topic-name'] }}
+    {%- elif message.protocoloptions and message.protocoloptions.topic -%}
+    {{ message.protocoloptions.topic }}
+    {%- else -%}
+    {{ messageid }}
+    {%- endif -%}
+    {%- endmacro -%}
+
     {%- for messagegroupid, messagegroup in messagegroups.items() %}
     {%- set pascal_group_name = messagegroupid | pascal %}
     {%- set producer_class = (pascal_group_name | strip_namespace) + "Producer" %}
     {%- set consumer_class = (pascal_group_name | strip_namespace) + "Consumer" %}
     {%- set group_package = (package_name ~ "." ~ messagegroupid) | lower | replace('-', '_') %}
-    
+
     {%- for messageid, message in messagegroup.messages.items() %}
     {%- set messagename = messageid | pascal | strip_namespace %}
     {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
-    {%- if message.binding and message.binding.mqtt and message.binding.mqtt.topic %}
-    {%- set topic = message.binding.mqtt.topic %}
-    {%- elif message.metadata and message.metadata.attributes and message.metadata.attributes["topic-name"] %}
-    {%- set topic = message.metadata.attributes["topic-name"].value %}
-    {%- else %}
-    {%- set topic = messageid %}
+    {%- set default_topic = get_default_topic(message, messageid) %}
+    {%- set topic_template_vars = [] %}
+    {%- for ph in default_topic | regex_search('\\\\{([A-Za-z0-9_]+)\\\\}') %}
+    {%- if ph not in topic_template_vars %}{%- set _ = topic_template_vars.append(ph) %}{%- endif %}
+    {%- endfor %}
+    {%- set uri_template_vars = [] %}
+    {%- if message.envelopemetadata %}
+    {%- for attrname, attribute in message.envelopemetadata.items() %}
+    {%- if attribute.type == "uritemplate" and attribute.value %}
+    {%- for ph in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+    {%- if ph not in uri_template_vars %}{%- set _ = uri_template_vars.append(ph) %}{%- endif %}
+    {%- endfor %}
     {%- endif %}
-    
+    {%- endfor %}
+    {%- endif %}
+    {%- for ph in default_topic | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+    {%- if ph not in uri_template_vars %}{%- set _ = uri_template_vars.append(ph) %}{%- endif %}
+    {%- endfor %}
+    {%- if message.envelopemetadata %}
+    {%- for attrname, attribute in message.envelopemetadata.items() %}
+    {%- if 'value' not in attribute and attrname not in ["id", "time", "datacontenttype", "dataschema"] %}
+    {%- if attrname not in uri_template_vars %}{%- set _ = uri_template_vars.append(attrname) %}{%- endif %}
+    {%- endif %}
+    {%- endfor %}
+    {%- endif %}
+    {%- set sub_topic = default_topic | regex_replace('\\{[A-Za-z0-9_]+\\}', '+') %}
+
     @Test
-    @DisplayName("Test {{ messagename }} message publish and consume")
-    public void test{{ messagename }}Message() throws Exception {
-        logger.info("Starting test{{ messagename }}Message");
-        
-        final CountDownLatch latch = new CountDownLatch(5);
-        final List<{{ message_body_type }}> receivedMessages = new ArrayList<>();
-        
-        // Create consumer with test handler
+    @DisplayName("MQTT 5 binary CloudEvents round trip for {{ messagename }}")
+    public void test{{ messagename }}BinaryCloudEventRoundTrip() throws Exception {
+        CountDownLatch latch = new CountDownLatch(1);
+        List<{{ message_body_type }}> receivedMessages = new ArrayList<>();
+        List<String> receivedTopics = new ArrayList<>();
+        List<Map<String, String>> receivedTopicParameters = new ArrayList<>();
+        AtomicReference<MqttMessage> rawMessage = new AtomicReference<>();
+        CountDownLatch rawLatch = new CountDownLatch(1);
+
         {{ group_package }}.{{ consumer_class }} messageConsumer = new {{ group_package }}.{{ consumer_class }}() {
+            {%- for handler_messageid, handler_message in messagegroup.messages.items() %}
+            {%- set handler_messagename = handler_messageid | pascal | strip_namespace %}
+            {%- set handler_message_body_type = util.get_data_type(data_project_name, root, handler_message) %}
             @Override
-            protected void on{{ messagename }}({{ message_body_type }} data, String topic, Map<String, String> topicParameters) {
-                logger.info("Received {{ messagename }} message from topic {} with params {}", topic, topicParameters);
+            protected void on{{ handler_messagename }}({{ handler_message_body_type }} data, String topic, Map<String, String> topicParameters) {
+                {%- if handler_messageid == messageid %}
                 receivedMessages.add(data);
+                receivedTopics.add(topic);
+                receivedTopicParameters.add(topicParameters);
                 latch.countDown();
+                {%- else %}
+                logger.info("Received {{ handler_messagename }} message while testing {{ messagename }}");
+                {%- endif %}
             }
-            
-            {%- for other_messageid, other_message in messagegroup.messages.items() %}
-            {%- if other_messageid != messageid %}
-            {%- set other_messagename = other_messageid | pascal | strip_namespace %}
-            {%- set other_message_body_type = util.get_data_type(data_project_name, root, other_message) %}
-            @Override
-            protected void on{{ other_messagename }}({{ other_message_body_type }} data, String topic, Map<String, String> topicParameters) {
-                logger.info("Received {{ other_messagename }} message (not expected in this test)");
-            }
-            {%- endif %}
             {%- endfor %}
         };
-        
-        // Create and start consumer
+
         MqttEventClient consumer = MqttEventClient.createConsumerFor{{ pascal_group_name | strip_namespace }}(
             messageConsumer,
             brokerUrl,
             "test-consumer-" + UUID.randomUUID(),
-            new String[]{"{{ topic }}"}
+            {{ group_package }}.{{ consumer_class }}.getSubscriptionTopics().toArray(new String[0])
         );
-        
+
+        MqttClient rawClient = createConnectedClient("raw-capture-" + UUID.randomUUID());
+        rawClient.setCallback(new CapturingCallback(rawMessage, rawLatch));
+        rawClient.subscribe("{{ sub_topic }}", 1);
+
         try {
-            // Give consumer time to subscribe
             Thread.sleep(1000);
-            
-            // Create producer and send message
-            {{ group_package }}.{{ producer_class }} producer = MqttEventClient.createProducerFor{{ pascal_group_name | strip_namespace }}(
-                brokerUrl,
-                "test-producer-" + UUID.randomUUID()
-            );
-            
+            MqttClient mqttClient = createConnectedClient("test-producer-" + UUID.randomUUID());
+            {{ group_package }}.{{ producer_class }} producer = new {{ group_package }}.{{ producer_class }}(mqttClient);
             try {
-                // Create test data
                 {%- if message_body_type == 'byte[]' %}
                 byte[] testData = "test data".getBytes();
                 {%- else %}
-                {{ message_body_type }} testData = new {{ message_body_type }}();
-                // TODO: Initialize testData fields with test values
+                {{ message_body_type }} testData = createTestData({{ message_body_type }}.class);
                 {%- endif %}
-                
-                // Send 5 messages
-                for (int i = 0; i < 5; i++) {
-                    producer.send{{ messagename }}(testData);
-                }
-                logger.info("5 test messages sent to topic {{ topic }}");
-                
-                // Wait for messages to be consumed
-                boolean messagesReceived = latch.await(15, TimeUnit.SECONDS);
-                
-                assertTrue(messagesReceived, "{{ messagename }} messages should be received within 15 seconds");
-                assertEquals(5, receivedMessages.size(), "Should receive exactly 5 messages");
-                assertNotNull(receivedMessages.get(0), "Received message should not be null");
-                
-                logger.info("{{ messagename }} message test completed successfully");
-                
+                String expectedTopic = applyTopicTemplate("{{ default_topic }}"{% for ph in uri_template_vars %}, "{{ ph }}", "{{ ph }}Value"{% endfor %});
+
+                producer.send{{ messagename }}(testData{% for ph in uri_template_vars %}, "{{ ph }}Value"{% endfor %});
+
+                assertTrue(latch.await(20, TimeUnit.SECONDS), "{{ messagename }} should round-trip through Mosquitto");
+                assertEquals(1, receivedMessages.size(), "Should receive exactly one {{ messagename }} message");
+                assertEquals(expectedTopic, receivedTopics.get(0), "Topic template placeholders should be substituted");
+                {%- for ph in topic_template_vars %}
+                assertEquals("{{ ph }}Value", receivedTopicParameters.get(0).get("{{ ph }}"), "Topic parameter {{ ph }} should be extracted");
+                {%- endfor %}
+
+                assertTrue(rawLatch.await(20, TimeUnit.SECONDS), "Raw MQTT message should be captured");
+                assertCloudEventBinaryProperties(rawMessage.get(), {{ 'true' if message.envelopemetadata and 'datacontenttype' in message.envelopemetadata else 'false' }});
             } finally {
                 producer.close();
             }
         } finally {
+            rawClient.disconnect();
+            rawClient.close();
             consumer.close();
         }
     }
-    
-    {% endfor %}
-    {% endfor %}
+
+    @Test
+    @DisplayName("MQTT 5 QoS retain override and topic substitution for {{ messagename }}")
+    public void test{{ messagename }}QosRetainOverrideAndTopicSubstitution() throws Exception {
+        AtomicReference<MqttMessage> rawMessage = new AtomicReference<>();
+        CountDownLatch rawLatch = new CountDownLatch(1);
+        MqttClient rawClient = createConnectedClient("override-capture-" + UUID.randomUUID());
+        rawClient.setCallback(new CapturingCallback(rawMessage, rawLatch));
+        rawClient.subscribe("{{ sub_topic }}", 1);
+
+        try {
+            Thread.sleep(1000);
+            MqttClient mqttClient = createConnectedClient("override-producer-" + UUID.randomUUID());
+            {{ group_package }}.{{ producer_class }} producer = new {{ group_package }}.{{ producer_class }}(mqttClient);
+            try {
+                {%- if message_body_type == 'byte[]' %}
+                byte[] testData = "test data".getBytes();
+                {%- else %}
+                {{ message_body_type }} testData = createTestData({{ message_body_type }}.class);
+                {%- endif %}
+                String expectedTopic = applyTopicTemplate("{{ default_topic }}"{% for ph in uri_template_vars %}, "{{ ph }}", "override{{ loop.index }}"{% endfor %});
+
+                producer.send{{ messagename }}(testData{% for ph in uri_template_vars %}, "override{{ loop.index }}"{% endfor %}, null, 1, false);
+
+                assertTrue(rawLatch.await(20, TimeUnit.SECONDS), "Override message should be captured");
+                assertNotNull(rawMessage.get(), "Captured MQTT message should not be null");
+                assertEquals(1, rawMessage.get().getQos(), "Per-call QoS override should be applied");
+                assertFalse(rawMessage.get().isRetained(), "Per-call retain override should be applied");
+            } finally {
+                producer.close();
+            }
+        } finally {
+            rawClient.disconnect();
+            rawClient.close();
+        }
+    }
+    {%- endfor %}
+    {%- endfor %}
+
+    private MqttClient createConnectedClient(String clientId) throws MqttException {
+        MqttClient mqttClient = new MqttClient(brokerUrl, clientId);
+        MqttConnectionOptions opts = new MqttConnectionOptions();
+        opts.setCleanStart(true);
+        opts.setAutomaticReconnect(false);
+        mqttClient.connect(opts);
+        return mqttClient;
+    }
+
+    private static void assertCloudEventBinaryProperties(MqttMessage message, boolean expectContentType) {
+        assertNotNull(message, "MQTT message should not be null");
+        MqttProperties props = message.getProperties();
+        assertNotNull(props, "MQTT 5 properties should be present");
+        if (expectContentType) {
+            assertNotNull(props.getContentType(), "CloudEvents datacontenttype should map to MQTT contentType");
+        }
+        Set<String> keys = new HashSet<>();
+        List<UserProperty> userProperties = props.getUserProperties();
+        assertNotNull(userProperties, "CloudEvents attributes should be MQTT user properties");
+        for (UserProperty up : userProperties) {
+            keys.add(up.getKey().toLowerCase());
+        }
+        assertTrue(keys.containsAll(Arrays.asList("specversion", "id", "type", "source")), "Required CloudEvents attributes should be user properties");
+    }
+
+    private static String applyTopicTemplate(String topicPattern, Object... kvPairs) {
+        String result = topicPattern;
+        for (int i = 0; i + 1 < kvPairs.length; i += 2) {
+            result = result.replace("{" + kvPairs[i] + "}", String.valueOf(kvPairs[i + 1]));
+        }
+        return result;
+    }
+
+    private static <T> T createTestData(Class<T> clazz) throws Exception {
+        T instance = clazz.getDeclaredConstructor().newInstance();
+        populateAvroLike(instance);
+        populateFields(instance);
+        return instance;
+    }
+
+    private static void populateAvroLike(Object instance) {
+        try {
+            Method getSchema = instance.getClass().getMethod("getSchema");
+            Object schema = getSchema.invoke(instance);
+            Method getFields = schema.getClass().getMethod("getFields");
+            List<?> fields = (List<?>) getFields.invoke(schema);
+            Method put = instance.getClass().getMethod("put", int.class, Object.class);
+            for (int i = 0; i < fields.size(); i++) {
+                Object field = fields.get(i);
+                Method nameMethod = field.getClass().getMethod("name");
+                Method schemaMethod = field.getClass().getMethod("schema");
+                String fieldName = String.valueOf(nameMethod.invoke(field));
+                Object fieldSchema = schemaMethod.invoke(field);
+                put.invoke(instance, i, sampleValue(fieldName, fieldSchema));
+            }
+        } catch (Exception ignored) {
+            // Not an Avro-like generated type.
+        }
+    }
+
+    private static void populateFields(Object instance) {
+        for (Field field : instance.getClass().getDeclaredFields()) {
+            if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                continue;
+            }
+            try {
+                field.setAccessible(true);
+                if (field.get(instance) == null || field.getType().isPrimitive()) {
+                    field.set(instance, sampleValueForType(field.getName(), field.getType()));
+                }
+            } catch (Exception ignored) {
+                // Best-effort population for generated data models.
+            }
+        }
+    }
+
+    private static Object sampleValue(String fieldName, Object schema) throws Exception {
+        Object type = schema.getClass().getMethod("getType").invoke(schema);
+        String typeName = String.valueOf(type);
+        if ("UNION".equals(typeName)) {
+            List<?> types = (List<?>) schema.getClass().getMethod("getTypes").invoke(schema);
+            for (Object candidate : types) {
+                Object candidateType = candidate.getClass().getMethod("getType").invoke(candidate);
+                if (!"NULL".equals(String.valueOf(candidateType))) {
+                    return sampleValue(fieldName, candidate);
+                }
+            }
+            return null;
+        }
+        switch (typeName) {
+            case "STRING": return fieldName + "Value";
+            case "INT": return 42;
+            case "LONG": return 42L;
+            case "FLOAT": return 42.0f;
+            case "DOUBLE": return 42.0d;
+            case "BOOLEAN": return true;
+            case "BYTES": return java.nio.ByteBuffer.wrap("bytes".getBytes());
+            case "ARRAY": return new java.util.ArrayList<>();
+            case "MAP": return new java.util.HashMap<>();
+            case "RECORD":
+                try {
+                    String fullName = (String) schema.getClass().getMethod("getFullName").invoke(schema);
+                    Class<?> recordClass = Class.forName(fullName);
+                    Object nested = recordClass.getDeclaredConstructor().newInstance();
+                    populateAvroLike(nested);
+                    populateFields(nested);
+                    return nested;
+                } catch (Exception e) {
+                    return null;
+                }
+            default: return null;
+        }
+    }
+
+    private static Object sampleValueForType(String fieldName, Class<?> type) {
+        if (type == String.class) return fieldName + "Value";
+        if (type == int.class || type == Integer.class) return 42;
+        if (type == long.class || type == Long.class) return 42L;
+        if (type == float.class || type == Float.class) return 42.0f;
+        if (type == double.class || type == Double.class) return 42.0d;
+        if (type == boolean.class || type == Boolean.class) return true;
+        if (type == byte[].class) return "bytes".getBytes();
+        if (type.isEnum()) {
+            Object[] constants = type.getEnumConstants();
+            return (constants != null && constants.length > 0) ? constants[0] : null;
+        }
+        if (java.util.List.class.isAssignableFrom(type)) return new java.util.ArrayList<>();
+        if (java.util.Map.class.isAssignableFrom(type)) return new java.util.HashMap<>();
+        try {
+            Object nested = type.getDeclaredConstructor().newInstance();
+            populateAvroLike(nested);
+            populateFields(nested);
+            return nested;
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private static class CapturingCallback implements MqttCallback {
+        private final AtomicReference<MqttMessage> rawMessage;
+        private final CountDownLatch latch;
+
+        CapturingCallback(AtomicReference<MqttMessage> rawMessage, CountDownLatch latch) {
+            this.rawMessage = rawMessage;
+            this.latch = latch;
+        }
+
+        @Override
+        public void disconnected(MqttDisconnectResponse disconnectResponse) {
+        }
+
+        @Override
+        public void mqttErrorOccurred(MqttException exception) {
+            logger.error("MQTT capture error", exception);
+        }
+
+        @Override
+        public void messageArrived(String topic, MqttMessage message) {
+            rawMessage.set(message);
+            latch.countDown();
+        }
+
+        @Override
+        public void deliveryComplete(IMqttToken token) {
+        }
+
+        @Override
+        public void connectComplete(boolean reconnect, String serverURI) {
+        }
+
+        @Override
+        public void authPacketArrived(int reasonCode, MqttProperties properties) {
+        }
+    }
 }

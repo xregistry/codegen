@@ -1,17 +1,28 @@
 {%- import 'util.jinja.include' as util -%}
 {%- import 'cloudevents.jinja.include' as cloudEvents -%}
-{%- import 'mqtt.jinja.include' as mqtt -%}
 {{ util.CommonFileHeader() }}
 
 {%- set messagegroups = root.messagegroups %}
 {%- set package_name = project_name | lower | replace('-', '_') %}
+{%- set uses_cloudevents = cloudEvents.usesCloudEvents(root) %}
 
 {% for messagegroupid, messagegroup in messagegroups.items() -%}
 {%- set groupname = messagegroupid | pascal -%}
 {%- set group_package = (package_name ~ "." ~ messagegroupid) | lower | replace('-', '_') %}
 package {{ group_package }};
 
-import org.eclipse.paho.client.mqttv3.*;
+import org.eclipse.paho.mqttv5.client.MqttClient;
+import org.eclipse.paho.mqttv5.common.MqttException;
+import org.eclipse.paho.mqttv5.common.MqttMessage;
+{%- if uses_cloudevents %}
+import org.eclipse.paho.mqttv5.common.packet.MqttProperties;
+import org.eclipse.paho.mqttv5.common.packet.UserProperty;
+import io.cloudevents.CloudEvent;
+import io.cloudevents.core.builder.CloudEventBuilder;
+import io.cloudevents.core.data.BytesCloudEventData;
+import java.util.ArrayList;
+import java.util.List;
+{%- endif %}
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -26,28 +37,28 @@ import {{ message_body_type.rsplit('.', 1)[0] }}.*;
 
 {#- Helper macro to get the default topic for a message -#}
 {%- macro get_default_topic(message, messageid) -%}
-{%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic -%}
-{{ message.protocoloptions.properties.topic.value }}
-{%- elif message.binding and message.binding.mqtt and message.binding.mqtt.topic -%}
-{{ message.binding.mqtt.topic }}
-{%- elif message.metadata and message.metadata.attributes and message.metadata.attributes["topic-name"] -%}
-{{ message.metadata.attributes["topic-name"].value }}
+{%- if message.protocoloptions and message.protocoloptions.topic_name -%}
+{{ message.protocoloptions.topic_name }}
+{%- elif message.protocoloptions and message.protocoloptions['topic-name'] -%}
+{{ message.protocoloptions['topic-name'] }}
+{%- elif message.protocoloptions and message.protocoloptions.topic -%}
+{{ message.protocoloptions.topic }}
 {%- else -%}
 {{ messageid }}
 {%- endif -%}
 {%- endmacro -%}
 
 /**
- * MQTT Producer for {{ messagegroupid }} message group.
+ * MQTT 5.0 Producer for {{ messagegroupid }} message group.
  */
 public class {{ producer_class }} implements AutoCloseable {
     private static final Logger logger = LogManager.getLogger({{ producer_class }}.class);
-    
+
     private final MqttClient mqttClient;
 
     /**
      * Creates a new producer.
-     * 
+     *
      * @param mqttClient The MQTT client to use for publishing
      */
     public {{ producer_class }}(MqttClient mqttClient) {
@@ -58,60 +69,120 @@ public class {{ producer_class }} implements AutoCloseable {
     {%- set messagename = messageid | pascal | strip_namespace %}
     {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
     {%- set default_topic = get_default_topic(message, messageid) %}
+    {%- set uri_template_vars = [] %}
+    {%- if message.envelopemetadata %}
+    {%- for attrname, attribute in message.envelopemetadata.items() %}
+    {%- if attribute.type == "uritemplate" and attribute.value %}
+    {%- for ph in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+    {%- if ph not in uri_template_vars %}{%- set _ = uri_template_vars.append(ph) %}{%- endif %}
+    {%- endfor %}
+    {%- endif %}
+    {%- endfor %}
+    {%- endif %}
+    {%- set _topic_val = default_topic %}
+    {%- for ph in _topic_val | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+    {%- if ph not in uri_template_vars %}{%- set _ = uri_template_vars.append(ph) %}{%- endif %}
+    {%- endfor %}
+    {%- if message.envelopemetadata %}
+    {%- for attrname, attribute in message.envelopemetadata.items() %}
+    {%- if 'value' not in attribute and attrname not in ["id", "time", "datacontenttype", "dataschema"] %}
+    {%- if attrname not in uri_template_vars %}{%- set _ = uri_template_vars.append(attrname) %}{%- endif %}
+    {%- endif %}
+    {%- endfor %}
+    {%- endif %}
+    {%- set default_qos = 1 %}
+    {%- if message.protocoloptions and message.protocoloptions.qos is not none %}
+    {%- set default_qos = message.protocoloptions.qos %}
+    {%- endif %}
+    {%- set default_retain_val = "false" %}
+    {%- if message.protocoloptions and message.protocoloptions.retain is not none %}
+    {%- if message.protocoloptions.retain %}
+    {%- set default_retain_val = "true" %}
+    {%- else %}
+    {%- set default_retain_val = "false" %}
+    {%- endif %}
+    {%- endif %}
 
     /**
      * Send {{ messagename }} message to MQTT topic.
-     * 
+     *
      * @param data The message data to send
      * @param topic Optional topic override. If null, uses default topic '{{ default_topic }}'.
-     * @param qos Quality of Service (0, 1, or 2)
+     * @param qos Optional QoS override. If null, uses default QoS {{ default_qos }}.
+     * @param retain Optional retained flag override. If null, uses default retained flag {{ default_retain_val }}.
      * @throws MqttException if publishing fails
      {%- if message_body_type != "byte[]" %}
      * @throws Exception if serialization fails
      {%- endif %}
      */
-    public void send{{ messagename }}({{ message_body_type }} data, String topic, int qos) throws {% if message_body_type != "byte[]" %}Exception{% else %}MqttException{% endif %} {
-        String targetTopic = (topic != null && !topic.isEmpty()) ? topic : "{{ default_topic }}";
-        
+    public void send{{ messagename }}({{ message_body_type }} data{% for ph in uri_template_vars %}, String {{ ph }}{% endfor %}, String topic, Integer qos, Boolean retain) throws {% if message_body_type != "byte[]" %}Exception{% else %}MqttException{% endif %} {
+        String topicPattern = (topic != null && !topic.isEmpty()) ? topic : "{{ default_topic }}";
+        String targetTopic = applyTopicTemplate(topicPattern{% for ph in uri_template_vars %}, "{{ ph }}", {{ ph }}{% endfor %});
+        int effectiveQos = qos != null ? qos : {{ default_qos }};
+        boolean effectiveRetain = retain != null ? retain : {{ default_retain_val }};
         {%- if message_body_type == "byte[]" %}
-        byte[] payload = data;
+        byte[] dataBytes = data;
         {%- else %}
-        byte[] payload = data.toByteArray("application/json");
+        byte[] dataBytes = data.toByteArray({{ cloudEvents.GetContentType(message) }});
         {%- endif %}
-        MqttMessage message = new MqttMessage(payload);
-        message.setQos(qos);
-        mqttClient.publish(targetTopic, message);
-        logger.debug("Published {{ messagename }} to topic {}", targetTopic);
+
+        MqttMessage mqttMessage = new MqttMessage(dataBytes);
+        mqttMessage.setQos(effectiveQos);
+        mqttMessage.setRetained(effectiveRetain);
+        {%- if message.envelopemetadata %}
+        {{ cloudEvents.BuildCloudEvent(message, "dataBytes") | indent(8) }}
+        mqttMessage.setProperties(buildBinaryModeProperties(cloudEvent));
+        {%- endif %}
+        mqttClient.publish(targetTopic, mqttMessage);
+        logger.debug("Published {{ messagename }} to topic {} with QoS {} retained {}", targetTopic, effectiveQos, effectiveRetain);
     }
 
     /**
-     * Send {{ messagename }} message with QoS 1 to default topic.
-     * 
+     * Send {{ messagename }} message to the default topic using default QoS and retain settings.
+     *
      * @param data The message data to send
+     {%- for ph in uri_template_vars %}
+     * @param {{ ph }} Topic or CloudEvents URI template value
+     {%- endfor %}
      * @throws MqttException if publishing fails
      {%- if message_body_type != "byte[]" %}
      * @throws Exception if serialization fails
      {%- endif %}
      */
-    public void send{{ messagename }}({{ message_body_type }} data) throws {% if message_body_type != "byte[]" %}Exception{% else %}MqttException{% endif %} {
-        send{{ messagename }}(data, null, 1);
-    }
-
-    /**
-     * Send {{ messagename }} message with QoS 1.
-     * 
-     * @param data The message data to send
-     * @param topic Optional topic override. If null, uses default topic '{{ default_topic }}'.
-     * @throws MqttException if publishing fails
-     {%- if message_body_type != "byte[]" %}
-     * @throws Exception if serialization fails
-     {%- endif %}
-     */
-    public void send{{ messagename }}({{ message_body_type }} data, String topic) throws {% if message_body_type != "byte[]" %}Exception{% else %}MqttException{% endif %} {
-        send{{ messagename }}(data, topic, 1);
+    public void send{{ messagename }}({{ message_body_type }} data{% for ph in uri_template_vars %}, String {{ ph }}{% endfor %}) throws {% if message_body_type != "byte[]" %}Exception{% else %}MqttException{% endif %} {
+        send{{ messagename }}(data{% for ph in uri_template_vars %}, {{ ph }}{% endfor %}, null, null, null);
     }
     {%- endfor %}
 
+    private static String applyTopicTemplate(String topicPattern, Object... kvPairs) {
+        String result = topicPattern;
+        for (int i = 0; i + 1 < kvPairs.length; i += 2) {
+            result = result.replace("{" + kvPairs[i] + "}", String.valueOf(kvPairs[i + 1]));
+        }
+        return result;
+    }
+
+    {%- if uses_cloudevents %}
+    private static MqttProperties buildBinaryModeProperties(CloudEvent ce) {
+        MqttProperties props = new MqttProperties();
+        List<UserProperty> userProps = new ArrayList<>();
+        userProps.add(new UserProperty("specversion", ce.getSpecVersion().toString()));
+        userProps.add(new UserProperty("id", ce.getId()));
+        userProps.add(new UserProperty("type", ce.getType()));
+        userProps.add(new UserProperty("source", ce.getSource().toString()));
+        if (ce.getTime() != null) userProps.add(new UserProperty("time", ce.getTime().toString()));
+        if (ce.getSubject() != null) userProps.add(new UserProperty("subject", ce.getSubject()));
+        if (ce.getDataSchema() != null) userProps.add(new UserProperty("dataschema", ce.getDataSchema().toString()));
+        for (String extName : ce.getExtensionNames()) {
+            Object extVal = ce.getExtension(extName);
+            if (extVal != null) userProps.add(new UserProperty(extName, extVal.toString()));
+        }
+        props.setUserProperties(userProps);
+        if (ce.getDataContentType() != null) props.setContentType(ce.getDataContentType());
+        return props;
+    }
+
+    {%- endif %}
     @Override
     public void close() {
         try {

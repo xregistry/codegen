@@ -344,6 +344,13 @@ def test_mqttclient_lightbulb_ts():
                         tmpdirname, "TestProject", "mqttclient")
 
 
+def test_mqttclient_protocoloptions_ts():
+    """ Test the MQTT client for MQTT/5.0 protocoloptions fixture (broker-backed)."""
+    tmpdirname = tempfile.mkdtemp()
+    run_typescript_test(os.path.join(project_root, "test/xreg/mqtt-protocoloptions.xreg.json".replace(
+            '/', os.sep)), tmpdirname, "TestProject", "mqttclient")
+
+
 def test_egproducer_contoso_erp_ts():
     """ Test the Event Grid producer for Contoso ERP."""
     tmpdirname = tempfile.mkdtemp()
