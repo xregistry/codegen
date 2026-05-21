@@ -1,4 +1,5 @@
 {%- import 'util.jinja.include' as util -%}
+{%- import 'cloudevents.jinja.include' as cloudEvents -%}
 {{ util.CommonFileHeader() }}
 
 {%- set messagegroups = root.messagegroups %}
@@ -184,7 +185,7 @@ public abstract class {{ consumer_class }} {
                     {%- if message_body_type == 'byte[]' %}
                     byte[] data = dataPayload;
                     {%- else %}
-                    {{ message_body_type }} data = {{ message_body_type }}.fromData(dataPayload, cloudEvent.getDataContentType() != null ? cloudEvent.getDataContentType() : "application/json");
+                    {{ message_body_type }} data = {{ message_body_type }}.fromData(dataPayload, cloudEvent.getDataContentType() != null ? cloudEvent.getDataContentType() : {{ cloudEvents.GetContentType(message) }});
                     {%- endif %}
                     Map<String, String> topicParams = extractTopicParameters(topic, "{{ messageid }}");
                     on{{ messagename }}(data, topic, topicParams);

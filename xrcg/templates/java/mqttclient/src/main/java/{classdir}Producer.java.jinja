@@ -83,6 +83,13 @@ public class {{ producer_class }} implements AutoCloseable {
     {%- for ph in _topic_val | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
     {%- if ph not in uri_template_vars %}{%- set _ = uri_template_vars.append(ph) %}{%- endif %}
     {%- endfor %}
+    {%- if message.envelopemetadata %}
+    {%- for attrname, attribute in message.envelopemetadata.items() %}
+    {%- if 'value' not in attribute and attrname not in ["id", "time", "datacontenttype", "dataschema"] %}
+    {%- if attrname not in uri_template_vars %}{%- set _ = uri_template_vars.append(attrname) %}{%- endif %}
+    {%- endif %}
+    {%- endfor %}
+    {%- endif %}
     {%- set default_qos = 1 %}
     {%- if message.protocoloptions and message.protocoloptions.qos is not none %}
     {%- set default_qos = message.protocoloptions.qos %}

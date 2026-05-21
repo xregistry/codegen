@@ -98,6 +98,13 @@ public class MqttClientTest {
     {%- for ph in default_topic | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
     {%- if ph not in uri_template_vars %}{%- set _ = uri_template_vars.append(ph) %}{%- endif %}
     {%- endfor %}
+    {%- if message.envelopemetadata %}
+    {%- for attrname, attribute in message.envelopemetadata.items() %}
+    {%- if 'value' not in attribute and attrname not in ["id", "time", "datacontenttype", "dataschema"] %}
+    {%- if attrname not in uri_template_vars %}{%- set _ = uri_template_vars.append(attrname) %}{%- endif %}
+    {%- endif %}
+    {%- endfor %}
+    {%- endif %}
     {%- set sub_topic = default_topic | regex_replace('\\{[A-Za-z0-9_]+\\}', '+') %}
 
     @Test
@@ -161,7 +168,7 @@ public class MqttClientTest {
                 {%- endfor %}
 
                 assertTrue(rawLatch.await(20, TimeUnit.SECONDS), "Raw MQTT message should be captured");
-                assertCloudEventBinaryProperties(rawMessage.get());
+                assertCloudEventBinaryProperties(rawMessage.get(), {{ 'true' if message.envelopemetadata and 'datacontenttype' in message.envelopemetadata else 'false' }});
             } finally {
                 producer.close();
             }
@@ -219,11 +226,13 @@ public class MqttClientTest {
         return mqttClient;
     }
 
-    private static void assertCloudEventBinaryProperties(MqttMessage message) {
+    private static void assertCloudEventBinaryProperties(MqttMessage message, boolean expectContentType) {
         assertNotNull(message, "MQTT message should not be null");
         MqttProperties props = message.getProperties();
         assertNotNull(props, "MQTT 5 properties should be present");
-        assertNotNull(props.getContentType(), "CloudEvents datacontenttype should map to MQTT contentType");
+        if (expectContentType) {
+            assertNotNull(props.getContentType(), "CloudEvents datacontenttype should map to MQTT contentType");
+        }
         Set<String> keys = new HashSet<>();
         List<UserProperty> userProperties = props.getUserProperties();
         assertNotNull(userProperties, "CloudEvents attributes should be MQTT user properties");
@@ -305,6 +314,19 @@ public class MqttClientTest {
             case "DOUBLE": return 42.0d;
             case "BOOLEAN": return true;
             case "BYTES": return java.nio.ByteBuffer.wrap("bytes".getBytes());
+            case "ARRAY": return new java.util.ArrayList<>();
+            case "MAP": return new java.util.HashMap<>();
+            case "RECORD":
+                try {
+                    String fullName = (String) schema.getClass().getMethod("getFullName").invoke(schema);
+                    Class<?> recordClass = Class.forName(fullName);
+                    Object nested = recordClass.getDeclaredConstructor().newInstance();
+                    populateAvroLike(nested);
+                    populateFields(nested);
+                    return nested;
+                } catch (Exception e) {
+                    return null;
+                }
             default: return null;
         }
     }
@@ -317,6 +339,18 @@ public class MqttClientTest {
         if (type == double.class || type == Double.class) return 42.0d;
         if (type == boolean.class || type == Boolean.class) return true;
         if (type == byte[].class) return "bytes".getBytes();
+        if (type.isEnum()) {
+            Object[] constants = type.getEnumConstants();
+            return (constants != null && constants.length > 0) ? constants[0] : null;
+        }
+        if (java.util.List.class.isAssignableFrom(type)) return new java.util.ArrayList<>();
+        if (java.util.Map.class.isAssignableFrom(type)) return new java.util.HashMap<>();
+        try {
+            Object nested = type.getDeclaredConstructor().newInstance();
+            populateAvroLike(nested);
+            populateFields(nested);
+            return nested;
+        } catch (Exception ignored) {}
         return null;
     }
 
