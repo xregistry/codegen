@@ -1,6 +1,7 @@
+{%- set _azure_cbs_target = azure_cbs_target | default(none) %}
 [tool.poetry]
 name = "{{main_project_name|replace("_","-")}}"
-description = "{{main_project_name}} AMQP 1.0 producer library"
+description = "{{main_project_name}} AMQP 1.0 producer library{% if _azure_cbs_target %} (Azure {{ _azure_cbs_target }} CBS/Entra ID enabled){% endif %}"
 authors = ["Your Name <your.email@example.com>"]
 version = "{{ "0.1.0" if not package_version else package_version }}"  # Placeholder version, dynamic versioning can be handled with plugins
 packages = [{include = "{{main_project_name|lower}}", from = "src"}]
@@ -10,6 +11,10 @@ python = "<4.0,>=3.10"
 {{data_project_name|replace("_","-")}} = {path = "../{{data_project_name}}", develop = true}  
 python-qpid-proton = ">=0.39.0"
 cloudevents = ">=1.10.1,<2.0.0"
+{%- if _azure_cbs_target %}
+azure-identity = ">=1.15.0"
+azure-core = ">=1.30.0"
+{%- endif %}
 
 [tool.poetry.dev-dependencies]
 pytest = ">=8.2.2"
