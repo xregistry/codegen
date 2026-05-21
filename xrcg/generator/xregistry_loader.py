@@ -716,11 +716,42 @@ class ResourceResolver:
 
 
 class MessageResolver:
-    """Resolves basemessage references in message definitions."""
-    
+    """Resolves basemessage references in message definitions.
+
+    Two attribute names are honored:
+
+    * ``basemessage`` — the current xRegistry message spec (1.0-rc2+) name.
+      An XID pointing to another message definition, e.g.
+      ``/messagegroups/group1/messages/msg1``.
+    * ``basemessageurl`` — the legacy name used by earlier drafts and still
+      emitted by some tooling. Treated as a synonym for ``basemessage``.
+
+    If a message specifies both, ``basemessage`` takes precedence.
+    """
+
+    # Attribute names that may carry a base-message reference, in priority order.
+    _BASEMESSAGE_KEYS = ("basemessage", "basemessageurl")
+
     def __init__(self, loader: 'XRegistryLoader'):
         self.loader = loader
         self.logger = logging.getLogger(__name__ + ".MessageResolver")
+
+    def _get_basemessage_ref(self, message: Dict[str, Any]) -> Optional[str]:
+        """Return the base-message reference from a message, honoring both spec
+        names (``basemessage`` and the legacy ``basemessageurl``). Returns the
+        first non-empty value found, or None."""
+        for key in self._BASEMESSAGE_KEYS:
+            value = message.get(key)
+            if value:
+                return value
+        return None
+
+    def _strip_basemessage_keys(self, message: Dict[str, Any]) -> None:
+        """Remove all base-message reference attributes from a message dict
+        in place, so the resolved message no longer carries the marker."""
+        for key in self._BASEMESSAGE_KEYS:
+            if key in message:
+                del message[key]
     
     def _deep_merge(self, base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
         """Deep merge two dictionaries with overlay shadowing base.
@@ -756,8 +787,9 @@ class MessageResolver:
         Returns:
             The fully resolved message with all base messages merged, or None if circular reference detected
         """
-        # Check for basemessageurl reference
-        base_ref = message.get('basemessageurl')
+        # Check for a base-message reference (current spec: ``basemessage``;
+        # legacy alias: ``basemessageurl``).
+        base_ref = self._get_basemessage_ref(message)
         if not base_ref:
             # No base message - return as-is
             return dict(message)
@@ -774,10 +806,9 @@ class MessageResolver:
         if not base_message:
             self.logger.warning(f"Base message not found: {base_ref}")
             # Per spec: "If the referenced message can not be found then an error MUST NOT be generated"
-            # Return current message without base, but remove basemessageurl
+            # Return current message without the base-message marker(s).
             result = dict(message)
-            if 'basemessageurl' in result:
-                del result['basemessageurl']
+            self._strip_basemessage_keys(result)
             return result
         
         # Recursively resolve the base message's chain
@@ -786,12 +817,11 @@ class MessageResolver:
             # Circular reference in base chain
             return None
         
-        # Remove basemessageurl from both before merging
+        # Remove base-message marker(s) from both sides before merging so the
+        # merged result is a clean, fully-resolved message.
         current = dict(message)
-        if 'basemessageurl' in current:
-            del current['basemessageurl']
-        if 'basemessageurl' in resolved_base:
-            del resolved_base['basemessageurl']
+        self._strip_basemessage_keys(current)
+        self._strip_basemessage_keys(resolved_base)
         
         # Merge: base first, then overlay with current message
         merged = self._deep_merge(resolved_base, current)
@@ -892,8 +922,10 @@ class MessageResolver:
             if not isinstance(message, dict):
                 continue
             
-            # Check if this message has a basemessageurl
-            if 'basemessageurl' not in message:
+            # Skip messages that have no base-message reference (under either
+            # the current spec name ``basemessage`` or the legacy alias
+            # ``basemessageurl``).
+            if not self._get_basemessage_ref(message):
                 continue
             
             self.logger.debug(f"Resolving basemessage for message: {message_id}")
