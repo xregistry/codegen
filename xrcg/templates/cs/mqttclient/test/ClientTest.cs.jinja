@@ -246,4 +246,135 @@ namespace {{ project_name | pascal }}.Test
         {%- endfor %}
     }
     {%- endfor %}
+
+    {#- Binary-mode test class: validates MQTT5 user-property CE encoding with default-topic substitution -#}
+    {% for messagegroupid, messagegroup in messagegroups.items() %}
+    {%- set pascal_group_name = messagegroupid | pascal %}
+    {%- set producer_class_name = "global::" + ( pascal_group_name | concat_namespace(project_name) | pascal ) + '.' + ( pascal_group_name | strip_namespace ) + "Producer" %}
+    {%- set dispatcher_class_name = "global::" + ( pascal_group_name | concat_namespace(project_name) | pascal ) + '.' + ( pascal_group_name | strip_namespace ) + "Dispatcher" %}
+    {%- set binary_test_class_name = ( project_name | strip_dots | pascal )+( pascal_group_name | strip_dots )+"BinaryModeTests" %}
+
+    [Collection("MQTT broker")]
+    public class {{ binary_test_class_name }}
+    {
+        private readonly {{ project_name | pascal | strip_dots }}Fixture _fixture;
+        private readonly ILogger _logger;
+
+        public {{ binary_test_class_name }}({{ project_name | pascal | strip_dots }}Fixture fixture)
+        {
+            _fixture = fixture;
+            _logger = _fixture.GetLoggerFactory().CreateLogger<{{ binary_test_class_name }}>();
+        }
+
+#pragma warning disable CS8604 // nullable init handled by fixture
+
+        {%- for messageid, message in messagegroup.messages.items() %}
+        {%- set messagename = messageid | strip_namespace | pascal %}
+        {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
+        {%- set isMqtt = (message | exists( "protocol", "mqtt" )) %}
+        {%- set message_body_type = util.body_type(data_project_name, root, message) %}
+        {%- if isCloudEvent %}
+        {%- set uriargs = cloudEvents.DeclareUriTemplateArguments(message) -%}
+        {%- elif isMqtt %}
+        {%- set uriargs = mqtt.DeclareUriTemplateArguments(message) -%}
+        {%- endif %}
+        {#- Compute extra topic-only placeholders not already in uriargs -#}
+        {%- set _uriarg_names = [] %}
+        {%- if uriargs %}
+            {%- for _arg in uriargs.split(',') if _arg.strip() %}
+                {%- set _ = _uriarg_names.append(_arg.strip().split(' ')[1]) %}
+            {%- endfor %}
+        {%- endif %}
+        {%- set _extra_topic_args = [] %}
+        {%- set _dft = namespace(val=messageid) %}
+        {%- if message.protocoloptions and message.protocoloptions.topic_name %}
+            {%- set _dft.val = message.protocoloptions.topic_name %}
+        {%- elif message.protocoloptions and message.protocoloptions['topic-name'] %}
+            {%- set _dft.val = message.protocoloptions['topic-name'] %}
+        {%- elif message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic %}
+            {%- set _dft.val = message.protocoloptions.properties.topic.value %}
+        {%- endif %}
+        {%- set _topic_phs = _dft.val | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- if _topic_phs %}
+            {%- for _ph in _topic_phs if _ph not in _uriarg_names %}
+                {%- set _ = _extra_topic_args.append(_ph) %}
+            {%- endfor %}
+        {%- endif %}
+        {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
+        {%- if isCloudEvent %}
+        /// <summary>
+        /// Binary-mode CloudEvent test for {{ messagename }}: publishes without a formatter
+        /// (CE attributes go as MQTT5 User Properties), uses default topic URI-template
+        /// substitution, and verifies the received CloudEvent reconstructs correctly.
+        /// </summary>
+        [Fact]
+        public async Task Test{{ messagename }}BinaryModeDefaultTopicMessage()
+        {
+            _logger.LogInformation("Starting Test{{ messagename }}BinaryModeDefaultTopicMessage");
+            try
+            {
+                var mqttOptions = new MqttClientOptionsBuilder()
+                    .WithTcpServer(_fixture.MosquittoBrokerHost, _fixture.MosquittoBrokerPort)
+                    .WithProtocolVersion(MQTTnet.Formatter.MqttProtocolVersion.V500)
+                    .WithClientId("{{ binary_test_class_name }}{{ messagename }}Client")
+                    .WithCleanSession()
+                    .Build();
+                var factory = new MqttClientFactory();
+                var client = factory.CreateMqttClient();
+                await client.ConnectAsync(mqttOptions);
+
+                // Subscribe using default wildcard topic patterns derived from protocoloptions.topic_name
+                var subscriptionTopics = {{ dispatcher_class_name }}.GetSubscriptionTopics();
+                var subscriber = new MqttSubscriber(client, subscriptionTopics.ToArray());
+                var dispatcher = new {{ dispatcher_class_name }}(subscriber, null, _fixture.GetLoggerFactory());
+                await subscriber.SubscribeAsync();
+                var producer = new {{ producer_class_name }}(client);
+
+                var tcs = new TaskCompletionSource<bool>();
+                CloudEvent? receivedCloudEvent = null;
+                dispatcher.{{ messagename }}Async += (mqttMsg, ce, data, topicParams) =>
+                {
+                    receivedCloudEvent = ce;
+                    tcs.TrySetResult(true);
+                    return Task.CompletedTask;
+                };
+
+                {%- if message_body_type != "byte[]" %}
+                var eventDataTest = new {{ message_body_type }}Tests();
+                var testData = eventDataTest.CreateInstance();
+                {%- endif %}
+
+                // Binary mode (no formatter) with per-call qos/retain overrides and default topic substitution
+                await producer.Send{{ messagename }}Async(
+                    {%- if message_body_type != "byte[]" %}testData{%- else %}new byte[0]{%- endif %}
+                    {%- if uriargs -%}
+                    {%- for arg in uriargs.split(',') if arg.strip() -%}
+                    , {{ arg.strip().split(' ')[1] -}}: "test"
+                    {%- endfor -%}
+                    {%- endif -%}
+                    {%- for ph in _extra_topic_args -%}
+                    , {{ ph -}}: "test"
+                    {%- endfor -%}
+                    , qos: 2
+                    , retain: false
+                );
+
+#pragma warning disable xUnit1031 // Do not use blocking task operations in test method
+                Assert.True(Task.WaitAll([tcs.Task], 15000));
+#pragma warning restore xUnit1031 // Do not use blocking task operations in test method
+                Assert.NotNull(receivedCloudEvent);
+                Assert.Equal("{{ ce_type_value }}", receivedCloudEvent.Type);
+                _logger.LogInformation("Test{{ messagename }}BinaryModeDefaultTopicMessage passed");
+                await client.DisconnectAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred during Test{{ messagename }}BinaryModeDefaultTopicMessage");
+                throw;
+            }
+        }
+        {%- endif %}
+        {%- endfor %}
+    }
+    {%- endfor %}
 }

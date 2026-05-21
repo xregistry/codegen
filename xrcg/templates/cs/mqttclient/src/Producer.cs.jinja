@@ -12,6 +12,7 @@
 using CloudNative.CloudEvents;
 using CloudNative.CloudEvents.SystemTextJson;
 using MQTTnet;
+using {{ project_name | pascal }}.Tools;
 
 {% for messagegroupid, messagegroup in messagegroups.items() -%}
 {%- set groupname = messagegroupid | pascal -%}
@@ -84,6 +85,30 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {%- elif isMqtt %}
         {%- set uriargs = mqtt.DeclareUriTemplateArguments(message) -%}
         {%- endif %}
+        {#- Compute default topic: prefer flat spec key topic_name, then topic-name, then legacy nested, then messageid -#}
+        {%- set _dft = namespace(val=messageid) %}
+        {%- if message.protocoloptions and message.protocoloptions.topic_name %}
+            {%- set _dft.val = message.protocoloptions.topic_name %}
+        {%- elif message.protocoloptions and message.protocoloptions['topic-name'] %}
+            {%- set _dft.val = message.protocoloptions['topic-name'] %}
+        {%- elif message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic %}
+            {%- set _dft.val = message.protocoloptions.properties.topic.value %}
+        {%- endif %}
+        {%- set default_topic = _dft.val %}
+        {#- Collect any extra placeholders from topic that are NOT already in uriargs -#}
+        {%- set _extra_topic_args = [] %}
+        {%- set _uriarg_names = [] %}
+        {%- if uriargs %}
+            {%- for _arg in uriargs.split(',') if _arg.strip() %}
+                {%- set _ = _uriarg_names.append(_arg.strip().split(' ')[1]) %}
+            {%- endfor %}
+        {%- endif %}
+        {%- set _topic_phs = default_topic | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- if _topic_phs %}
+            {%- for _ph in _topic_phs if _ph not in _uriarg_names %}
+                {%- set _ = _extra_topic_args.append(_ph) %}
+            {%- endfor %}
+        {%- endif %}
         /// <summary>
         /// Publish the `{{ messagename }}` event
         {%- if message.description %}
@@ -97,26 +122,50 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         /// <param name="{{ splitarg[1] }}"> URI template argument</param>
         {%- endfor %}
         {%- endif %}
-        /// <param name="topic">Optional topic name override. If not provided, uses the default topic '{{ mqtt.GetDefaultTopic(message, messageid) }}'.</param>
+        {%- for ph in _extra_topic_args %}
+        /// <param name="{{ ph }}"> URI template argument (topic-only)</param>
+        {%- endfor %}
+        /// <param name="topic">Optional topic name override. If not provided, uses the default topic '{{ default_topic }}' with URI template placeholders substituted.</param>
         /// <param name="contentType">The desired content type of the message data.</param>
         {%- if isCloudEvent %}
         /// <param name="formatter">The CloudEvent formatter to use for structured mode, e.g. JsonEventFormatter.</param>
         {%- endif %}
+        /// <param name="qos">Optional MQTT QoS override (0, 1 or 2). If not provided, uses the per-message default.</param>
+        /// <param name="retain">Optional MQTT retain flag override. If not provided, uses the per-message default.</param>
         /// <returns>A `Task` object representing the asynchronous publish operation.</returns>
         public async Task Send{{ messagename | strip_namespace }}Async(
         {{ type_name }} data
         {%- if uriargs -%}
         {{- uriargs -}}
         {%- endif -%}
+        {%- for ph in _extra_topic_args -%}
+        , string {{ ph }}
+        {%- endfor -%}
         , string? topic = null
         {%- if isCloudEvent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
         , string contentType = "{{ message.envelopemetadata["datacontenttype"]["value"] }}"
         {%- else -%}
         , string contentType = System.Net.Mime.MediaTypeNames.Application.Json
         {%- endif %}
-        {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %})
+        {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %}
+        , int? qos = null
+        , bool? retain = null)
         {
-            var topicName = topic ?? "{{ mqtt.GetDefaultTopic(message, messageid) }}";
+            var topicName = topic ?? "{{ default_topic }}";
+            {#- Apply URI-template substitution to the topic when no explicit override was provided -#}
+            if (topic == null)
+            {
+            {%- set _all_ph = _uriarg_names + _extra_topic_args %}
+            {%- if _all_ph %}
+                var topicVars = new System.Collections.Generic.Dictionary<string, string>
+                {
+                {%- for _ph in _all_ph %}
+                    { "{{ _ph }}", {{ _ph }} },
+                {%- endfor %}
+                };
+                topicName = {{ project_name | pascal }}.Tools.MqttTopicHelper.ApplyTopicTemplate(topicName, topicVars);
+            {%- endif %}
+            }
             
             var message = {{groupname | strip_namespace}}EventFactory.Create{{ messagename | strip_namespace }}Message(topicName, data,
                 {%- if uriargs %}
@@ -125,8 +174,13 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
                 {{- splitarg[1] -}},
                 {%- endfor -%}
                 {%- endif -%}
+                {%- for ph in _extra_topic_args -%}
+                {{- ph -}},
+                {%- endfor -%}
                 contentType
                 {%- if isCloudEvent %}, formatter{% endif -%}
+                , qosOverride: qos
+                , retainOverride: retain
             );
             await this.Client.PublishAsync(message);
         }

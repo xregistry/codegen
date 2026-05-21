@@ -214,6 +214,13 @@ def test_mqttclient_lightbulb_cs():
             project_root, "test/xreg/lightbulb.xreg.json"), tmpdirname, "TestProject", "mqttclient")
 
 
+def test_mqttclient_protocoloptions_cs():
+    """ Test the MQTT client with MQTT/5.0 protocoloptions (flat topic_name, qos, retain)."""
+    tmpdirname = tempfile.mkdtemp()
+    run_dotnet_test(os.path.join(
+            project_root, "test/xreg/mqtt-protocoloptions.xreg.json"), tmpdirname, "TestProject", "mqttclient")
+
+
 def test_mqttclient_inkjet_protocol_variants_cs():
     """ Test the MQTT client for Inkjet Protocol Variants with basemessage inheritance."""
     tmpdirname = tempfile.mkdtemp()

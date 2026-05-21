@@ -70,6 +70,31 @@ namespace {{ project_name | pascal }}
         }
     } 
 
+    namespace Tools
+    {
+        /// <summary>
+        /// Helpers for MQTT topic URI-template substitution.
+        /// </summary>
+        public static class MqttTopicHelper
+        {
+            /// <summary>
+            /// Replaces URI template placeholders (e.g. <c>{tenantid}</c>) in
+            /// <paramref name="topicTemplate"/> with the corresponding values from
+            /// <paramref name="values"/>. Unknown placeholders are left unchanged.
+            /// </summary>
+            public static string ApplyTopicTemplate(string topicTemplate, IDictionary<string, string> values)
+            {
+                if (values == null || values.Count == 0)
+                    return topicTemplate;
+                foreach (var kvp in values)
+                {
+                    topicTemplate = topicTemplate.Replace("{" + kvp.Key + "}", kvp.Value);
+                }
+                return topicTemplate;
+            }
+        }
+    }
+
     /// <summary>
     /// A simple wrapper for the MQTT client that processes messages and handles errors.
     /// </summary>
