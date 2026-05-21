@@ -110,6 +110,14 @@ describe('{{ test_class_name }}', () => {
     {%- set default_retain_js = "true" %}
     {%- endif %}
 
+    {#- Bare CE attribute parameters expected by the generated publish method (attrs without value). -#}
+    {%- set bare_ce_attrs = [] %}
+    {%- if isCloudEvent %}
+    {%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ['id', 'time', 'source', 'type', 'datacontenttype', 'dataschema'] and not attribute.value %}
+    {%- set _ = bare_ce_attrs.append(attrname) %}
+    {%- endfor %}
+    {%- endif %}
+
     {#- Topic string with placeholders replaced by literal values for decoding test. -#}
     {%- set _concrete_topic = _topic_val | default(messageid) | regex_replace('\\{([A-Za-z0-9_]+)\\}', 'test') %}
 
@@ -118,6 +126,9 @@ describe('{{ test_class_name }}', () => {
         const _sfx = Math.random().toString(36).substring(2, 8);
         {%- for placeholder in uri_template_vars %}
         const {{ placeholder }} = `test_{{ placeholder }}_${_sfx}`;
+        {%- endfor %}
+        {%- for attrname in bare_ce_attrs %}
+        const {{ attrname }} = `test_{{ attrname }}_${_sfx}`;
         {%- endfor %}
 
         // Use MQTT3.1.1 (protocolVersion: 4) — aedes does not support MQTT5.
@@ -159,6 +170,9 @@ describe('{{ test_class_name }}', () => {
 
         await publisher.publish{{ messagename }}(
             {} as unknown as {{ body_type }},
+            {%- for attrname in bare_ce_attrs %}
+            {{ attrname }},
+            {%- endfor %}
             {%- for placeholder in uri_template_vars %}
             {{ placeholder }},
             {%- endfor %}
@@ -208,8 +222,14 @@ describe('{{ test_class_name }}', () => {
         {%- for placeholder in uri_template_vars %}
         const {{ placeholder }} = 'test_{{ placeholder }}';
         {%- endfor %}
+        {%- for attrname in bare_ce_attrs %}
+        const {{ attrname }} = 'test_{{ attrname }}';
+        {%- endfor %}
         await client.publish{{ messagename }}(
             {} as unknown as {{ body_type }},
+            {%- for attrname in bare_ce_attrs %}
+            {{ attrname }},
+            {%- endfor %}
             {%- for placeholder in uri_template_vars %}
             {{ placeholder }},
             {%- endfor %}

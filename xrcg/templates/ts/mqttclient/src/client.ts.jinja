@@ -363,6 +363,9 @@ export class {{ class_name }} {
      {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
      * @param {{ attrname }} CloudEvent required attribute '{{ attrname }}'
      {%- endfor %}
+     {%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ['id', 'time', 'source', 'type', 'datacontenttype', 'dataschema'] and not attribute.value %}
+     * @param {{ attrname }} CloudEvent attribute '{{ attrname }}'{% if not attribute.required %} (optional){% endif %}
+     {%- endfor %}
      {%- endif %}
      {%- for placeholder in uri_template_vars %}
      * @param {{ placeholder }} URI template variable `{{ placeholder }}`
@@ -376,6 +379,9 @@ export class {{ class_name }} {
         {%- if isCloudEvent %}
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         {{ attrname }}: string,
+        {%- endfor %}
+        {%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ['id', 'time', 'source', 'type', 'datacontenttype', 'dataschema'] and not attribute.value %}
+        {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
         {%- for placeholder in uri_template_vars %}
