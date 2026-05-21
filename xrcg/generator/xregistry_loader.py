@@ -1538,13 +1538,15 @@ class XRegistryLoader:
                         filtered_messagegroups[group_id] = group_data
                 filtered_doc["messagegroups"] = filtered_messagegroups
             
-            # Step 4: Filter schemagroups to match the filtered messagegroups
-            if referenced_messagegroups and isinstance(filtered_doc.get("schemagroups"), dict):
-                filtered_schemagroups = {}
-                for group_id, group_data in filtered_doc["schemagroups"].items():
-                    if group_id in referenced_messagegroups:
-                        filtered_schemagroups[group_id] = group_data
-                filtered_doc["schemagroups"] = filtered_schemagroups
+            # Step 4: Keep all schemagroups intact. The endpoint filter
+            # narrows the messaging surface (endpoints + messagegroups),
+            # but schemagroups are shared infrastructure: a derived
+            # messagegroup may reference schemas only via its base
+            # (resolved by basemessageurl), and some codegen paths (e.g.
+            # the jstruct -> Python converter) silently no-op when their
+            # schemas aren't in the document. Retaining all schemagroups
+            # avoids these foot-guns and matches the behavior of an
+            # unfiltered load.
         
         return filtered_doc
     
