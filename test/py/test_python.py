@@ -230,6 +230,13 @@ def test_mqttclient_inkjet_py():
             '/', os.sep)), tmpdirname, "test_mqttclient_inkjet_py", "mqttclient")
 
 
+def test_mqttclient_protocoloptions_py():
+    """ Test the MQTT client with MQTT/5.0 protocoloptions (qos/retain/topic_name)."""
+    tmpdirname = tempfile.mkdtemp()
+    run_python_test(os.path.join(project_root, "test/xreg/mqtt-protocoloptions.xreg.json".replace(
+            '/', os.sep)), tmpdirname, "test_mqttclient_protocoloptions_py", "mqttclient")
+
+
 def test_sbproducer_lightbulb_py():
     """ Test the Service Bus producer for Lightbulb."""
     tmpdirname = tempfile.mkdtemp()
