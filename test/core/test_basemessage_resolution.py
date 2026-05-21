@@ -614,5 +614,315 @@ class TestBasemessageResolution(unittest.TestCase):
         self.assertEqual(mqtt_msg["dataschemaurl"], "#/schemagroups/eventgroup/schemas/SensorReading")
 
 
+class TestBasemessageSpecAttributeName(unittest.TestCase):
+    """Tests that the loader honors the current spec attribute name
+    ``basemessage`` (xRegistry message spec 1.0-rc2+), in addition to the
+    legacy ``basemessageurl`` covered by ``TestBasemessageResolution``.
+
+    Regression coverage for https://github.com/xregistry/codegen/issues/283.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        for file in os.listdir(self.temp_dir):
+            os.remove(os.path.join(self.temp_dir, file))
+        os.rmdir(self.temp_dir)
+
+    def _load(self, doc):
+        test_file = os.path.join(self.temp_dir, "test.json")
+        with open(test_file, 'w') as f:
+            json.dump(doc, f)
+        with patch('xrcg.generator.xregistry_loader.Model') as MockModel:
+            mock_model = Mock()
+            mock_model.groups = {
+                "messagegroups": {
+                    "resources": {
+                        "messages": {"singular": "message"}
+                    }
+                }
+            }
+            MockModel.return_value = mock_model
+            loader = XRegistryLoader()
+            _, result = loader.load(test_file)
+        return result
+
+    def test_basemessage_intra_group(self):
+        """``basemessage`` (spec name) is resolved like ``basemessageurl``
+        for a same-group reference."""
+        doc = {
+            "specversion": "1.0-rc2",
+            "messagegroups": {
+                "testgroup": {
+                    "messagegroupid": "testgroup",
+                    "messages": {
+                        "Base": {
+                            "messageid": "Base",
+                            "envelope": "CloudEvents/1.0",
+                            "envelopemetadata": {
+                                "type":   {"value": "com.example.base"},
+                                "source": {"value": "/base/source"},
+                            },
+                            "datacontenttype": "application/json",
+                        },
+                        "Derived": {
+                            "messageid": "Derived",
+                            "basemessage": "/messagegroups/testgroup/messages/Base",
+                            "envelopemetadata": {
+                                "type": {"value": "com.example.derived"},
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        result = self._load(doc)
+        derived = result["messagegroups"]["testgroup"]["messages"]["Derived"]
+        # Overridden by derived
+        self.assertEqual(derived["envelopemetadata"]["type"]["value"], "com.example.derived")
+        # Inherited from base
+        self.assertEqual(derived["envelopemetadata"]["source"]["value"], "/base/source")
+        self.assertEqual(derived["envelope"], "CloudEvents/1.0")
+        self.assertEqual(derived["datacontenttype"], "application/json")
+        # Spec marker is removed after resolution
+        self.assertNotIn("basemessage", derived)
+        self.assertNotIn("basemessageurl", derived)
+
+    def test_basemessage_cross_messagegroup(self):
+        """The canonical spec example: a derived MQTT messagegroup whose
+        messages only set ``basemessage`` + ``protocol`` + ``protocoloptions``,
+        pointing across to a base CloudEvents-only group. Mirrors the
+        reproduction in issue #283."""
+        doc = {
+            "specversion": "1.0-rc2",
+            "messagegroups": {
+                "demo": {
+                    "messagegroupid": "demo",
+                    "messages": {
+                        "demo.Hello": {
+                            "messageid": "demo.Hello",
+                            "envelope": "CloudEvents/1.0",
+                            "envelopemetadata": {
+                                "type":    {"value": "demo.Hello"},
+                                "subject": {"value": "{id}", "type": "uritemplate"},
+                            },
+                            "dataschemaformat": "JsonStructure/draft-02",
+                            "dataschemauri": "#/schemagroups/demo.jstruct/schemas/demo.Hello",
+                        },
+                    },
+                },
+                "demo.mqtt": {
+                    "messagegroupid": "demo.mqtt",
+                    "messages": {
+                        "demo.mqtt.Hello": {
+                            "messageid": "demo.mqtt.Hello",
+                            "basemessage": "/messagegroups/demo/messages/demo.Hello",
+                            "protocol": "MQTT/5.0",
+                            "protocoloptions": {
+                                "topic":  {"value": "demo/{id}/hello", "type": "uritemplate"},
+                                "qos":    1,
+                                "retain": True,
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        result = self._load(doc)
+        mqtt = result["messagegroups"]["demo.mqtt"]["messages"]["demo.mqtt.Hello"]
+        # Inherited envelope + schema metadata from cross-group base
+        self.assertEqual(mqtt["envelope"], "CloudEvents/1.0")
+        self.assertEqual(mqtt["envelopemetadata"]["type"]["value"], "demo.Hello")
+        self.assertEqual(mqtt["envelopemetadata"]["subject"]["value"], "{id}")
+        self.assertEqual(mqtt["dataschemaformat"], "JsonStructure/draft-02")
+        self.assertEqual(
+            mqtt["dataschemauri"],
+            "#/schemagroups/demo.jstruct/schemas/demo.Hello",
+        )
+        # Own protocol additions preserved
+        self.assertEqual(mqtt["protocol"], "MQTT/5.0")
+        self.assertEqual(mqtt["protocoloptions"]["topic"]["value"], "demo/{id}/hello")
+        self.assertEqual(mqtt["protocoloptions"]["qos"], 1)
+        self.assertTrue(mqtt["protocoloptions"]["retain"])
+        # Base group untouched
+        base = result["messagegroups"]["demo"]["messages"]["demo.Hello"]
+        self.assertNotIn("protocol", base)
+        self.assertNotIn("basemessage", mqtt)
+
+    def test_basemessage_transitive_chain(self):
+        """Multi-level ``basemessage`` chain across three messages."""
+        doc = {
+            "specversion": "1.0-rc2",
+            "messagegroups": {
+                "g": {
+                    "messagegroupid": "g",
+                    "messages": {
+                        "L1": {
+                            "messageid": "L1",
+                            "envelope": "CloudEvents/1.0",
+                            "envelopemetadata": {
+                                "type":   {"value": "l1.type"},
+                                "source": {"value": "l1.source"},
+                            },
+                        },
+                        "L2": {
+                            "messageid": "L2",
+                            "basemessage": "/messagegroups/g/messages/L1",
+                            "envelopemetadata": {
+                                "type":    {"value": "l2.type"},
+                                "subject": {"value": "l2.subject"},
+                            },
+                        },
+                        "L3": {
+                            "messageid": "L3",
+                            "basemessage": "/messagegroups/g/messages/L2",
+                            "envelopemetadata": {
+                                "type": {"value": "l3.type"},
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        result = self._load(doc)
+        l3 = result["messagegroups"]["g"]["messages"]["L3"]
+        self.assertEqual(l3["envelope"], "CloudEvents/1.0")
+        self.assertEqual(l3["envelopemetadata"]["type"]["value"], "l3.type")       # own
+        self.assertEqual(l3["envelopemetadata"]["subject"]["value"], "l2.subject")  # from L2
+        self.assertEqual(l3["envelopemetadata"]["source"]["value"], "l1.source")    # from L1
+        self.assertNotIn("basemessage", l3)
+
+    def test_basemessage_circular_detection(self):
+        """Circular ``basemessage`` chain is detected and does not crash."""
+        doc = {
+            "specversion": "1.0-rc2",
+            "messagegroups": {
+                "g": {
+                    "messagegroupid": "g",
+                    "messages": {
+                        "A": {
+                            "messageid": "A",
+                            "basemessage": "/messagegroups/g/messages/B",
+                        },
+                        "B": {
+                            "messageid": "B",
+                            "basemessage": "/messagegroups/g/messages/A",
+                        },
+                    },
+                },
+            },
+        }
+        result = self._load(doc)
+        # Both messages remain in the document; cycle is logged, not raised.
+        self.assertIn("A", result["messagegroups"]["g"]["messages"])
+        self.assertIn("B", result["messagegroups"]["g"]["messages"])
+
+    def test_basemessage_missing_reference(self):
+        """Missing ``basemessage`` target is tolerated per spec (no error,
+        derived message kept with the marker stripped)."""
+        doc = {
+            "specversion": "1.0-rc2",
+            "messagegroups": {
+                "g": {
+                    "messagegroupid": "g",
+                    "messages": {
+                        "Derived": {
+                            "messageid": "Derived",
+                            "basemessage": "/messagegroups/g/messages/Missing",
+                            "envelope": "CloudEvents/1.0",
+                            "envelopemetadata": {
+                                "type": {"value": "x"},
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        result = self._load(doc)
+        derived = result["messagegroups"]["g"]["messages"]["Derived"]
+        self.assertEqual(derived["envelope"], "CloudEvents/1.0")
+        self.assertEqual(derived["envelopemetadata"]["type"]["value"], "x")
+        self.assertNotIn("basemessage", derived)
+
+    def test_basemessage_scalar_overrides_object(self):
+        """Per spec: when the derived attribute is scalar and the base
+        attribute at the same key is an object, the scalar fully replaces
+        the (complex) base value."""
+        doc = {
+            "specversion": "1.0-rc2",
+            "messagegroups": {
+                "g": {
+                    "messagegroupid": "g",
+                    "messages": {
+                        "Base": {
+                            "messageid": "Base",
+                            "envelope": "CloudEvents/1.0",
+                            "envelopemetadata": {
+                                "type": {
+                                    "value": "base.type",
+                                    "type":  "string",
+                                    "required": True,
+                                },
+                            },
+                        },
+                        "Derived": {
+                            "messageid": "Derived",
+                            "basemessage": "/messagegroups/g/messages/Base",
+                            "envelopemetadata": {
+                                "type": "literal-string",
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        result = self._load(doc)
+        derived = result["messagegroups"]["g"]["messages"]["Derived"]
+        # Scalar string fully replaces the complex object from the base.
+        self.assertEqual(derived["envelopemetadata"]["type"], "literal-string")
+
+    def test_basemessage_takes_precedence_over_basemessageurl(self):
+        """When a message specifies both spellings, the current-spec
+        ``basemessage`` wins."""
+        doc = {
+            "specversion": "1.0-rc2",
+            "messagegroups": {
+                "g": {
+                    "messagegroupid": "g",
+                    "messages": {
+                        "Real": {
+                            "messageid": "Real",
+                            "envelope": "CloudEvents/1.0",
+                            "envelopemetadata": {
+                                "source": {"value": "from-real"},
+                            },
+                        },
+                        "Stale": {
+                            "messageid": "Stale",
+                            "envelope": "CloudEvents/1.0",
+                            "envelopemetadata": {
+                                "source": {"value": "from-stale"},
+                            },
+                        },
+                        "Derived": {
+                            "messageid": "Derived",
+                            "basemessage":    "/messagegroups/g/messages/Real",
+                            "basemessageurl": "/messagegroups/g/messages/Stale",
+                            "envelopemetadata": {
+                                "type": {"value": "d.type"},
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        result = self._load(doc)
+        derived = result["messagegroups"]["g"]["messages"]["Derived"]
+        self.assertEqual(derived["envelopemetadata"]["source"]["value"], "from-real")
+        self.assertNotIn("basemessage", derived)
+        self.assertNotIn("basemessageurl", derived)
+
+
 if __name__ == '__main__':
     unittest.main()
