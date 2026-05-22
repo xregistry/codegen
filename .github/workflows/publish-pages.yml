@@ -72,10 +72,11 @@ jobs:
         echo "✅ Installed xrcg version: $(pip show xrcg | grep Version)"
 
     - name: Build gallery
+      continue-on-error: true
       run: |
         if [ -f "scripts/build_gallery.py" ]; then
           echo "🖼️ Building gallery..."
-          python scripts/build_gallery.py
+          python scripts/build_gallery.py || echo "⚠️ Gallery build had failures; continuing so wheel index and Pages deploy still run."
         else
           echo "⚠️ No gallery build script found"
         fi
