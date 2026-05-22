@@ -144,10 +144,12 @@ class SchemaProcessor(ResourceProcessor):
         merged_schema = []
         for schema_info in self.avrotize_queue:
             schema_content = schema_info["schema_content"]
-            if isinstance(schema_content, list):
-                merged_schema.extend(schema_content)
-            else:
-                merged_schema.append(schema_content)
+            contents = schema_content if isinstance(schema_content, list) else [schema_content]
+            for content in contents:
+                if not isinstance(content, dict):
+                    logger.debug("Skipping non-object top-level Avro schema entry from %s", schema_info.get("schema_reference"))
+                    continue
+                merged_schema.append(content)
 
         if len(merged_schema) == 1:
             merged_schema = merged_schema[0]

@@ -266,6 +266,9 @@ class TemplateRenderer:
                     content = schema_info["content"]
                     contents = content if isinstance(content, list) else [content]
                     for c in contents:
+                        if not isinstance(c, dict):
+                            logger.debug("Skipping non-object top-level Avro schema entry from %s", schema_info.get("reference"))
+                            continue
                         key = get_schema_key(c)
                         if key not in seen_keys:
                             seen_keys.add(key)
