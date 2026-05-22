@@ -23,6 +23,11 @@ on:
         description: 'Create / update GitHub Release with the wheels'
         type: boolean
         default: true
+  pull_request:
+    paths:
+      - 'tools/proton-windows-wheel/**'
+      - '.github/workflows/build-proton-windows-wheels.yml'
+      - 'scripts/build_wheel_index.py'
 
 permissions:
   contents: write   # for creating the release
@@ -74,8 +79,8 @@ jobs:
       - name: Build patched wheel
         run: |
           python tools/proton-windows-wheel/build.py `
-            --proton-version "${{ github.event.inputs.proton_version }}" `
-            --xrcg-build "${{ github.event.inputs.xrcg_build }}" `
+            --proton-version "${{ github.event.inputs.proton_version || '0.40.0' }}" `
+            --xrcg-build "${{ github.event.inputs.xrcg_build || '1' }}" `
             --output-dir dist
 
       - name: Sanity-check the wheel
@@ -105,7 +110,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    if: ${{ github.event.inputs.publish_release == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true' }}
     needs: build
     runs-on: ubuntu-latest
     steps:
