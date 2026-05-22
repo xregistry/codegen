@@ -1475,15 +1475,43 @@ class XRegistryLoader:
                     filtered_messagegroups[group_id] = group_data
             filtered_doc["messagegroups"] = filtered_messagegroups
         
-        # Also filter schemagroups to match the filtered messagegroups
+        # Also filter schemagroups to keep only those referenced by the
+        # filtered messagegroups via dataschemauri (schemagroup IDs are
+        # independent of messagegroup IDs and must be resolved from refs).
         if isinstance(filtered_doc.get("schemagroups"), dict):
-            filtered_schemagroups = {}
-            for group_id, group_data in filtered_doc["schemagroups"].items():
-                if messagegroup_filter in group_id:
-                    filtered_schemagroups[group_id] = group_data
+            referenced_sg_ids = self._collect_referenced_schemagroup_ids(
+                filtered_doc.get("messagegroups", {}))
+            filtered_schemagroups = {
+                sg_id: sg_data
+                for sg_id, sg_data in filtered_doc["schemagroups"].items()
+                if not referenced_sg_ids or sg_id in referenced_sg_ids
+            }
             filtered_doc["schemagroups"] = filtered_schemagroups
         
         return filtered_doc
+
+    @staticmethod
+    def _collect_referenced_schemagroup_ids(messagegroups: Any) -> Set[str]:
+        """Walk messagegroups and collect schemagroup IDs referenced by any
+        message's dataschemauri (e.g. ``#/schemagroups/<id>/schemas/...``)."""
+        ids: Set[str] = set()
+        if not isinstance(messagegroups, dict):
+            return ids
+        for _, group in messagegroups.items():
+            if not isinstance(group, dict):
+                continue
+            messages = group.get("messages", {})
+            if not isinstance(messages, dict):
+                continue
+            for _, message in messages.items():
+                if not isinstance(message, dict):
+                    continue
+                uri = message.get("dataschemauri")
+                if isinstance(uri, str) and uri.startswith("#/schemagroups/"):
+                    parts = uri.split("/")
+                    if len(parts) > 2:
+                        ids.add(parts[2])
+        return ids
     
     def _apply_endpoint_filter(self, document: Dict[str, Any], 
                               endpoint_filter: str) -> Dict[str, Any]:
@@ -1538,13 +1566,18 @@ class XRegistryLoader:
                         filtered_messagegroups[group_id] = group_data
                 filtered_doc["messagegroups"] = filtered_messagegroups
             
-            # Step 4: Filter schemagroups to match the filtered messagegroups
-            if referenced_messagegroups and isinstance(filtered_doc.get("schemagroups"), dict):
-                filtered_schemagroups = {}
-                for group_id, group_data in filtered_doc["schemagroups"].items():
-                    if group_id in referenced_messagegroups:
-                        filtered_schemagroups[group_id] = group_data
-                filtered_doc["schemagroups"] = filtered_schemagroups
+            # Step 4: Filter schemagroups to keep only those referenced by
+            # the filtered messagegroups via dataschemauri. Schemagroup IDs
+            # are independent of messagegroup IDs (e.g. ``foo.jstruct`` vs
+            # ``foo.kafka``) and must be resolved from the actual refs.
+            if isinstance(filtered_doc.get("schemagroups"), dict):
+                referenced_sg_ids = self._collect_referenced_schemagroup_ids(
+                    filtered_doc.get("messagegroups", {}))
+                filtered_doc["schemagroups"] = {
+                    sg_id: sg_data
+                    for sg_id, sg_data in filtered_doc["schemagroups"].items()
+                    if not referenced_sg_ids or sg_id in referenced_sg_ids
+                }
         
         return filtered_doc
     
