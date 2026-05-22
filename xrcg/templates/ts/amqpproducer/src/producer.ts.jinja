@@ -130,31 +130,51 @@ export class {{ class_name }} {
             
             let message: rhea.Message;
             if (this.mode === 'structured') {
+                const structuredBody = cloudEvent.toJSON();
                 message = {
-                    body: cloudEvent.toJSON(),
+                    body: typeof structuredBody === 'string'
+                        ? Buffer.from(structuredBody, 'utf-8')
+                        : Buffer.from(JSON.stringify(structuredBody), 'utf-8'),
                     content_type: this.format
                 };
             } else {
+                // CloudEvents AMQP Protocol Binding v1.0.2 §3.1: application
+                // properties carrying CE attributes MUST be prefixed with
+                // 'cloudEvents:' (not 'ce-' from the HTTP binding, and not
+                // 'ce_' from the Kafka binding).
                 const application_properties: Record<string, any> = {
-                    ce_specversion: '1.0',
-                    ce_id: cloudEvent.id,
-                    ce_type: cloudEvent.type,
-                    ce_source: cloudEvent.source
+                    'cloudEvents:specversion': '1.0',
+                    'cloudEvents:id': cloudEvent.id,
+                    'cloudEvents:type': cloudEvent.type,
+                    'cloudEvents:source': cloudEvent.source
                 };
-                if (cloudEvent.subject) application_properties.ce_subject = cloudEvent.subject;
-                if (cloudEvent.time) application_properties.ce_time = cloudEvent.time;
+                if (cloudEvent.subject) application_properties['cloudEvents:subject'] = cloudEvent.subject;
+                if (cloudEvent.time) application_properties['cloudEvents:time'] = cloudEvent.time;
                 {%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["id", "type", "source", "subject", "time", "specversion", "datacontenttype", "dataschema", "data"] %}
-                if ((cloudEvent as any).{{ attrname }}) application_properties.ce_{{ attrname }} = (cloudEvent as any).{{ attrname }};
+                if ((cloudEvent as any).{{ attrname }}) application_properties['cloudEvents:{{ attrname }}'] = (cloudEvent as any).{{ attrname }};
                 {%- endfor %}
+                // Coerce body to Buffer so rhea emits an AMQP binary data
+                // section; string bodies become AMQP string sections and cause
+                // double-encoding of JSON payloads on the wire.
+                const binaryBody = typeof data === 'string'
+                    ? Buffer.from(data, 'utf-8')
+                    : (data instanceof Uint8Array || Buffer.isBuffer(data))
+                        ? Buffer.from(data as Uint8Array)
+                        : Buffer.from(JSON.stringify(data), 'utf-8');
                 message = {
-                    body: data,
+                    body: binaryBody,
                     content_type: contentType,
                     application_properties
                 };
             }
             {%- else %}
+            const plainBody = typeof data === 'string'
+                ? Buffer.from(data, 'utf-8')
+                : (data instanceof Uint8Array || Buffer.isBuffer(data))
+                    ? Buffer.from(data as Uint8Array)
+                    : Buffer.from(JSON.stringify(data), 'utf-8');
             const message: rhea.Message = {
-                body: data,
+                body: plainBody,
                 application_properties: {
                     subject: '{{ messageid }}'
                 },

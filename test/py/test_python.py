@@ -530,3 +530,96 @@ def test_mqttclient_body_is_bytes_not_str():
         "client.py must coerce str payload to bytes before publish so the "
         "wire representation matches the declared content-type byte-for-byte"
     )
+
+
+def _generate_eh_producer_src(xreg_relpath="test/xreg/lightbulb.xreg.json"):
+    """Generate the Python Event Hubs producer for the given fixture."""
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    _generate_with_template_args(
+        os.path.join(project_root, xreg_relpath.replace('/', os.sep)),
+        tmpdirname,
+        "test_eh_introspect",
+        "ehproducer",
+        [],
+    )
+    producer_files = glob.glob(os.path.join(tmpdirname, "**", "producer.py"), recursive=True)
+    assert producer_files, "no producer.py emitted under " + tmpdirname
+    return open(producer_files[0], encoding="utf-8").read()
+
+
+def _generate_sb_producer_src(xreg_relpath="test/xreg/lightbulb.xreg.json"):
+    """Generate the Python Service Bus producer for the given fixture."""
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    _generate_with_template_args(
+        os.path.join(project_root, xreg_relpath.replace('/', os.sep)),
+        tmpdirname,
+        "test_sb_introspect",
+        "sbproducer",
+        [],
+    )
+    producer_files = glob.glob(os.path.join(tmpdirname, "**", "producer.py"), recursive=True)
+    assert producer_files, "no producer.py emitted under " + tmpdirname
+    return open(producer_files[0], encoding="utf-8").read()
+
+
+def test_ehproducer_emits_cloudevents_prefix_not_cloudevents_underscore():
+    """Event Hubs producer must use the CE-AMQP §3.1 ``cloudEvents:``
+    prefix on application-properties; the previous ``cloudEvents_``
+    (underscore) form is not recognized by spec-compliant CE consumers
+    such as azure-servicebus ``CloudEvent.from_message``.
+    """
+    src = _generate_eh_producer_src("test/xreg/lightbulb.xreg.json")
+    assert 'event_data.properties["cloudEvents:"+key[3:]]' in src, (
+        "ehproducer must map cloudevents-sdk 'ce-' headers to "
+        "'cloudEvents:' application-properties (CE-AMQP §3.1)"
+    )
+    assert "cloudEvents_" not in src, (
+        "ehproducer must not emit the non-spec 'cloudEvents_' "
+        "(underscore) prefix on application-properties"
+    )
+
+
+def test_ehproducer_body_is_bytes_not_str():
+    """Event Hubs producer must coerce JSON ``str`` payloads to bytes
+    before constructing ``EventData`` so the wire body is a binary AMQP
+    data section, not a string section containing escaped JSON.
+    """
+    src = _generate_eh_producer_src("test/xreg/lightbulb.xreg.json")
+    assert "byte_data = data.to_byte_array(content_type)" in src
+    assert "isinstance(byte_data, str)" in src and "byte_data.encode('utf-8')" in src, (
+        "ehproducer must coerce to_byte_array str result to bytes before "
+        "handing to the CloudEvent constructor"
+    )
+    assert "isinstance(body, str)" in src and "body.encode('utf-8')" in src, (
+        "ehproducer must coerce cloudevents-sdk body str to bytes before "
+        "constructing EventData (avoids AMQP string section + JSON double-encode)"
+    )
+
+
+def test_sbproducer_emits_cloudevents_prefix():
+    """Service Bus producer already maps to 'cloudEvents:' — guard the
+    mapping against regressions.
+    """
+    src = _generate_sb_producer_src("test/xreg/lightbulb.xreg.json")
+    assert 'message.application_properties["cloudEvents:"+key[3:]]' in src, (
+        "sbproducer must keep mapping 'ce-' headers to 'cloudEvents:' "
+        "application-properties (CE-AMQP §3.1)"
+    )
+
+
+def test_sbproducer_body_is_bytes_not_str():
+    """Service Bus producer must coerce JSON ``str`` payloads to bytes
+    before constructing ``ServiceBusMessage`` so the wire body is a
+    binary AMQP data section.
+    """
+    src = _generate_sb_producer_src("test/xreg/lightbulb.xreg.json")
+    assert "isinstance(byte_data, str)" in src and "byte_data.encode('utf-8')" in src, (
+        "sbproducer must coerce to_byte_array str result to bytes before "
+        "handing to the CloudEvent constructor"
+    )
+    assert "isinstance(body, str)" in src and "body.encode('utf-8')" in src, (
+        "sbproducer must coerce cloudevents-sdk body str to bytes before "
+        "constructing ServiceBusMessage"
+    )

@@ -126,11 +126,18 @@ class {{ class_name }}:
         }
         attributes["datacontenttype"] = content_type
         byte_data = data.to_byte_array(content_type) if data is not None else b''
+        # to_byte_array returns str for text content types (e.g. JSON); coerce
+        # to bytes so the wire body is the exact serialized representation
+        # (binary AMQP data section) and receivers do not double-decode JSON.
+        if isinstance(byte_data, str):
+            byte_data = byte_data.encode('utf-8')
         event = CloudEvent(attributes, byte_data)
         
         async with self.servicebus_client.get_queue_sender(queue_name=self.queue_or_topic_name) as sender:
             if self.content_mode == "structured":
                 headers, body = to_structured(event)
+                if isinstance(body, str):
+                    body = body.encode('utf-8')
                 message = ServiceBusMessage(body=body)
                 if "Content-Type" in headers:
                     message.content_type = headers["Content-Type"]
@@ -139,6 +146,8 @@ class {{ class_name }}:
                     message.application_properties = {}
             else:
                 headers, body = to_binary(event)
+                if isinstance(body, str):
+                    body = body.encode('utf-8')
                 message = ServiceBusMessage(body=body)
                 message.content_type = attributes.get("datacontenttype", "application/octet-stream")
                 # Initialize application_properties dict if not already set

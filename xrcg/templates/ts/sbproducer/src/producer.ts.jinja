@@ -195,17 +195,17 @@ export class {{ class_name }} {
                 body: data,
                 contentType: contentType,
                 applicationProperties: {
-                    'ce_specversion': '1.0',
-                    'ce_id': cloudEvent.id,
-                    'ce_type': cloudEvent.type,
-                    'ce_source': cloudEvent.source
+                    'cloudEvents:specversion': '1.0',
+                    'cloudEvents:id': cloudEvent.id,
+                    'cloudEvents:type': cloudEvent.type,
+                    'cloudEvents:source': cloudEvent.source
                 }
             };
             
             {%- for attrname, attribute in message.envelopemetadata.items() %}
             {%- if attrname not in ["id", "type", "source", "specversion", "datacontenttype", "data"] %}
             if (cloudEvent.{{ attrname }}) {
-                message.applicationProperties!['ce_{{ attrname }}'] = String(cloudEvent.{{ attrname }});
+                message.applicationProperties!['cloudEvents:{{ attrname }}'] = String(cloudEvent.{{ attrname }});
             }
             {%- endif %}
             {%- endfor %}
@@ -296,15 +296,15 @@ export class {{ class_name }} {
                 };
             } else {
                 const applicationProperties: Record<string, any> = {
-                    ce_specversion: '1.0',
-                    ce_id: cloudEvent.id,
-                    ce_type: cloudEvent.type,
-                    ce_source: cloudEvent.source
+                    'cloudEvents:specversion': '1.0',
+                    'cloudEvents:id': cloudEvent.id,
+                    'cloudEvents:type': cloudEvent.type,
+                    'cloudEvents:source': cloudEvent.source
                 };
-                if (cloudEvent.subject) applicationProperties.ce_subject = cloudEvent.subject;
-                if (cloudEvent.time) applicationProperties.ce_time = cloudEvent.time;
+                if (cloudEvent.subject) applicationProperties['cloudEvents:subject'] = cloudEvent.subject;
+                if (cloudEvent.time) applicationProperties['cloudEvents:time'] = cloudEvent.time;
                 {%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["id", "type", "source", "subject", "time", "specversion", "datacontenttype", "dataschema", "data"] %}
-                if ((cloudEvent as any).{{ attrname }}) applicationProperties.ce_{{ attrname }} = (cloudEvent as any).{{ attrname }};
+                if ((cloudEvent as any).{{ attrname }}) applicationProperties['cloudEvents:{{ attrname }}'] = (cloudEvent as any).{{ attrname }};
                 {%- endfor %}
                 return {
                     body: data,

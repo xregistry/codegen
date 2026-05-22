@@ -168,17 +168,17 @@ export class {{ class_name }} {
                 body: data,
                 contentType: contentType,
                 properties: {
-                    'ce_specversion': '1.0',
-                    'ce_id': cloudEvent.id,
-                    'ce_type': cloudEvent.type,
-                    'ce_source': cloudEvent.source
+                    'cloudEvents:specversion': '1.0',
+                    'cloudEvents:id': cloudEvent.id,
+                    'cloudEvents:type': cloudEvent.type,
+                    'cloudEvents:source': cloudEvent.source
                 }
             };
             
             {%- for attrname, attribute in message.envelopemetadata.items() %}
             {%- if attrname not in ["id", "type", "source", "specversion", "datacontenttype", "data"] %}
             if (cloudEvent.{{ attrname }}) {
-                eventData.properties!['ce_{{ attrname }}'] = String(cloudEvent.{{ attrname }});
+                eventData.properties!['cloudEvents:{{ attrname }}'] = String(cloudEvent.{{ attrname }});
             }
             {%- endif %}
             {%- endfor %}
@@ -276,16 +276,16 @@ export class {{ class_name }} {
             } else {
                 // Binary content mode
                 const properties: Record<string, any> = {
-                    'ce_specversion': '1.0',
-                    'ce_id': cloudEvent.id,
-                    'ce_type': cloudEvent.type,
-                    'ce_source': cloudEvent.source
+                    'cloudEvents:specversion': '1.0',
+                    'cloudEvents:id': cloudEvent.id,
+                    'cloudEvents:type': cloudEvent.type,
+                    'cloudEvents:source': cloudEvent.source
                 };
                 
                 {%- for attrname, attribute in message.envelopemetadata.items() %}
                 {%- if attrname not in ["id", "type", "source", "specversion", "datacontenttype", "data"] %}
                 if (cloudEvent.{{ attrname }}) {
-                    properties['ce_{{ attrname }}'] = String(cloudEvent.{{ attrname }});
+                    properties['cloudEvents:{{ attrname }}'] = String(cloudEvent.{{ attrname }});
                 }
                 {%- endif %}
                 {%- endfor %}
