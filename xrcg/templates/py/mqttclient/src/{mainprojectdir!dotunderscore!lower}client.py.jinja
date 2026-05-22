@@ -428,14 +428,24 @@ class {{ class_name }}(_ClientBase):
             {%- endfor %}
         {%- endif %}
     {%- endif %}
-    {#- Per-message QoS and retain defaults pulled from protocoloptions (direct scalars per spec). -#}
+    {#- Per-message QoS and retain defaults pulled from protocoloptions.
+        Supports both the direct-scalar form (protocoloptions.qos = 1) and the
+        spec's properties-map form (protocoloptions.properties.qos.value = 1). -#}
     {%- set default_qos = 1 %}
-    {%- if message.protocoloptions and message.protocoloptions.qos is not none -%}
+    {%- if message.protocoloptions and message.protocoloptions.qos is defined and message.protocoloptions.qos is not none -%}
         {%- set default_qos = message.protocoloptions.qos %}
+    {%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.qos is defined and message.protocoloptions.properties.qos and message.protocoloptions.properties.qos.value is defined and message.protocoloptions.properties.qos.value is not none -%}
+        {%- set default_qos = message.protocoloptions.properties.qos.value %}
     {%- endif %}
     {%- set default_retain = "False" %}
-    {%- if message.protocoloptions and message.protocoloptions.retain is not none -%}
+    {%- if message.protocoloptions and message.protocoloptions.retain is defined and message.protocoloptions.retain is not none -%}
         {%- if message.protocoloptions.retain -%}
+            {%- set default_retain = "True" %}
+        {%- else -%}
+            {%- set default_retain = "False" %}
+        {%- endif %}
+    {%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.retain is defined and message.protocoloptions.properties.retain and message.protocoloptions.properties.retain.value is defined and message.protocoloptions.properties.retain.value is not none -%}
+        {%- if message.protocoloptions.properties.retain.value -%}
             {%- set default_retain = "True" %}
         {%- else -%}
             {%- set default_retain = "False" %}
@@ -507,6 +517,13 @@ class {{ class_name }}(_ClientBase):
         }
         attributes["datacontenttype"] = content_type
         byte_data = data.to_byte_array(content_type) if data is not None else b''
+        # to_byte_array returns str for text content types (e.g. JSON);
+        # paho-mqtt will UTF-8 encode str payloads, but cloudevents-sdk's
+        # to_binary/to_structured embed the str directly which then becomes
+        # a JSON string literal containing the JSON document. Coerce to
+        # bytes up-front so receivers can json.loads(payload) once.
+        if isinstance(byte_data, str):
+            byte_data = byte_data.encode('utf-8')
         event = CloudEvent(attributes, byte_data)
 
         _effective_qos = {{ default_qos }} if qos is None else qos
@@ -526,6 +543,15 @@ class {{ class_name }}(_ClientBase):
             mqtt5_props = _ce_headers_to_mqtt5_properties(dict(headers or {}))
             if mqtt5_props is not None:
                 publish_kwargs["properties"] = mqtt5_props
+
+        # Ensure the MQTT PUBLISH payload is bytes so it is sent as the
+        # exact serialized representation; paho-mqtt would UTF-8 encode a
+        # str, but a dict (from structured mode) would crash, and any
+        # double-encoding upstream would land on the wire untouched.
+        if isinstance(payload, dict):
+            payload = json.dumps(payload).encode('utf-8')
+        elif isinstance(payload, str):
+            payload = payload.encode('utf-8')
 
         self.client.publish(target_topic, payload, **publish_kwargs)
 

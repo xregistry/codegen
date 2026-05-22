@@ -1475,15 +1475,81 @@ class XRegistryLoader:
                     filtered_messagegroups[group_id] = group_data
             filtered_doc["messagegroups"] = filtered_messagegroups
         
-        # Also filter schemagroups to match the filtered messagegroups
+        # Also filter schemagroups to keep only those referenced by the
+        # filtered messagegroups via dataschemauri (schemagroup IDs are
+        # independent of messagegroup IDs and must be resolved from refs).
         if isinstance(filtered_doc.get("schemagroups"), dict):
-            filtered_schemagroups = {}
-            for group_id, group_data in filtered_doc["schemagroups"].items():
-                if messagegroup_filter in group_id:
-                    filtered_schemagroups[group_id] = group_data
+            referenced_sg_ids = self._collect_referenced_schemagroup_ids(
+                filtered_doc.get("messagegroups", {}), document)
+            filtered_schemagroups = {
+                sg_id: sg_data
+                for sg_id, sg_data in filtered_doc["schemagroups"].items()
+                if not referenced_sg_ids or sg_id in referenced_sg_ids
+            }
             filtered_doc["schemagroups"] = filtered_schemagroups
         
         return filtered_doc
+
+    @staticmethod
+    def _collect_referenced_schemagroup_ids(
+            messagegroups: Any,
+            full_document: Optional[Dict[str, Any]] = None) -> Set[str]:
+        """Walk messagegroups and collect schemagroup IDs referenced by any
+        message's ``dataschemauri`` (e.g. ``#/schemagroups/<id>/schemas/...``).
+
+        When a message inherits via ``basemessageurl`` from another
+        messagegroup, the base message is followed in ``full_document`` so
+        that schemagroups referenced only by the base are still kept.
+        """
+        ids: Set[str] = set()
+        visited: Set[str] = set()
+        full_mgs = (full_document or {}).get("messagegroups", {}) \
+            if isinstance(full_document, dict) else {}
+
+        def _record_uri(uri: Any) -> None:
+            if isinstance(uri, str) and uri.startswith("#/schemagroups/"):
+                parts = uri.split("/")
+                if len(parts) > 2:
+                    ids.add(parts[2])
+
+        def _resolve_base(base_url: Any) -> Optional[Dict[str, Any]]:
+            if not isinstance(base_url, str) or not isinstance(full_mgs, dict):
+                return None
+            # Accept forms like
+            #   /messagegroups/<mg>/messages/<msg>
+            #   #/messagegroups/<mg>/messages/<msg>
+            tokens = [t for t in base_url.split("/") if t and t != "#"]
+            if len(tokens) >= 4 and tokens[0] == "messagegroups" \
+                    and tokens[2] == "messages":
+                mg = full_mgs.get(tokens[1])
+                if isinstance(mg, dict):
+                    msg = mg.get("messages", {}).get(tokens[3])
+                    if isinstance(msg, dict):
+                        return msg
+            return None
+
+        def _visit(message: Dict[str, Any], depth: int = 0) -> None:
+            if depth > 16:
+                return
+            _record_uri(message.get("dataschemauri"))
+            base = message.get("basemessageurl") or message.get("basemessage")
+            if isinstance(base, str) and base not in visited:
+                visited.add(base)
+                resolved = _resolve_base(base)
+                if resolved is not None:
+                    _visit(resolved, depth + 1)
+
+        if isinstance(messagegroups, dict):
+            for _, group in messagegroups.items():
+                if not isinstance(group, dict):
+                    continue
+                messages = group.get("messages", {})
+                if not isinstance(messages, dict):
+                    continue
+                for _, message in messages.items():
+                    if isinstance(message, dict):
+                        _visit(message)
+        return ids
     
     def _apply_endpoint_filter(self, document: Dict[str, Any], 
                               endpoint_filter: str) -> Dict[str, Any]:
@@ -1538,13 +1604,18 @@ class XRegistryLoader:
                         filtered_messagegroups[group_id] = group_data
                 filtered_doc["messagegroups"] = filtered_messagegroups
             
-            # Step 4: Filter schemagroups to match the filtered messagegroups
-            if referenced_messagegroups and isinstance(filtered_doc.get("schemagroups"), dict):
-                filtered_schemagroups = {}
-                for group_id, group_data in filtered_doc["schemagroups"].items():
-                    if group_id in referenced_messagegroups:
-                        filtered_schemagroups[group_id] = group_data
-                filtered_doc["schemagroups"] = filtered_schemagroups
+            # Step 4: Filter schemagroups to keep only those referenced by
+            # the filtered messagegroups via dataschemauri. Schemagroup IDs
+            # are independent of messagegroup IDs (e.g. ``foo.jstruct`` vs
+            # ``foo.kafka``) and must be resolved from the actual refs.
+            if isinstance(filtered_doc.get("schemagroups"), dict):
+                referenced_sg_ids = self._collect_referenced_schemagroup_ids(
+                    filtered_doc.get("messagegroups", {}), document)
+                filtered_doc["schemagroups"] = {
+                    sg_id: sg_data
+                    for sg_id, sg_data in filtered_doc["schemagroups"].items()
+                    if not referenced_sg_ids or sg_id in referenced_sg_ids
+                }
         
         return filtered_doc
     

@@ -107,18 +107,27 @@ class {{ class_name }}:
         }
         attributes["datacontenttype"] = content_type
         byte_data = data.to_byte_array(content_type) if data is not None else b''
+        # to_byte_array returns str for text content types (e.g. JSON);
+        # coerce to bytes so the cloudevents-sdk emits a binary AMQP data
+        # section rather than a string section containing escaped JSON.
+        if isinstance(byte_data, str):
+            byte_data = byte_data.encode('utf-8')
         event = CloudEvent(attributes, byte_data)
         if self.content_mode == "structured":
             headers, body = to_structured(event)
         else:
             headers, body = to_binary(event)
+        if isinstance(body, str):
+            body = body.encode('utf-8')
         event_data = EventData(body)
         if "Content-Type" in headers:
             event_data.content_type = headers["Content-Type"]
             del headers["Content-Type"]
         for key, value in headers.items():
             if key.lower().startswith("ce-"):
-                event_data.properties["cloudEvents_"+key[3:]] = value
+                # CloudEvents AMQP Protocol Binding v1.0.2 §3.1 mandates the
+                # 'cloudEvents:' prefix on application-properties keys.
+                event_data.properties["cloudEvents:"+key[3:]] = value
             else:
                 event_data.properties[key] = value
         await self.producer.send_event(event_data)

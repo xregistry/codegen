@@ -377,3 +377,102 @@ def test_egproducer_lightbulb_ts():
     tmpdirname = tempfile.mkdtemp()
     run_typescript_test(os.path.join(project_root, "test/xreg/lightbulb.xreg.json"),
                         tmpdirname, "TestProject", "egproducer")
+
+
+# ---------------------------------------------------------------------------
+# Wire-format introspection tests (codegen-only, no npm build required).
+#
+# Guard against the CloudEvents AMQP §3.1 prefix violation observed in the
+# TS amqpproducer / ehproducer / sbproducer templates: application-properties
+# carrying CE attributes were being emitted with the non-spec ``ce_*``
+# prefix (Kafka header convention) instead of the spec-mandated
+# ``cloudEvents:*`` prefix. Any compliant CE-AMQP consumer (azure-servicebus
+# ``CloudEvent.from_message``, Knative eventing, NATS adapters, …) will
+# fail to recognize ``ce_*`` keys as CloudEvents attributes.
+# ---------------------------------------------------------------------------
+
+def _generate_ts_producer_src(style, source_filename):
+    """Run xrcg for the given TS style against lightbulb.xreg.json and return
+    the contents of ``<style-output-dir>/src/<source_filename>`` as a string.
+    """
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    sys.argv = ['xrcg', 'generate',
+                '--definitions', os.path.join(project_root, 'test/xreg/lightbulb.xreg.json'),
+                '--output', tmpdirname,
+                '--projectname', 'TestProject',
+                '--style', style,
+                '--language', 'ts']
+    assert xrcg.cli() == 0
+    candidates = glob.glob(os.path.join(tmpdirname, '**', source_filename), recursive=True)
+    assert candidates, f'no {source_filename} emitted under {tmpdirname}'
+    return open(candidates[0], encoding='utf-8').read()
+
+
+def test_ts_amqpproducer_emits_cloudevents_prefix_not_ce_underscore():
+    """ts/amqpproducer must emit ``cloudEvents:*`` application-properties
+    keys (CE-AMQP §3.1) rather than the Kafka-style ``ce_*`` prefix that
+    was previously hardcoded in the template.
+    """
+    src = _generate_ts_producer_src('amqpproducer', 'producer.ts')
+    assert "'cloudEvents:specversion'" in src
+    assert "'cloudEvents:id'" in src
+    assert "'cloudEvents:type'" in src
+    assert "'cloudEvents:source'" in src
+    # Regression guards: the buggy spellings must not reappear.
+    for bad in ('ce_specversion', 'ce_id:', 'ce_type:', 'ce_source:',
+                'ce_subject', 'ce_time'):
+        assert bad not in src, (
+            f'ts/amqpproducer must not emit non-spec CE prefix: {bad!r}'
+        )
+
+
+def test_ts_amqpproducer_body_is_buffer_not_object():
+    """ts/amqpproducer must serialize the payload to a ``Buffer`` so rhea
+    emits an AMQP binary section. Passing a raw class instance / string
+    causes rhea to encode an AMQP map / string section, which produces
+    double-encoded wire payloads.
+    """
+    src = _generate_ts_producer_src('amqpproducer', 'producer.ts')
+    assert 'Buffer.from(' in src, (
+        'ts/amqpproducer must coerce payload bodies into Buffer instances'
+    )
+    # The raw-object body bug.
+    assert 'body: data,\n' not in src, (
+        'ts/amqpproducer must not pass raw `data` object as message body '
+        '(rhea would AMQP-encode it as a map)'
+    )
+
+
+def test_ts_ehproducer_emits_cloudevents_prefix_not_ce_underscore():
+    """ts/ehproducer must emit ``cloudEvents:*`` keys on EventData.properties
+    (which become AMQP application-properties on the wire).
+    """
+    src = _generate_ts_producer_src('ehproducer', 'producer.ts')
+    assert "'cloudEvents:specversion'" in src
+    assert "'cloudEvents:id'" in src
+    assert "'cloudEvents:type'" in src
+    assert "'cloudEvents:source'" in src
+    for bad in ("'ce_specversion'", "'ce_id'", "'ce_type'", "'ce_source'"):
+        assert bad not in src, (
+            f'ts/ehproducer must not emit non-spec CE prefix: {bad}'
+        )
+
+
+def test_ts_sbproducer_emits_cloudevents_prefix_not_ce_underscore():
+    """ts/sbproducer must emit ``cloudEvents:*`` keys on
+    ServiceBusMessage.applicationProperties.
+    """
+    src = _generate_ts_producer_src('sbproducer', 'producer.ts')
+    assert "'cloudEvents:specversion'" in src
+    assert "'cloudEvents:id'" in src
+    assert "'cloudEvents:type'" in src
+    assert "'cloudEvents:source'" in src
+    for bad in ("'ce_specversion'", "'ce_id'", "'ce_type'", "'ce_source'",
+                'ce_specversion:', 'ce_id:', 'ce_type:', 'ce_source:'):
+        assert bad not in src, (
+            f'ts/sbproducer must not emit non-spec CE prefix: {bad}'
+        )
+
+
+
