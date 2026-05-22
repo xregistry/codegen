@@ -55,9 +55,18 @@ jobs:
 
     - name: Fetch sample definitions from main branch
       run: |
-        echo "📥 Fetching sample definitions from main branch..."
+        echo "📥 Fetching sample definitions and scripts from main branch..."
         git fetch origin main
         git checkout origin/main -- samples/message-definitions
+        # Wheel-index script: prefer the dispatching ref (so PRs/dispatch from a
+        # feature branch can validate end-to-end), fall back to main.
+        SCRIPT_REF="${{ github.ref_name }}"
+        if git fetch origin "$SCRIPT_REF" 2>/dev/null && git checkout "origin/$SCRIPT_REF" -- scripts/build_wheel_index.py 2>/dev/null; then
+          echo "✅ Got build_wheel_index.py from $SCRIPT_REF"
+        else
+          git checkout origin/main -- scripts/build_wheel_index.py
+          echo "✅ Got build_wheel_index.py from main"
+        fi
         echo "✅ Fetched $(ls -1 samples/message-definitions/*.json 2>/dev/null | wc -l) definition files"
 
     - name: Set up Python
