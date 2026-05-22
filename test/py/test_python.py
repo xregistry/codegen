@@ -295,3 +295,90 @@ def test_sbconsumer_inkjet_py():
     tmpdirname = tempfile.mkdtemp()
     run_python_test(os.path.join(project_root, "test/xreg/inkjet.xreg.json".replace(
             '/', os.sep)), tmpdirname, "test_sbconsumer_inkjet_py", "sbconsumer")
+
+def _generate_with_template_args(xreg_file, output_dir, projectname, style, template_args):
+    """Run xrcg generate with --template-args; no build/test step."""
+    argv = ['xrcg', 'generate',
+            '--definitions', xreg_file,
+            '--output', output_dir,
+            '--projectname', projectname,
+            '--style', style,
+            '--language', 'py']
+    for kv in template_args:
+        argv += ['--template-args', kv]
+    sys.argv = argv
+    assert xrcg.cli() == 0
+
+
+@pytest.mark.parametrize("target,expected_audience", [
+    ("eventhubs", "https://eventhubs.azure.net/.default"),
+    ("servicebus", "https://servicebus.azure.net/.default"),
+])
+def test_amqpproducer_azure_cbs_codegen(target, expected_audience):
+    """Codegen-only: --template-args azure_cbs_target={eventhubs,servicebus}
+    emits a syntactically valid producer with the CBS reactor handler wired in
+    and the correct audience.
+    """
+    import ast, glob
+    tmpdirname = tempfile.mkdtemp()
+    _generate_with_template_args(
+        os.path.join(project_root, "test/xreg/lightbulb-amqp.xreg.json"),
+        tmpdirname,
+        "test_cbs_" + target,
+        "amqpproducer",
+        ["azure_cbs_target=" + target],
+    )
+    producer_files = glob.glob(os.path.join(tmpdirname, "**", "producer.py"), recursive=True)
+    assert producer_files, "no producer.py emitted under " + tmpdirname
+    src = open(producer_files[0], encoding="utf-8").read()
+    ast.parse(src)
+    assert "_CbsAzureHandler" in src, "CBS handler missing from generated producer"
+    assert "from azure.core.credentials import TokenCredential" in src
+    assert expected_audience in src, f"expected audience {expected_audience!r} not in generated producer"
+    # pyproject must include azure deps
+    pyproject_files = glob.glob(os.path.join(tmpdirname, "**", "pyproject.toml"), recursive=True)
+    assert pyproject_files, "no pyproject.toml emitted"
+    pyp = open(pyproject_files[0], encoding="utf-8").read()
+    assert "azure-identity" in pyp
+    assert "azure-core" in pyp
+
+
+def test_amqpproducer_azure_cbs_invalid_target_fails():
+    """Invalid azure_cbs_target value must abort producer.py generation."""
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    try:
+        _generate_with_template_args(
+            os.path.join(project_root, "test/xreg/lightbulb-amqp.xreg.json"),
+            tmpdirname,
+            "test_cbs_bad",
+            "amqpproducer",
+            ["azure_cbs_target=bogus"],
+        )
+    except (Exception, SystemExit):
+        pass
+    producer_files = glob.glob(os.path.join(tmpdirname, "**", "producer.py"), recursive=True)
+    assert not producer_files, (
+        "producer.py must not be generated when azure_cbs_target is invalid; "
+        "found: " + repr(producer_files)
+    )
+
+
+def test_amqpproducer_no_azure_cbs_has_no_azure_deps():
+    """Without azure_cbs_target, no azure imports must leak into the producer."""
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    _generate_with_template_args(
+        os.path.join(project_root, "test/xreg/lightbulb-amqp.xreg.json"),
+        tmpdirname,
+        "test_cbs_off",
+        "amqpproducer",
+        [],
+    )
+    producer_files = glob.glob(os.path.join(tmpdirname, "**", "producer.py"), recursive=True)
+    src = open(producer_files[0], encoding="utf-8").read()
+    assert "azure.core.credentials" not in src
+    assert "_CbsAzureHandler" not in src
+    pyproject_files = glob.glob(os.path.join(tmpdirname, "**", "pyproject.toml"), recursive=True)
+    pyp = open(pyproject_files[0], encoding="utf-8").read()
+    assert "azure-identity" not in pyp

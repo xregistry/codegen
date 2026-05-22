@@ -1,5 +1,8 @@
 {%- import "util.include.jinja" as util -%}
 {%- set messagegroups = root.messagegroups %}
+{%- set _azure_cbs_target = azure_cbs_target | default(none) %}
+{%- set azure_audience_map = {'eventhubs': 'https://eventhubs.azure.net/.default', 'servicebus': 'https://servicebus.azure.net/.default'} %}
+{%- set _azure_cbs_audience = (azure_cbs_audience | default(none)) or azure_audience_map.get(_azure_cbs_target) %}
 {%- filter wordwrap(120) %}
 # {{ project_name | capitalize }} - AMQP 1.0 Producer
 
@@ -27,11 +30,82 @@ Use cases: Enterprise integration, IoT messaging, financial services, cloud-nati
 
 **Note for RabbitMQ users:** RabbitMQ requires the AMQP 1.0 plugin to be enabled. See the [RabbitMQ AMQP 1.0 Setup Guide](https://github.com/clemensv/xregistry-cli/blob/main/docs/rabbitmq_amqp_setup.md) for detailed instructions.
 
+{% if _azure_cbs_target %}
+## Azure Entra ID (CBS) Authentication — enabled
+
+This producer was generated with `--template-args azure_cbs_target={{ _azure_cbs_target }}`,
+which wires in AMQP CBS (Claims-Based Security) put-token flow for **Azure Event Hubs** and
+**Azure Service Bus** using `azure-identity` token credentials.
+
+```python
+from azure.identity import DefaultAzureCredential
+producer = {{ "<Group>Producer" }}(
+    host="my-namespace.servicebus.windows.net",   # EH or SB FQDN
+    address="my-hub-or-queue",                    # entity path
+    credential=DefaultAzureCredential(),
+)
+producer.send_my_event(...)
+producer.close()
+```
+
+CBS audience: `{{ _azure_cbs_audience }}`
+(override with `--template-args azure_cbs_audience=<scope>` at code-gen time)
+
+Required RBAC role on the entity or namespace, e.g.:
+- Event Hubs: **Azure Event Hubs Data Sender**
+- Service Bus: **Azure Service Bus Data Sender**
+
+Debug logging:
+
+```python
+import logging
+logging.getLogger("amqp.cbs").setLevel(logging.DEBUG)
+```
+
+**Known limitations of the v1 CBS implementation:**
+- Token is acquired once at `__init__` time; there is no background refresh. Recreate the
+  producer (or open a fresh one) before token expiry (~60 min for Entra ID).
+- On Windows, the official `python-qpid-proton` PyPI wheel (verified on 0.40.0,
+  the latest release at the time of writing) is linked against SChannel via the
+  legacy `SCHANNEL_CRED` API and **cannot negotiate TLS 1.3**. Azure Service
+  Bus namespaces with `minimumTlsVersion=1.3` will return
+  `amqp:unauthorized-access "Invalid TLS version"` at AMQP open. Tracked
+  upstream as [PROTON-2933](https://issues.apache.org/jira/browse/PROTON-2933).
+
+  Until the upstream wheel is fixed, install the OpenSSL-backed Windows
+  wheel published from `xregistry/codegen`:
+
+  ```
+  pip install --extra-index-url https://xregistry.github.io/codegen/wheels/simple/ python-qpid-proton
+  ```
+
+  pip will pick the `0.40.0+xrcgN` build automatically on Windows; Linux and
+  macOS continue to install the stock `0.40.0` from PyPI.
+- A reactor-based handler is used on the CBS path; the non-CBS path keeps the
+  `BlockingConnection` implementation unchanged.
+
+{% endif %}
 ## Installation
 
 ```bash
-pip install python-qpid-proton cloudevents
+pip install python-qpid-proton cloudevents{% if _azure_cbs_target %} azure-identity azure-core{% endif %}
 ```
+
+### Windows: TLS 1.3 — extra index URL required
+
+The official `python-qpid-proton` Windows wheel does not support TLS 1.3
+(it links against SChannel via a deprecated API). If your AMQP broker
+requires TLS 1.3 — most notably Azure Service Bus namespaces with
+`minimumTlsVersion=1.3` — install with our OpenSSL-backed patched wheel:
+
+```bash
+pip install --extra-index-url https://xregistry.github.io/codegen/wheels/simple/ python-qpid-proton cloudevents{% if _azure_cbs_target %} azure-identity azure-core{% endif %}
+```
+
+pip selects the patched wheel only on Windows (it has a strictly higher
+PEP 440 local version `0.40.0+xrcgN`); Linux and macOS continue to install
+the stock release from PyPI. The patched wheel will be retired as soon as
+upstream proton ships a Windows wheel with TLS 1.3 support.
 
 ## Generated Producers
 

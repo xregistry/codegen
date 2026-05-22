@@ -6,6 +6,10 @@ on:
     workflows: ["Publish to PyPI"]
     types:
       - completed
+  # Also re-run when a wheel release is published / edited so the simple index
+  # gains the new wheels.
+  release:
+    types: [published, edited, deleted]
   # Also allow manual trigger
   workflow_dispatch:
 
@@ -23,9 +27,11 @@ concurrency:
 jobs:
   build-pages:
     runs-on: ubuntu-latest
-    # Only run if PyPI publish succeeded and was triggered by a tag
+    # Run on workflow_dispatch, on release events (wheel index refresh),
+    # or after a successful PyPI publish triggered by a v* tag.
     if: |
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'release' ||
       (github.event_name == 'workflow_run' && 
        github.event.workflow_run.conclusion == 'success' &&
        startsWith(github.event.workflow_run.head_branch, 'v'))
@@ -49,9 +55,18 @@ jobs:
 
     - name: Fetch sample definitions from main branch
       run: |
-        echo "📥 Fetching sample definitions from main branch..."
+        echo "📥 Fetching sample definitions and scripts from main branch..."
         git fetch origin main
         git checkout origin/main -- samples/message-definitions
+        # Wheel-index script: prefer the dispatching ref (so PRs/dispatch from a
+        # feature branch can validate end-to-end), fall back to main.
+        SCRIPT_REF="${{ github.ref_name }}"
+        if git fetch origin "$SCRIPT_REF" 2>/dev/null && git checkout "origin/$SCRIPT_REF" -- scripts/build_wheel_index.py 2>/dev/null; then
+          echo "✅ Got build_wheel_index.py from $SCRIPT_REF"
+        else
+          git checkout origin/main -- scripts/build_wheel_index.py
+          echo "✅ Got build_wheel_index.py from main"
+        fi
         echo "✅ Fetched $(ls -1 samples/message-definitions/*.json 2>/dev/null | wc -l) definition files"
 
     - name: Set up Python
@@ -66,10 +81,11 @@ jobs:
         echo "✅ Installed xrcg version: $(pip show xrcg | grep Version)"
 
     - name: Build gallery
+      continue-on-error: true
       run: |
         if [ -f "scripts/build_gallery.py" ]; then
           echo "🖼️ Building gallery..."
-          python scripts/build_gallery.py
+          python scripts/build_gallery.py || echo "⚠️ Gallery build had failures; continuing so wheel index and Pages deploy still run."
         else
           echo "⚠️ No gallery build script found"
         fi
@@ -77,7 +93,7 @@ jobs:
     - name: Setup Ruby
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: '3.1'
+        ruby-version: '3.3'
         bundler-cache: true
 
     - name: Setup Pages
@@ -89,6 +105,16 @@ jobs:
         bundle exec jekyll build --baseurl "/codegen"
       env:
         JEKYLL_ENV: production
+
+    - name: Build PEP 503 wheel index for patched proton wheels
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+      run: |
+        echo "🛞 Building PEP 503 wheel index..."
+        python scripts/build_wheel_index.py --output-dir _site/wheels
+        echo "Generated files:"
+        find _site/wheels -type f | sort
 
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v5

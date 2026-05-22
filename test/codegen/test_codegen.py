@@ -135,3 +135,18 @@ def test_codegen_java(template_name):
     assert os.path.exists(os.path.join(main_dir, 'pom.xml')), f"No pom.xml found in {main_dir}"
     result = subprocess.run("mvn package -B", cwd=main_dir, shell=True, timeout=300)
     assert result.returncode == 0, "Main project build failed"
+
+
+def test_codegen_java_kafka_inkjet_proto_generates():
+    """Regression test for Protobuf conversion with multiple nested enums."""
+    output_dir = os.path.join(project_root, 'tmp/test/java/kafkaproducer-inkjet-proto')
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir, ignore_errors=True)
+
+    sys.argv = ['xrcg', 'generate',
+                '--style', 'kafkaproducer',
+                '--language', 'java',
+                '--definitions', os.path.join(project_root, 'samples/message-definitions/inkjet-proto.xreg.json'),
+                '--output', output_dir,
+                '--projectname', 'JavaKafkaInkjetProto']
+    assert xrcg.cli() == 0
