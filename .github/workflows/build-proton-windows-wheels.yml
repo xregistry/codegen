@@ -1,0 +1,146 @@
+name: Build Proton Windows Wheels (OpenSSL)
+
+# Builds a TLS-1.3-capable python-qpid-proton Windows wheel by patching
+# upstream ext_build.py to use OpenSSL (via vcpkg) instead of SChannel.
+# See tools/proton-windows-wheel/README.md for the why and when-to-drop.
+#
+# Triggered manually. Produces wheels for all supported CPython versions
+# on win_amd64, uploads them as a workflow artifact, and (when the run is
+# tagged) creates / updates a GitHub Release named proton-windows-<ver>+xrcg<N>.
+
+on:
+  workflow_dispatch:
+    inputs:
+      proton_version:
+        description: 'Upstream python-qpid-proton version to patch'
+        required: true
+        default: '0.40.0'
+      xrcg_build:
+        description: 'Our local build number (PEP 440 +xrcg<N> suffix)'
+        required: true
+        default: '1'
+      publish_release:
+        description: 'Create / update GitHub Release with the wheels'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write   # for creating the release
+
+jobs:
+  build:
+    name: Build cp${{ matrix.python }} win_amd64
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Cache vcpkg
+        id: vcpkg-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:/vcpkg/installed
+            C:/vcpkg/packages
+            C:/vcpkg/buildtrees
+          key: vcpkg-openssl-${{ runner.os }}-v1
+
+      - name: Install OpenSSL via vcpkg
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "C:/vcpkg/installed/x64-windows-static-md/include/openssl")) {
+            vcpkg install openssl:x64-windows-static-md
+          } else {
+            Write-Host "Using cached vcpkg OpenSSL install"
+          }
+          $opensslDir = "C:/vcpkg/installed/x64-windows-static-md"
+          echo "OPENSSL_DIR=$opensslDir" >> $env:GITHUB_ENV
+          Get-ChildItem "$opensslDir/include/openssl" | Select-Object -First 5
+          Get-ChildItem "$opensslDir/lib" | Where-Object Name -Match 'ssl|crypto' | Select-Object Name
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build wheel cffi setuptools
+
+      - name: Build patched wheel
+        run: |
+          python tools/proton-windows-wheel/build.py `
+            --proton-version "${{ github.event.inputs.proton_version }}" `
+            --xrcg-build "${{ github.event.inputs.xrcg_build }}" `
+            --output-dir dist
+
+      - name: Sanity-check the wheel
+        shell: pwsh
+        run: |
+          Get-ChildItem dist
+          $wheel = (Get-ChildItem dist\python_qpid_proton-*.whl | Select-Object -First 1).FullName
+          python -m pip install --force-reinstall $wheel
+          python -c "import proton; print('proton', proton.VERSION); import proton._handlers; print('handlers ok')"
+          # Confirm the C extension does NOT mention SChannel and DOES mention OpenSSL
+          $pyd = Get-ChildItem -Recurse "$($env:VIRTUAL_ENV)\..\..\Lib\site-packages\cproton_ffi*.pyd" -ErrorAction SilentlyContinue
+          if (-not $pyd) {
+            $pyd = Get-ChildItem -Recurse "$(python -c 'import site; print(site.getsitepackages()[0])')\cproton_ffi*.pyd"
+          }
+          if ($pyd) {
+            $strings = & cmd /c "findstr /C:\"OpenSSL\" /C:\"SChannel\" /C:\"TLSv1.3\" `"$($pyd.FullName)`" 2>nul" | Select-Object -First 5
+            Write-Host "C-extension banner hits:"
+            $strings | ForEach-Object { Write-Host "  $_" }
+          }
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheel-cp${{ matrix.python }}-win_amd64
+          path: dist/python_qpid_proton-*.whl
+          retention-days: 90
+
+  publish:
+    name: Publish GitHub Release
+    if: ${{ github.event.inputs.publish_release == 'true' }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: List wheels
+        run: ls -lh dist/
+
+      - name: Create / update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "proton-windows-${{ github.event.inputs.proton_version }}+xrcg${{ github.event.inputs.xrcg_build }}"
+          name: "python-qpid-proton ${{ github.event.inputs.proton_version }}+xrcg${{ github.event.inputs.xrcg_build }} (Windows OpenSSL)"
+          body: |
+            Patched build of upstream `python-qpid-proton` ${{ github.event.inputs.proton_version }}
+            for Windows that links against OpenSSL (via vcpkg) instead of SChannel,
+            enabling **TLS 1.3** against brokers like Azure Service Bus on namespaces
+            with `minimumTlsVersion=1.3`.
+
+            Install with:
+
+            ```
+            pip install --extra-index-url https://xregistry.github.io/codegen/wheels/ python-qpid-proton
+            ```
+
+            See [`tools/proton-windows-wheel/README.md`](../tree/main/tools/proton-windows-wheel/README.md)
+            for the rationale and dropme criteria.
+          files: dist/python_qpid_proton-*.whl
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

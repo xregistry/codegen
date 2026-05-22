@@ -6,6 +6,10 @@ on:
     workflows: ["Publish to PyPI"]
     types:
       - completed
+  # Also re-run when a wheel release is published / edited so the simple index
+  # gains the new wheels.
+  release:
+    types: [published, edited, deleted]
   # Also allow manual trigger
   workflow_dispatch:
 
@@ -23,9 +27,11 @@ concurrency:
 jobs:
   build-pages:
     runs-on: ubuntu-latest
-    # Only run if PyPI publish succeeded and was triggered by a tag
+    # Run on workflow_dispatch, on release events (wheel index refresh),
+    # or after a successful PyPI publish triggered by a v* tag.
     if: |
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'release' ||
       (github.event_name == 'workflow_run' && 
        github.event.workflow_run.conclusion == 'success' &&
        startsWith(github.event.workflow_run.head_branch, 'v'))
@@ -89,6 +95,16 @@ jobs:
         bundle exec jekyll build --baseurl "/codegen"
       env:
         JEKYLL_ENV: production
+
+    - name: Build PEP 503 wheel index for patched proton wheels
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+      run: |
+        echo "🛞 Building PEP 503 wheel index..."
+        python scripts/build_wheel_index.py --output-dir _site/wheels
+        echo "Generated files:"
+        find _site/wheels -type f | sort
 
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v5

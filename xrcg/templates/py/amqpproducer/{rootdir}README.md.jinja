@@ -66,13 +66,21 @@ logging.getLogger("amqp.cbs").setLevel(logging.DEBUG)
 - Token is acquired once at `__init__` time; there is no background refresh. Recreate the
   producer (or open a fresh one) before token expiry (~60 min for Entra ID).
 - On Windows, the official `python-qpid-proton` PyPI wheel (verified on 0.40.0,
-  the latest release at the time of writing) is linked against an OpenSSL
-  build with no TLS 1.3 support. Azure Service Bus namespaces with
-  `minimumTlsVersion=1.3` will return `amqp:unauthorized-access "Invalid TLS
-  version"` at AMQP open. The proton C API also has no knob to pin a TLS
-  version. Workarounds: run the generated client on Linux/macOS or in a
-  Linux container (system OpenSSL 3.x negotiates TLS 1.3 fine), or use a
-  namespace with `minimumTlsVersion=1.2`.
+  the latest release at the time of writing) is linked against SChannel via the
+  legacy `SCHANNEL_CRED` API and **cannot negotiate TLS 1.3**. Azure Service
+  Bus namespaces with `minimumTlsVersion=1.3` will return
+  `amqp:unauthorized-access "Invalid TLS version"` at AMQP open. Tracked
+  upstream as a [Qpid Proton JIRA issue](https://issues.apache.org/jira/projects/PROTON).
+
+  Until the upstream wheel is fixed, install the OpenSSL-backed Windows
+  wheel published from `xregistry/codegen`:
+
+  ```
+  pip install --extra-index-url https://xregistry.github.io/codegen/wheels/simple/ python-qpid-proton
+  ```
+
+  pip will pick the `0.40.0+xrcgN` build automatically on Windows; Linux and
+  macOS continue to install the stock `0.40.0` from PyPI.
 - A reactor-based handler is used on the CBS path; the non-CBS path keeps the
   `BlockingConnection` implementation unchanged.
 
@@ -82,6 +90,22 @@ logging.getLogger("amqp.cbs").setLevel(logging.DEBUG)
 ```bash
 pip install python-qpid-proton cloudevents{% if _azure_cbs_target %} azure-identity azure-core{% endif %}
 ```
+
+### Windows: TLS 1.3 — extra index URL required
+
+The official `python-qpid-proton` Windows wheel does not support TLS 1.3
+(it links against SChannel via a deprecated API). If your AMQP broker
+requires TLS 1.3 — most notably Azure Service Bus namespaces with
+`minimumTlsVersion=1.3` — install with our OpenSSL-backed patched wheel:
+
+```bash
+pip install --extra-index-url https://xregistry.github.io/codegen/wheels/simple/ python-qpid-proton cloudevents{% if _azure_cbs_target %} azure-identity azure-core{% endif %}
+```
+
+pip selects the patched wheel only on Windows (it has a strictly higher
+PEP 440 local version `0.40.0+xrcgN`); Linux and macOS continue to install
+the stock release from PyPI. The patched wheel will be retired as soon as
+upstream proton ships a Windows wheel with TLS 1.3 support.
 
 ## Generated Producers
 
