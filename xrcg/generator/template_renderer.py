@@ -266,9 +266,6 @@ class TemplateRenderer:
                     content = schema_info["content"]
                     contents = content if isinstance(content, list) else [content]
                     for c in contents:
-                        if not isinstance(c, dict):
-                            logger.debug("Skipping non-object top-level Avro schema entry from %s", schema_info.get("reference"))
-                            continue
                         key = get_schema_key(c)
                         if key not in seen_keys:
                             seen_keys.add(key)
@@ -324,6 +321,81 @@ class TemplateRenderer:
                 self.template_args, self.suppress_schema_output
             )
 
+    def _resolve_jstruct_root(self, schema: JsonNode) -> JsonNode:
+        """Resolve a JSON Structure ``$root`` reference and lift the resolved
+        type to the top level.
+
+        JSON Structure schemas commonly use the pattern::
+
+            {
+              "$id": "...",
+              "name": "Station",
+              "$root": "#/definitions/de/wsv/pegelonline/Station",
+              "definitions": { "de": { "wsv": { "pegelonline": {
+                "Station": {"type": "object", "properties": {...}},
+                ...
+              }}}}
+            }
+
+        The top-level wrapper has no ``type``/``enum`` of its own — the actual
+        class lives at the ``$root`` pointer. avrotize's
+        ``convert_structure_schema_to_python`` (and its sibling converters)
+        only emit code when each top-level schema in the input list is itself
+        a class-shaped schema (``type=object``, ``enum``, ``type=choice``,
+        ``type=map``); given a bare ``$root`` wrapper it silently does
+        nothing and writes only a ``pyproject.toml``.
+
+        This helper resolves ``$root`` against the schema's own
+        ``definitions`` and returns a new dict that has the resolved type
+        fields lifted to the top level while preserving the ``definitions``
+        map (so nested ``$ref`` targets like ``Water`` referenced from
+        ``Station`` still resolve in avrotize).
+
+        If there is no ``$root`` or it can't be resolved, returns the input
+        schema unchanged.
+        """
+        if not isinstance(schema, dict):
+            return schema
+        root_ref = schema.get("$root")
+        if not root_ref or not isinstance(root_ref, str) or not root_ref.startswith("#/"):
+            return schema
+        try:
+            resolved = jsonpointer.resolve_pointer(schema, root_ref[1:])
+        except (jsonpointer.JsonPointerException, Exception) as exc:
+            logger.warning("Failed to resolve $root %s: %s", root_ref, exc)
+            return schema
+        if not isinstance(resolved, dict):
+            return schema
+
+        merged = dict(resolved)
+        if "definitions" in schema and "definitions" not in merged:
+            merged["definitions"] = schema["definitions"]
+        for key in ("$id", "$schema"):
+            if key in schema and key not in merged:
+                merged[key] = schema[key]
+        if "name" not in merged and "name" in schema:
+            merged["name"] = schema["name"]
+
+        # Derive namespace from the $root pointer path. For a pointer like
+        # "#/definitions/de/wsv/pegelonline/Station" the namespace is
+        # "de.wsv.pegelonline" — everything between "definitions" and the
+        # final segment. avrotize uses ``namespace`` to place the generated
+        # class in a sub-package; without it Station/CurrentMeasurement
+        # would be emitted at the data package root while Water (reached via
+        # $ref to its fully-namespaced definitions path) would be placed
+        # under de/wsv/pegelonline/, producing an inconsistent tree.
+        if "namespace" not in merged:
+            segments = root_ref[1:].split("/")
+            try:
+                idx = segments.index("definitions")
+            except ValueError:
+                idx = -1
+            if idx >= 0 and len(segments) > idx + 2:
+                ns_parts = segments[idx + 1 : -1]
+                if ns_parts:
+                    merged["namespace"] = ".".join(ns_parts)
+        return merged
+
     def _process_jstruct_schemas(self, jstruct_schema: JsonNode, project_data_dir: str, json_enabled: bool, avro_enabled: bool = False) -> None:
         """Process JSON Structure schemas using dedicated Avrotize converters.
         
@@ -345,6 +417,13 @@ class TemplateRenderer:
         
         # Ensure output directory exists
         os.makedirs(project_data_dir, exist_ok=True)
+
+        # Resolve $root wrappers so avrotize sees class-shaped top-level
+        # schemas. See _resolve_jstruct_root for details.
+        if isinstance(jstruct_schema, list):
+            jstruct_schema = [self._resolve_jstruct_root(s) for s in jstruct_schema]
+        else:
+            jstruct_schema = self._resolve_jstruct_root(jstruct_schema)
         
         if self.language == "py":
             convert_structure_schema_to_python(
