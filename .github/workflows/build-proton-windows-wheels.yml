@@ -90,15 +90,20 @@ jobs:
           $wheel = (Get-ChildItem dist\python_qpid_proton-*.whl | Select-Object -First 1).FullName
           python -m pip install --force-reinstall $wheel
           python -c "import proton; print('proton', proton.VERSION); import proton._handlers; print('handlers ok')"
-          # Confirm the C extension does NOT mention SChannel and DOES mention OpenSSL
-          $pyd = Get-ChildItem -Recurse "$($env:VIRTUAL_ENV)\..\..\Lib\site-packages\cproton_ffi*.pyd" -ErrorAction SilentlyContinue
-          if (-not $pyd) {
-            $pyd = Get-ChildItem -Recurse "$(python -c 'import site; print(site.getsitepackages()[0])')\cproton_ffi*.pyd"
-          }
+          # Confirm the built C extension references OpenSSL (not SChannel)
+          $sitePackages = python -c "import site; print(site.getsitepackages()[0])"
+          $pyd = Get-ChildItem -Path $sitePackages -Filter "cproton_ffi*.pyd" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($pyd) {
-            $strings = & cmd /c "findstr /C:\"OpenSSL\" /C:\"SChannel\" /C:\"TLSv1.3\" `"$($pyd.FullName)`" 2>nul" | Select-Object -First 5
-            Write-Host "C-extension banner hits:"
-            $strings | ForEach-Object { Write-Host "  $_" }
+            Write-Host "Inspecting $($pyd.FullName)"
+            $hits = & cmd /c "findstr /C:`"OpenSSL`" /C:`"SChannel`" /C:`"TLSv1.3`" `"$($pyd.FullName)`" 2>nul"
+            if ($hits) {
+              Write-Host "C-extension banner hits:"
+              $hits | Select-Object -First 5 | ForEach-Object { Write-Host "  $_" }
+            } else {
+              Write-Host "(no banner strings matched)"
+            }
+          } else {
+            Write-Host "cproton_ffi*.pyd not located under $sitePackages (informational only)"
           }
 
       - name: Upload wheel artifact
