@@ -71,7 +71,9 @@ _WIN_BLOCK_REPLACEMENT = """if os.name == 'nt':
     libraries += ['libssl', 'libcrypto', 'crypt32', 'ws2_32', 'advapi32', 'user32']
     include_dirs_extra = [os.path.join(_openssl_dir, 'include')]
     library_dirs_extra = [os.path.join(_openssl_dir, 'lib')]
-    sources.append(os.path.join(proton_c_src, 'ssl', 'openssl.c'))"""
+    sources.append(os.path.join(proton_c_src, 'ssl', 'openssl.c'))
+    # Bump Win32 API floor to Vista+ so InitOnceExecuteOnce et al. are declared.
+    macros_extra = [('_WIN32_WINNT', '0x0A00'), ('_CRT_SECURE_NO_WARNINGS', '1')]"""
 
 
 # Original set_source call (the "no pkgconfig" branch is the one Windows hits).
@@ -91,7 +93,7 @@ _SET_SOURCE_RE = re.compile(
 _SET_SOURCE_REPLACEMENT = """ffibuilder.set_source(
         "cproton_ffi",
         c_code,
-        define_macros=macros,
+        define_macros=macros + (macros_extra if 'macros_extra' in dir() else []),
         extra_compile_args=extra,
         sources=sources,
         include_dirs=include_dirs + (include_dirs_extra if 'include_dirs_extra' in dir() else []),
@@ -122,7 +124,62 @@ def patch_ext_build(src_root: Path) -> None:
         )
 
     ext_build.write_text(new_text, encoding="utf-8")
-    print("[build] Patched OK")
+    print("[build] Patched ext_build.py OK")
+
+
+# Proton's openssl.c was never built on Windows: the InitOnceExecuteOnce call
+# in the _WIN32 ensure_initialized block calls `&initialize` directly, but
+# initialize() is `void(void)`, not the BOOL CALLBACK(PINIT_ONCE,PVOID,PVOID*)
+# signature InitOnceExecuteOnce expects. Also the forward decl of initialize
+# lives in the #else (POSIX) branch, so it's invisible to the _WIN32 block.
+# Replace the broken Win32 block with a correctly-typed wrapper.
+_OPENSSL_WIN_INIT_RE = re.compile(
+    r"INIT_ONCE initialize_once = INIT_ONCE_STATIC_INIT;\s*\n"
+    r"static inline bool ensure_initialized\(void\)\s*\{\s*\n"
+    r"\s*void\* dummy;\s*\n"
+    r"\s*InitOnceExecuteOnce\(&initialize_once, &initialize, NULL, &dummy\);\s*\n"
+    r"\s*return init_ok;\s*\n"
+    r"\}",
+    re.MULTILINE,
+)
+
+_OPENSSL_WIN_INIT_REPLACEMENT = """/* PATCHED by xregistry-codegen tools/proton-windows-wheel:
+ * upstream openssl.c was never built on Windows; the original code passed
+ * &initialize directly to InitOnceExecuteOnce, but initialize() is void(void),
+ * not the BOOL CALLBACK(PINIT_ONCE, PVOID, PVOID*) callback type the API
+ * requires. Also forward-declare initialize() so it's visible from this block.
+ */
+static void initialize(void);
+
+static BOOL CALLBACK pn_initialize_once_callback(PINIT_ONCE once, PVOID param, PVOID *context) {
+  (void)once; (void)param; (void)context;
+  initialize();
+  return TRUE;
+}
+
+static INIT_ONCE initialize_once = INIT_ONCE_STATIC_INIT;
+static inline bool ensure_initialized(void) {
+  void* dummy;
+  InitOnceExecuteOnce(&initialize_once, pn_initialize_once_callback, NULL, &dummy);
+  return init_ok;
+}"""
+
+
+def patch_openssl_c(src_root: Path) -> None:
+    """Fix proton's openssl.c so it actually compiles on Windows."""
+    openssl_c = src_root / "src" / "ssl" / "openssl.c"
+    if not openssl_c.is_file():
+        raise SystemExit(f"openssl.c not found at {openssl_c}")
+    print(f"[build] Patching {openssl_c.relative_to(src_root)}")
+    text = openssl_c.read_text(encoding="utf-8")
+    new_text, n = _OPENSSL_WIN_INIT_RE.subn(_OPENSSL_WIN_INIT_REPLACEMENT, text)
+    if n != 1:
+        raise SystemExit(
+            "FATAL: could not find the Windows InitOnceExecuteOnce block in openssl.c. "
+            "Upstream layout has changed; this patcher needs updating."
+        )
+    openssl_c.write_text(new_text, encoding="utf-8")
+    print("[build] Patched openssl.c OK")
 
 
 def patch_version(src_root: Path, version: str, xrcg_build: int) -> str:
@@ -182,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
         sdist = download_sdist(args.proton_version, work)
         src_root = extract_sdist(sdist, work)
         patch_ext_build(src_root)
+        patch_openssl_c(src_root)
         new_version = patch_version(src_root, args.proton_version, args.xrcg_build)
         wheel = build_wheel(src_root, args.output_dir.resolve(), args.python)
         print(f"\n[build] SUCCESS: {wheel}  (version {new_version})")
