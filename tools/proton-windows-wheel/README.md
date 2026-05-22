@@ -8,7 +8,7 @@ The upstream `python-qpid-proton` Windows wheel uses [SChannel](https://learn.mi
 
 The Linux/macOS wheels link against OpenSSL via pkg-config, which already supports TLS 1.3 — no change needed there.
 
-Until [PROTON-XXXX](https://issues.apache.org/jira/projects/PROTON) lands a fix in the upstream wheel (likely switching to `SCH_CREDENTIALS` + `TLS_PARAMETERS` for Windows 10 1809+), this repo publishes a patched Windows wheel that links against OpenSSL via vcpkg.
+Until [PROTON-2933](https://issues.apache.org/jira/browse/PROTON-2933) lands a fix in the upstream wheel (likely switching to `SCH_CREDENTIALS` + `TLS_PARAMETERS` for Windows 10 1809+), this repo publishes a patched Windows wheel that links against OpenSSL via vcpkg.
 
 ## Naming & versioning
 
@@ -27,7 +27,7 @@ Generated app `pyproject.toml` files declare a single unconditional dependency: 
 
 ## When to drop this
 
-The day the upstream Windows wheel supports TLS 1.3:
+The day [PROTON-2933](https://issues.apache.org/jira/browse/PROTON-2933) ships in an upstream wheel that supports TLS 1.3 on Windows:
 
 1. Stop publishing new wheels here.
 2. Bump the recommended `python-qpid-proton` version floor in generated `pyproject.toml.jinja` to the first upstream version that works on Windows TLS 1.3.
