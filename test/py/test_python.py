@@ -527,6 +527,23 @@ def test_amqpproducer_protocoloptions_application_properties_codegen():
     assert "amqp_msg.properties.update(app_properties)" in src
 
 
+def test_amqpproducer_protocoloptions_message_annotations_codegen():
+    """AMQP protocoloptions.message_annotations must become qpid-proton
+    message annotations with AMQP symbol keys.
+    """
+    src = _generate_amqp_producer_src("test/xreg/lightbulb-amqp.xreg.json")
+    sig_start = src.index("def send_turned_on(")
+    sig_end = src.index(") -> None:", sig_start)
+    send_signature = src[sig_start:sig_end]
+    assert send_signature.count("_tenantid: str") == 1
+    assert send_signature.count("_deviceid: str") == 1
+    assert "from proton import Message, symbol" in src
+    assert 'annotation_value = "{tenantid}-{deviceid}".format(tenantid=_tenantid, deviceid=_deviceid)' in src
+    assert "annotation_value = str(annotation_value)[:128]" in src
+    assert 'annotations[symbol("x-opt-partition-key")] = annotation_value' in src
+    assert "amqp_msg.annotations.update(annotations)" in src
+
+
 def test_mqttclient_body_is_bytes_not_str():
     """The MQTT PUBLISH payload MUST be bytes. ``to_byte_array`` returns
     ``str`` for text content types; the client must coerce to bytes

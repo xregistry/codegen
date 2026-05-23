@@ -391,14 +391,14 @@ def test_egproducer_lightbulb_ts():
 # fail to recognize ``ce_*`` keys as CloudEvents attributes.
 # ---------------------------------------------------------------------------
 
-def _generate_ts_producer_src(style, source_filename):
-    """Run xrcg for the given TS style against lightbulb.xreg.json and return
+def _generate_ts_producer_src(style, source_filename, xreg_relpath='test/xreg/lightbulb.xreg.json'):
+    """Run xrcg for the given TS style against the requested fixture and return
     the contents of ``<style-output-dir>/src/<source_filename>`` as a string.
     """
     import glob
     tmpdirname = tempfile.mkdtemp()
     sys.argv = ['xrcg', 'generate',
-                '--definitions', os.path.join(project_root, 'test/xreg/lightbulb.xreg.json'),
+                '--definitions', os.path.join(project_root, xreg_relpath.replace('/', os.sep)),
                 '--output', tmpdirname,
                 '--projectname', 'TestProject',
                 '--style', style,
@@ -444,6 +444,23 @@ def test_ts_amqpproducer_body_is_buffer_not_object():
     )
 
 
+def test_ts_amqpproducer_protocoloptions_message_annotations_codegen():
+    """ts/amqpproducer must emit AMQP message_annotations declared in the
+    manifest, including partition-key truncation.
+    """
+    src = _generate_ts_producer_src(
+        'amqpproducer',
+        'producer.ts',
+        'test/xreg/lightbulb-amqp.xreg.json',
+    )
+    assert 'tenantid: string' in src
+    assert 'deviceid: string' in src
+    assert "const message_annotations: Record<string, any> = {};" in src
+    assert "messageAnnotationValue1 = String(messageAnnotationValue1).substring(0, 128);" in src
+    assert "message_annotations['x-opt-partition-key'] = messageAnnotationValue1;" in src
+    assert "message.message_annotations = message_annotations;" in src
+
+
 def test_ts_ehproducer_emits_cloudevents_prefix_not_ce_underscore():
     """ts/ehproducer must emit ``cloudEvents:*`` keys on EventData.properties
     (which become AMQP application-properties on the wire).
@@ -473,6 +490,5 @@ def test_ts_sbproducer_emits_cloudevents_prefix_not_ce_underscore():
         assert bad not in src, (
             f'ts/sbproducer must not emit non-spec CE prefix: {bad}'
         )
-
 
 

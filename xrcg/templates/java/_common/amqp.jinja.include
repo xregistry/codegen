@@ -47,12 +47,40 @@ import org.apache.qpid.jms.provider.amqp.AmqpConnection;
 {#- Declare URI template arguments from protocol options -#}
 {%- macro DeclareUriTemplateArguments(message) -%}
 {%- if message.protocoloptions %}
-{%- if message.protocoloptions.header %}{{ EmitArguments(message.protocoloptions.header) }}{% endif -%}
-{%- if message.protocoloptions.footer %}{{ EmitArguments(message.protocoloptions.footer) }}{% endif -%}
-{%- if message.protocoloptions["message-annotations"] %}{{ EmitArguments(message.protocoloptions["message-annotations"]) }}{% endif -%}
-{%- if message.protocoloptions["delivery-annotations"] %}{{ EmitArguments(message.protocoloptions["delivery-annotations"]) }}{% endif -%}
-{%- if message.protocoloptions.properties %}{{ EmitArguments(message.protocoloptions.properties) }}{% endif -%}
-{%- if message.protocoloptions["application-properties"] %}{{ EmitArguments(message.protocoloptions["application-properties"]) }}{% endif -%}
+{%- set protocoloptions = message.protocoloptions -%}
+{%- set message_annotations = protocoloptions["message_annotations"] if "message_annotations" in protocoloptions else (protocoloptions["message-annotations"] if "message-annotations" in protocoloptions else none) -%}
+{%- set delivery_annotations = protocoloptions["delivery_annotations"] if "delivery_annotations" in protocoloptions else (protocoloptions["delivery-annotations"] if "delivery-annotations" in protocoloptions else none) -%}
+{%- set application_properties = protocoloptions["application_properties"] if "application_properties" in protocoloptions else (protocoloptions["application-properties"] if "application-properties" in protocoloptions else none) -%}
+{%- set emitted = namespace(args=[]) -%}
+{%- for props in [protocoloptions.header if protocoloptions.header else none, protocoloptions.footer if protocoloptions.footer else none, message_annotations, delivery_annotations, protocoloptions.properties if protocoloptions.properties else none, application_properties] if props -%}
+{%- for propname, prop in props.items() -%}
+{%- if prop.type == "uritemplate" -%}
+{%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if placeholder not in emitted.args -%}
+, String {{ placeholder }}
+{%- set _ = emitted.args.append(placeholder) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- elif prop.value is not defined and propname not in emitted.args -%}
+, String {{ propname }}
+{%- set _ = emitted.args.append(propname) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro JavaValue(prop, propname) -%}
+{%- if prop.value is defined -%}
+{%- if prop.type == "integer" or prop.type == "number" or prop.type == "boolean" -%}
+{{ prop.value }}
+{%- elif prop.type == "uritemplate" -%}
+"{{ prop.value }}"{%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}.replace("{{ '{' }}{{ placeholder }}{{ '}' }}", String.valueOf({{ placeholder }})){%- endfor -%}
+{%- else -%}
+"{{ prop.value }}"
+{%- endif -%}
+{%- else -%}
+{{ propname }}
 {%- endif -%}
 {%- endmacro -%}
 
@@ -60,6 +88,10 @@ import org.apache.qpid.jms.provider.amqp.AmqpConnection;
 {%- macro CreateProtonMessage(message, dataVar) -%}
 Message<?> message = Message.create({{ dataVar }});
 {%- if message.protocoloptions %}
+{%- set protocoloptions = message.protocoloptions %}
+{%- set application_properties = protocoloptions["application_properties"] if "application_properties" in protocoloptions else (protocoloptions["application-properties"] if "application-properties" in protocoloptions else none) %}
+{%- set message_annotations = protocoloptions["message_annotations"] if "message_annotations" in protocoloptions else (protocoloptions["message-annotations"] if "message-annotations" in protocoloptions else none) %}
+{%- set delivery_annotations = protocoloptions["delivery_annotations"] if "delivery_annotations" in protocoloptions else (protocoloptions["delivery-annotations"] if "delivery-annotations" in protocoloptions else none) %}
 {%- if message.protocoloptions.properties %}
 
 // Set message properties
@@ -71,7 +103,7 @@ message.userId({% if prop.value %}"{{ prop.value }}".getBytes(){% else %}userId.
 {%- elif propname == "to" %}
 message.to({% if prop.value %}"{{ prop.value }}"{% else %}to{% endif %});
 {%- elif propname == "subject" %}
-message.subject({% if prop.value %}"{{ prop.value }}"{% else %}subject{% endif %});
+message.subject({{ JavaValue(prop, "subject") }});
 {%- elif propname == "reply-to" %}
 message.replyTo({% if prop.value %}"{{ prop.value }}"{% else %}replyTo{% endif %});
 {%- elif propname == "correlation-id" %}
@@ -93,25 +125,33 @@ message.replyToGroupId({% if prop.value %}"{{ prop.value }}"{% else %}replyToGro
 {%- endif %}
 {%- endfor %}
 {%- endif %}
-{%- if message.protocoloptions["application-properties"] %}
+{%- if application_properties %}
 
 // Set application properties
-{%- for propname, prop in message.protocoloptions["application-properties"].items() %}
-message.property("{{ propname }}", {% if prop.value %}{% if prop.type == "integer" %}{{ prop.value }}{% elif prop.type == "boolean" %}{{ prop.value }}{% else %}"{{ prop.value }}"{% endif %}{% else %}{{ propname }}{% endif %});
+{%- for propname, prop in application_properties.items() %}
+message.property("{{ propname }}", {{ JavaValue(prop, propname) }});
 {%- endfor %}
 {%- endif %}
-{%- if message.protocoloptions["message-annotations"] %}
+{%- if message_annotations %}
 
 // Set message annotations
-{%- for propname, prop in message.protocoloptions["message-annotations"].items() %}
-message.annotation("{{ propname }}", {% if prop.value %}{% if prop.type == "integer" %}{{ prop.value }}{% elif prop.type == "boolean" %}{{ prop.value }}{% else %}"{{ prop.value }}"{% endif %}{% else %}{{ propname }}{% endif %});
+{%- for propname, prop in message_annotations.items() %}
+Object messageAnnotationValue{{ loop.index }} = {{ JavaValue(prop, propname) }};
+{%- if propname == "x-opt-partition-key" %}
+String partitionKey{{ loop.index }} = String.valueOf(messageAnnotationValue{{ loop.index }});
+if (partitionKey{{ loop.index }}.length() > 128) {
+    partitionKey{{ loop.index }} = partitionKey{{ loop.index }}.substring(0, 128);
+}
+messageAnnotationValue{{ loop.index }} = partitionKey{{ loop.index }};
+{%- endif %}
+message.annotation("{{ propname }}", messageAnnotationValue{{ loop.index }});
 {%- endfor %}
 {%- endif %}
-{%- if message.protocoloptions["delivery-annotations"] %}
+{%- if delivery_annotations %}
 
 // Set delivery annotations
-{%- for propname, prop in message.protocoloptions["delivery-annotations"].items() %}
-message.annotation("{{ propname }}", {% if prop.value %}{% if prop.type == "integer" %}{{ prop.value }}{% elif prop.type == "boolean" %}{{ prop.value }}{% else %}"{{ prop.value }}"{% endif %}{% else %}{{ propname }}{% endif %});
+{%- for propname, prop in delivery_annotations.items() %}
+message.annotation("{{ propname }}", {{ JavaValue(prop, propname) }});
 {%- endfor %}
 {%- endif %}
 {%- if message.protocoloptions.header %}
