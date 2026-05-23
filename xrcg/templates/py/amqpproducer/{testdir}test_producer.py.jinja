@@ -304,10 +304,23 @@ class Test{{ class_name }}:
     {%- set messagename = messageid | pascal | strip_namespace %}
     {%- set isCloudEvent = (message | exists("envelope","CloudEvents/1.0")) %}
     {%- set type_name = util.DeclareDataType( data_project_name, root, message ) | strip_namespace %}
+    {%- set group_protocoloptions = messagegroup.protocoloptions if messagegroup.protocoloptions is defined and messagegroup.protocoloptions else {} %}
     {%- set protocoloptions = message.protocoloptions if message.protocoloptions is defined and message.protocoloptions else {} %}
-    {%- set message_properties = protocoloptions['properties'] if 'properties' in protocoloptions else {} %}
-    {%- set message_application_properties = protocoloptions['application_properties'] if 'application_properties' in protocoloptions else (protocoloptions['application-properties'] if 'application-properties' in protocoloptions else {}) %}
-    {%- set message_annotations = protocoloptions['message_annotations'] if 'message_annotations' in protocoloptions else (protocoloptions['message-annotations'] if 'message-annotations' in protocoloptions else {}) %}
+    {%- set group_properties = group_protocoloptions['properties'] if 'properties' in group_protocoloptions else {} %}
+    {%- set local_properties = protocoloptions['properties'] if 'properties' in protocoloptions else {} %}
+    {%- set group_application_properties = group_protocoloptions['application_properties'] if 'application_properties' in group_protocoloptions else (group_protocoloptions['application-properties'] if 'application-properties' in group_protocoloptions else {}) %}
+    {%- set local_application_properties = protocoloptions['application_properties'] if 'application_properties' in protocoloptions else (protocoloptions['application-properties'] if 'application-properties' in protocoloptions else {}) %}
+    {%- set group_annotations = group_protocoloptions['message_annotations'] if 'message_annotations' in group_protocoloptions else (group_protocoloptions['message-annotations'] if 'message-annotations' in group_protocoloptions else {}) %}
+    {%- set local_annotations = protocoloptions['message_annotations'] if 'message_annotations' in protocoloptions else (protocoloptions['message-annotations'] if 'message-annotations' in protocoloptions else {}) %}
+    {%- set message_properties = {} %}
+    {%- set _ = message_properties.update(group_properties) %}
+    {%- set _ = message_properties.update(local_properties) %}
+    {%- set message_application_properties = {} %}
+    {%- set _ = message_application_properties.update(group_application_properties) %}
+    {%- set _ = message_application_properties.update(local_application_properties) %}
+    {%- set message_annotations = {} %}
+    {%- set _ = message_annotations.update(group_annotations) %}
+    {%- set _ = message_annotations.update(local_annotations) %}
     
     def test_send_{{ messagename | snake }}(self, artemis_container):
         """Send and receive a {{ messagename }} message via ActiveMQ Artemis."""
