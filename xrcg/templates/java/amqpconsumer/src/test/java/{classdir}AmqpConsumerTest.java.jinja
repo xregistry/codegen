@@ -263,6 +263,9 @@ public class {{ class_name | strip_namespace }} {
             testMessage.messageId(UUID.randomUUID().toString());
             testMessage.contentType("application/json");
             {%- set protocolopts = message.get('protocoloptions', {}) %}
+            {%- if protocolopts.get('properties') and protocolopts.properties.get('subject') and protocolopts.properties.subject.get('value') %}
+            testMessage.subject("{{ protocolopts.properties.subject.value }}");
+            {%- endif %}
             {%- if protocolopts.get('application_properties') %}
             {%- for propname, propspec in protocolopts.application_properties.items() %}
             {%- if propspec.get('value') %}

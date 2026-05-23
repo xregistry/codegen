@@ -469,8 +469,12 @@ public class {{ class_name }} {
     
     {%- if uses_amqp_message %}
     private void dispatchAmqpMessage(Message<?> message, MessageContext context, Logger log) throws Exception {
-        // Extract subject from application properties
+        // Prefer the legacy static application-property subject when present;
+        // fall back to the AMQP properties subject for manifests that use it.
         Object subjectObj = message.property("subject");
+        if (subjectObj == null) {
+            subjectObj = message.subject();
+        }
         String subject = subjectObj != null ? subjectObj.toString() : null;
         
         log.info("Dispatching AMQP message with subject: " + subject);

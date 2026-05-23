@@ -16,6 +16,11 @@
                             }
                         },
                         "application_properties": {
+                            "subject": {
+                                "required": true,
+                                "value": "Fabrikam.Lumen.TurnedOn",
+                                "description": "Event raised when the bulb is turned on"
+                            },
                             "water_shortname": {
                                 "type": "uritemplate",
                                 "required": true,
