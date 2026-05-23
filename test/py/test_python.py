@@ -5,6 +5,7 @@ import subprocess
 import sys
 import os
 import tempfile
+import json
 import pytest
 
 project_root = os.path.abspath(
@@ -402,6 +403,17 @@ def _generate_amqp_producer_src(xreg_relpath="test/xreg/lightbulb-amqp.xreg.json
     return open(producer_files[0], encoding="utf-8").read()
 
 
+def _generate_amqp_producer_src_from_document(document):
+    """Generate the Python AMQP producer for an inline xRegistry document."""
+    with tempfile.NamedTemporaryFile("w", suffix=".xreg.json", delete=False, encoding="utf-8") as fp:
+        json.dump(document, fp)
+        manifest_path = fp.name
+    try:
+        return _generate_amqp_producer_src(manifest_path)
+    finally:
+        os.unlink(manifest_path)
+
+
 def _generate_mqtt_client_src(xreg_relpath="test/xreg/lightbulb.xreg.json"):
     """Generate the Python MQTT client for the given fixture and return the
     contents of the generated client.py as a string.
@@ -542,6 +554,88 @@ def test_amqpproducer_protocoloptions_message_annotations_codegen():
     assert "annotation_value = str(annotation_value)[:128]" in src
     assert 'annotations[symbol("x-opt-partition-key")] = annotation_value' in src
     assert "amqp_msg.annotations.update(annotations)" in src
+
+
+def test_amqpproducer_group_level_message_annotations_codegen():
+    """AMQP producer must merge messagegroup-level message_annotations into
+    CloudEvents messages and de-dupe placeholders already used by metadata.
+    """
+    src = _generate_amqp_producer_src_from_document({
+        "messagegroups": {
+            "Example.Amqp": {
+                "envelope": "CloudEvents/1.0",
+                "protocol": "AMQP/1.0",
+                "protocoloptions": {
+                    "message_annotations": {
+                        "x-opt-partition-key": {
+                            "type": "uritemplate",
+                            "value": "{spacecraft}"
+                        }
+                    }
+                },
+                "messages": {
+                    "Example.Event": {
+                        "envelope": "CloudEvents/1.0",
+                        "protocol": "AMQP/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"type": "uritemplate", "value": "{feedurl}"},
+                            "subject": {"type": "uritemplate", "value": "{spacecraft}"},
+                            "datacontenttype": {"value": "application/json"}
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {
+                            "type": "object",
+                            "properties": {"value": {"type": "string"}}
+                        }
+                    }
+                }
+            }
+        }
+    })
+    sig_start = src.index("def send_event(")
+    sig_end = src.index(") -> None:", sig_start)
+    send_signature = src[sig_start:sig_end]
+    assert send_signature.count("_spacecraft: str") == 1
+    assert 'annotation_value = "{spacecraft}".format(spacecraft=_spacecraft)' in src
+    assert 'annotations[symbol("x-opt-partition-key")] = annotation_value' in src
+
+
+def test_amqpproducer_time_uritemplate_sets_ce_and_creation_time():
+    """AMQP producer must not drop CloudEvents time URI templates and should
+    project parseable values onto AMQP properties.creation-time.
+    """
+    src = _generate_amqp_producer_src_from_document({
+        "messagegroups": {
+            "Example.Amqp": {
+                "envelope": "CloudEvents/1.0",
+                "protocol": "AMQP/1.0",
+                "messages": {
+                    "Example.Event": {
+                        "envelope": "CloudEvents/1.0",
+                        "protocol": "AMQP/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"type": "uritemplate", "value": "{feedurl}"},
+                            "subject": {"type": "uritemplate", "value": "{spacecraft}"},
+                            "time": {"type": "uritemplate", "value": "{time_tag}"},
+                            "datacontenttype": {"value": "application/json"}
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {
+                            "type": "object",
+                            "properties": {"value": {"type": "string"}}
+                        }
+                    }
+                }
+            }
+        }
+    })
+    assert "_time_tag: str" in src
+    assert '"{time_tag}".format(time_tag=_time_tag)' in src
+    assert "None,  # Will be auto-generated" not in src
+    assert "amqp_creation_time = self._coerce_amqp_timestamp(attributes.get('time'))" in src
+    assert "amqp_msg.creation_time = amqp_creation_time" in src
 
 
 def test_mqttclient_body_is_bytes_not_str():
