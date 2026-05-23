@@ -94,6 +94,36 @@ def run_java_test(xreg_file: str, output_dir: str, projectname: str, style: str)
         raise
 
 
+def _generate_java_amqp_producer_src(xreg_relpath="test/xreg/lightbulb-amqp.xreg.json"):
+    """Generate the Java AMQP producer and return EventProducer.java."""
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    sys.argv = [
+        'xregistry',
+        'generate',
+        '--definitions', os.path.join(project_root, xreg_relpath.replace('/', os.sep)),
+        '--output', tmpdirname,
+        '--projectname', "TestProject",
+        '--style', "amqpproducer",
+        '--language', 'java'
+    ]
+    assert xrcg.cli() == 0
+    candidates = glob.glob(os.path.join(tmpdirname, "**", "*EventProducer.java"), recursive=True)
+    assert candidates, "no EventProducer.java emitted under " + tmpdirname
+    return open(candidates[0], encoding="utf-8").read()
+
+
+def test_amqpproducer_protocoloptions_message_annotations_codegen_java():
+    """Java amqpproducer must emit message annotations and URI-template expansion."""
+    src = _generate_java_amqp_producer_src()
+    assert 'String tenantid' in src
+    assert 'String deviceid' in src
+    assert '.replace("{tenantid}", String.valueOf(tenantid))' in src
+    assert '.replace("{deviceid}", String.valueOf(deviceid))' in src
+    assert 'partitionKey1 = partitionKey1.substring(0, 128);' in src
+    assert 'message.annotation("x-opt-partition-key", messageAnnotationValue1);' in src
+
+
 # AMQP Producer Tests
 
 def test_amqpproducer_lightbulb_amqp_java():

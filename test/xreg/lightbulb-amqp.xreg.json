@@ -22,6 +22,14 @@
                                 "value": "{deviceid}",
                                 "description": "Application property used by AMQP routers and filters"
                             }
+                        },
+                        "message_annotations": {
+                            "x-opt-partition-key": {
+                                "type": "uritemplate",
+                                "required": true,
+                                "value": "{tenantid}-{deviceid}",
+                                "description": "AMQP message annotation used by partitioned brokers"
+                            }
                         }
                     },
                     "dataschemaformat": "Avro/1.11.1",

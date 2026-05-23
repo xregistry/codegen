@@ -18,6 +18,7 @@ from urllib.parse import quote_plus
 import pytest
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
+from proton import symbol
 from proton.utils import BlockingConnection
 
 {%- set amqp_message_property_attributes = {
@@ -306,6 +307,7 @@ class Test{{ class_name }}:
     {%- set protocoloptions = message.protocoloptions if message.protocoloptions is defined and message.protocoloptions else {} %}
     {%- set message_properties = protocoloptions['properties'] if 'properties' in protocoloptions else {} %}
     {%- set message_application_properties = protocoloptions['application_properties'] if 'application_properties' in protocoloptions else (protocoloptions['application-properties'] if 'application-properties' in protocoloptions else {}) %}
+    {%- set message_annotations = protocoloptions['message_annotations'] if 'message_annotations' in protocoloptions else (protocoloptions['message-annotations'] if 'message-annotations' in protocoloptions else {}) %}
     
     def test_send_{{ messagename | snake }}(self, artemis_container):
         """Send and receive a {{ messagename }} message via ActiveMQ Artemis."""
@@ -342,7 +344,7 @@ class Test{{ class_name }}:
                     {%- set _ = extra_args.items.append('_' + attrname) %}
                 {%- endfor %}
             {%- endif %}
-            {%- for propmap in [message_properties, message_application_properties] if propmap %}
+            {%- for propmap in [message_properties, message_application_properties, message_annotations] if propmap %}
                 {%- for propname, prop in propmap.items() if prop.value is defined %}
                     {%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
                         {%- set arg = '_' + (placeholder | snake) %}
@@ -366,6 +368,7 @@ class Test{{ class_name }}:
             for i in range(5):
                 received = _receive_single_message(artemis_container)
                 properties = received.properties or {}
+                annotations = received.annotations or {}
 
                 if {{ 'True' if isCloudEvent else 'False' }}:
                     body = received.body
@@ -401,6 +404,15 @@ class Test{{ class_name }}:
                 {%- if message_application_properties %}
                 {%- for propname, prop in message_application_properties.items() if prop.value is defined %}
                 assert properties.get('{{ propname }}') == {{ protocol_option_expected_value(prop) }}
+                {%- endfor %}
+                {%- endif %}
+                {%- if message_annotations %}
+                {%- for annotation_name, annotation in message_annotations.items() if annotation.value is defined %}
+                {%- if annotation_name == "x-opt-partition-key" %}
+                assert annotations.get(symbol('{{ annotation_name }}')) == str({{ protocol_option_expected_value(annotation) }})[:128]
+                {%- else %}
+                assert annotations.get(symbol('{{ annotation_name }}')) == {{ protocol_option_expected_value(annotation) }}
+                {%- endif %}
                 {%- endfor %}
                 {%- endif %}
         finally:

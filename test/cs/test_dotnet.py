@@ -46,6 +46,32 @@ def run_dotnet_test(xreg_file: str, output_dir: str, projectname: str, style: st
     use_shell = platform.system() == 'Windows'
     subprocess.check_call(['dotnet', 'test', output_dir], cwd=os.path.dirname(__file__), shell=use_shell)
 
+
+def _generate_dotnet_amqp_producer_src(xreg_relpath="test/xreg/lightbulb-amqp.xreg.json"):
+    """Generate the C# AMQP producer and return EventProducer.cs."""
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    sys.argv = ['xrcg', 'generate',
+                '--definitions', os.path.join(project_root, xreg_relpath.replace('/', os.sep)),
+                '--output', tmpdirname,
+                '--projectname', "TestProject",
+                '--style', "amqpproducer",
+                '--language', "cs"]
+    assert xrcg.cli() == 0
+    candidates = glob.glob(os.path.join(tmpdirname, "**", "EventProducer.cs"), recursive=True)
+    assert candidates, "no EventProducer.cs emitted under " + tmpdirname
+    return open(candidates[0], encoding="utf-8").read()
+
+
+def test_amqpproducer_protocoloptions_message_annotations_codegen_cs():
+    """C# amqpproducer must emit message annotations with AMQP symbol keys."""
+    src = _generate_dotnet_amqp_producer_src()
+    assert 'new Symbol("x-opt-partition-key")' in src
+    assert 'MessageAnnotations = new MessageAnnotations();' in src
+    assert 'Substring(0, 128)' in src
+    assert 'XOptPartitionKey =' not in src
+
+
 def test_ehproducer_contoso_erp_cs():
     """ Test the EventHub producer for Contoso ERP. """
     tmpdirname = tempfile.mkdtemp()

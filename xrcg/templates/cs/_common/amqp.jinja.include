@@ -39,12 +39,28 @@ using Amqp.Types;
 
 {#- Generates a list of arguments for "send" methods that correspond to placeholders in uritemplates -#}
 {%- macro DeclareUriTemplateArguments(message) -%}
-{%- if message.protocoloptions["header"] -%}{{ EmitArguments(message.protocoloptions["header"]) }}{%- endif -%}
-{%- if message.protocoloptions["footer"] -%}{{ EmitArguments(message.protocoloptions["footer"]) }}{%- endif -%}
-{%- if message.protocoloptions["message_annotations"] -%}{{ EmitArguments(message.protocoloptions["message_annotations"]) }}{%- endif -%}
-{%- if message.protocoloptions["delivery_annotations"] -%}{{ EmitArguments(message.protocoloptions["delivery_annotations"]) }}{%- endif -%}
-{%- if message.protocoloptions["properties"] -%}{{ EmitArguments(message.protocoloptions["properties"]) }}{%- endif -%}
-{%- if message.protocoloptions["application_properties"] -%}{{ EmitArguments(message.protocoloptions["application_properties"]) }}{%- endif -%}
+{%- if message.protocoloptions -%}
+{%- set protocoloptions = message.protocoloptions -%}
+{%- set message_annotations = protocoloptions["message_annotations"] if "message_annotations" in protocoloptions else (protocoloptions["message-annotations"] if "message-annotations" in protocoloptions else none) -%}
+{%- set delivery_annotations = protocoloptions["delivery_annotations"] if "delivery_annotations" in protocoloptions else (protocoloptions["delivery-annotations"] if "delivery-annotations" in protocoloptions else none) -%}
+{%- set application_properties = protocoloptions["application_properties"] if "application_properties" in protocoloptions else (protocoloptions["application-properties"] if "application-properties" in protocoloptions else none) -%}
+{%- set emitted = namespace(args=[]) -%}
+{%- for props in [protocoloptions["header"] if "header" in protocoloptions else none, protocoloptions["footer"] if "footer" in protocoloptions else none, message_annotations, delivery_annotations, protocoloptions["properties"] if "properties" in protocoloptions else none, application_properties] if props -%}
+{%- for propname, prop in props.items() -%}
+{%- if prop.type == "uritemplate" -%}
+{%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if placeholder not in emitted.args -%}
+   , string {{ placeholder }}
+{%- set _ = emitted.args.append(placeholder) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- elif prop.value is not defined and propname not in emitted.args -%}
+   , string {{ propname }}{%- if not prop.required %} = default {%- endif %}
+{%- set _ = emitted.args.append(propname) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
+{%- endif -%}
 {%- endmacro %}
 
 {#- Helper macro for assigning properties -#}
@@ -56,8 +72,10 @@ using Amqp.Types;
 {%- if prop.value -%}
    {%- if prop.type in ["integer", "number", "boolean"] -%}
       {{ prop.value }}
-   {%- elif prop.type == "uri" or prop.type == "uritemplate" -%}
+   {%- elif prop.type == "uri" -%}
       new Uri($"{{ prop.value }}", UriKind.RelativeOrAbsolute),
+   {%- elif prop.type == "uritemplate" -%}
+      $"{{ prop.value }}"
    {%- else -%}
       $"{{ prop.value }}"
    {%- endif -%}
@@ -67,14 +85,41 @@ using Amqp.Types;
 {%- endfor -%}
 {%- endmacro -%}
 
+{#- Helper macro for assigning AMQP annotation maps with symbol keys -#}
+{%- macro AssignAnnotationProps(variable, annotation_property, props) -%}
+{% for propname, prop in props.items() %}
+object annotationValue{{ loop.index }} =
+{%- if prop.value -%}
+   {%- if prop.type in ["integer", "number", "boolean"] -%}
+      {{ prop.value }}
+   {%- elif prop.type == "uri" -%}
+      new Uri($"{{ prop.value }}", UriKind.RelativeOrAbsolute)
+   {%- else -%}
+      $"{{ prop.value }}"
+   {%- endif -%}
+{%- else -%}
+   {{ propname }}
+{%- endif -%};
+{% if propname == "x-opt-partition-key" %}
+annotationValue{{ loop.index }} = annotationValue{{ loop.index }}?.ToString() ?? string.Empty;
+if (((string)annotationValue{{ loop.index }}).Length > 128)
+{
+   annotationValue{{ loop.index }} = ((string)annotationValue{{ loop.index }}).Substring(0, 128);
+}
+{% endif %}
+{{ variable }}.{{ annotation_property }}[new Symbol("{{ propname }}")] = annotationValue{{ loop.index }};
+{% endfor %}
+{%- endmacro -%}
+
 {#- Generates AMQP message objects from amqpDefinition as message -#}
 {%- macro DeclareAmqpNetLiteMessage(variable, message) -%}
-{%- set header = message.protocoloptions["header"] %}
-{%- set footer = message.protocoloptions["footer"] %}
-{%- set messageAnnotations = message.protocoloptions["message_annotations"] %}
-{%- set deliveryAnnotations = message.protocoloptions["delivery_annotations"] %}
-{%- set properties = message.protocoloptions["properties"] %}
-{%- set applicationProperties = message.protocoloptions["application_properties"] %}
+{%- set protocoloptions = message.protocoloptions if message.protocoloptions else {} %}
+{%- set header = protocoloptions["header"] if "header" in protocoloptions else none %}
+{%- set footer = protocoloptions["footer"] if "footer" in protocoloptions else none %}
+{%- set messageAnnotations = protocoloptions["message_annotations"] if "message_annotations" in protocoloptions else (protocoloptions["message-annotations"] if "message-annotations" in protocoloptions else none) %}
+{%- set deliveryAnnotations = protocoloptions["delivery_annotations"] if "delivery_annotations" in protocoloptions else (protocoloptions["delivery-annotations"] if "delivery-annotations" in protocoloptions else none) %}
+{%- set properties = protocoloptions["properties"] if "properties" in protocoloptions else none %}
+{%- set applicationProperties = protocoloptions["application_properties"] if "application_properties" in protocoloptions else (protocoloptions["application-properties"] if "application-properties" in protocoloptions else none) %}
 Amqp.Message {{ variable }} = new Amqp.Message()
 {
 {%- if header %}
@@ -82,22 +127,11 @@ Amqp.Message {{ variable }} = new Amqp.Message()
    {
    {{- AssignProps(header) | indent(6) }}
    },
+{%- endif %}
 {%- if footer %}
    Footer = new Footer() 
    {
    {{- AssignProps(footer) | indent(6) }}
-   },
-{%- endif %}
-{%- if messageAnnotations %}
-   MessageAnnotations = new MessageAnnotations()
-   {
-   {{- AssignProps(messageAnnotations) | indent(6) }}
-   },
-{%- endif %}
-{%- if deliveryAnnotations %}
-   DeliveryAnnotations = new DeliveryAnnotations()
-   {
-   {{- AssignProps(deliveryAnnotations) | indent(6) }}
    },
 {%- endif %}
 {%- if properties %}
@@ -112,8 +146,21 @@ Amqp.Message {{ variable }} = new Amqp.Message()
    {{- AssignProps(applicationProperties, True) | indent(6) }}
    },
 {%- endif %}
-{%- endif %}
 };
+{%- if messageAnnotations %}
+if ({{ variable }}.MessageAnnotations == null)
+{
+   {{ variable }}.MessageAnnotations = new MessageAnnotations();
+}
+{{- AssignAnnotationProps(variable, "MessageAnnotations", messageAnnotations) }}
+{%- endif %}
+{%- if deliveryAnnotations %}
+if ({{ variable }}.DeliveryAnnotations == null)
+{
+   {{ variable }}.DeliveryAnnotations = new DeliveryAnnotations();
+}
+{{- AssignAnnotationProps(variable, "DeliveryAnnotations", deliveryAnnotations) }}
+{%- endif %}
 {%- endmacro -%}
 
 
