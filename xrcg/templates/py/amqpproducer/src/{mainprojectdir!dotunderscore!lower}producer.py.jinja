@@ -6,6 +6,38 @@
 {%- error "azure_cbs_target must be 'eventhubs' or 'servicebus' (got: " ~ _azure_cbs_target ~ "), or pass --template-args azure_cbs_audience=<scope> for a custom audience" %}
 {%- endif %}
 {%- set _azure_cbs_audience = (azure_cbs_audience | default(none)) or azure_audience_map.get(_azure_cbs_target) %}
+{%- set amqp_message_property_attributes = {
+    'message-id': 'id',
+    'message_id': 'id',
+    'id': 'id',
+    'user-id': 'user_id',
+    'user_id': 'user_id',
+    'to': 'address',
+    'address': 'address',
+    'subject': 'subject',
+    'reply-to': 'reply_to',
+    'reply_to': 'reply_to',
+    'correlation-id': 'correlation_id',
+    'correlation_id': 'correlation_id',
+    'content-type': 'content_type',
+    'content_type': 'content_type',
+    'content-encoding': 'content_encoding',
+    'content_encoding': 'content_encoding',
+    'absolute-expiry-time': 'expiry_time',
+    'absolute_expiry_time': 'expiry_time',
+    'creation-time': 'creation_time',
+    'creation_time': 'creation_time',
+    'group-id': 'group_id',
+    'group_id': 'group_id',
+    'group-sequence': 'group_sequence',
+    'group_sequence': 'group_sequence',
+    'reply-to-group-id': 'reply_to_group_id',
+    'reply_to_group_id': 'reply_to_group_id'
+} %}
+{%- macro protocol_option_value(prop) -%}
+{%- set phs = prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+"{{ prop.value }}"{%- if phs -%}.format({%- for placeholder in phs -%}{{ placeholder }}=_{{ placeholder | snake }}{% if not loop.last %}, {% endif %}{%- endfor -%}){%- endif -%}
+{%- endmacro %}
 
 # pylint: disable=unused-import, line-too-long, missing-module-docstring, missing-function-docstring, missing-class-docstring, consider-using-f-string, trailing-whitespace, trailing-newlines
 
@@ -644,6 +676,40 @@ class {{ class_name }}:
     {%- set messagename = messageid | pascal | strip_namespace %}
     {%- set isCloudEvent = (message | exists("envelope","CloudEvents/1.0")) %}
     {%- set type_name = util.DeclareDataType( data_project_name, root, message ) | strip_namespace %}
+    {%- set protocoloptions = message.protocoloptions if message.protocoloptions is defined and message.protocoloptions else {} %}
+    {%- set message_properties = protocoloptions['properties'] if 'properties' in protocoloptions else {} %}
+    {%- set message_application_properties = protocoloptions['application_properties'] if 'application_properties' in protocoloptions else (protocoloptions['application-properties'] if 'application-properties' in protocoloptions else {}) %}
+    {%- set ce_arg_names = namespace(items=[]) %}
+    {%- if isCloudEvent %}
+    {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
+    {%- set _ = ce_arg_names.items.append(attrname | snake) %}
+    {%- endfor %}
+    {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+    {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+    {%- set argname = placeholder | snake %}
+    {%- if argname not in ce_arg_names.items %}
+    {%- set _ = ce_arg_names.items.append(argname) %}
+    {%- endif %}
+    {%- endfor %}
+    {%- endfor %}
+    {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
+    {%- set argname = attrname | snake %}
+    {%- if argname not in ce_arg_names.items %}
+    {%- set _ = ce_arg_names.items.append(argname) %}
+    {%- endif %}
+    {%- endfor %}
+    {%- endif %}
+    {%- set protocol_option_arg_names = namespace(items=[]) %}
+    {%- for propmap in [message_properties, message_application_properties] if propmap %}
+    {%- for propname, prop in propmap.items() if prop.value is defined %}
+    {%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+    {%- set argname = placeholder | snake %}
+    {%- if argname not in ce_arg_names.items and argname not in protocol_option_arg_names.items %}
+    {%- set _ = protocol_option_arg_names.items.append(argname) %}
+    {%- endif %}
+    {%- endfor %}
+    {%- endfor %}
+    {%- endfor %}
     
     def send_{{ messagename | snake }}(self,
         data: {{ type_name }},
@@ -660,6 +726,9 @@ class {{ class_name }}:
         {% if not attribute.required %}_{{ attrname }}: typing.Optional[str] = None,{% else %}_{{ attrname }}: str,{% endif %}
         {%- endfor %}
         {%- endif %}
+        {%- for argname in protocol_option_arg_names.items %}
+        _{{ argname }}: str,
+        {%- endfor %}
         content_type: str = 'application/json') -> None:
         """
         Send the `{{ messageid }}` message
@@ -681,6 +750,9 @@ class {{ class_name }}:
             _{{ attrname }} ({% if not attribute.required %}typing.Optional[str]{% else %}str{% endif %}): CloudEvent {{ attrname }} attribute
         {%- endfor %}
         {%- endif %}
+        {%- for argname in protocol_option_arg_names.items %}
+            _{{ argname }} (str): Value for AMQP protocol option placeholder {{ argname }}
+        {%- endfor %}
             data ({{ type_name }}): The message data object
             content_type (str): The content type of the message data (default: 'application/json')
         """
@@ -746,8 +818,29 @@ class {{ class_name }}:
         byte_data = self._serialize_payload(data, content_type)
         amqp_msg = Message(body=byte_data, inferred=True)
         amqp_msg.content_type = content_type
-        amqp_msg.properties = {'subject': '{{ messageid }}'}
         {%- endif %}
+
+        {%- if message_properties %}
+        # Apply AMQP message properties declared in protocoloptions.properties.
+        {%- for propname, prop in message_properties.items() if prop.value is defined %}
+        {%- set property_key = propname | lower %}
+        {%- if property_key in amqp_message_property_attributes %}
+        amqp_msg.{{ amqp_message_property_attributes[property_key] }} = {{ protocol_option_value(prop) }}
+        {%- endif %}
+        {%- endfor %}
+        {%- endif %}
+
+        app_properties = {}
+        {%- if (not isCloudEvent) and ('subject' not in message_properties) and ('subject' not in message_application_properties) %}
+        app_properties["subject"] = "{{ messageid }}"
+        {%- endif %}
+        {%- for propname, prop in message_application_properties.items() if prop.value is defined %}
+        app_properties["{{ propname }}"] = {{ protocol_option_value(prop) }}
+        {%- endfor %}
+        if app_properties:
+            if amqp_msg.properties is None:
+                amqp_msg.properties = {}
+            amqp_msg.properties.update(app_properties)
         
         # Send message
         {%- if _azure_cbs_target %}
@@ -762,6 +855,9 @@ class {{ class_name }}:
     def send_{{ messagename | snake }}_batch(self,
         data_array: typing.List[{{ type_name }}],
         {%- if isCloudEvent %}
+        {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
+        _{{ attrname }}: str,
+        {%- endfor %}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
         {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
         _{{ placeholder | snake }}: str,
@@ -771,6 +867,9 @@ class {{ class_name }}:
         {% if not attribute.required %}_{{ attrname }}: typing.Optional[str] = None,{% else %}_{{ attrname }}: str,{% endif %}
         {%- endfor %}
         {%- endif %}
+        {%- for argname in protocol_option_arg_names.items %}
+        _{{ argname }}: str,
+        {%- endfor %}
         content_type: str = 'application/json') -> None:
         """
         Send multiple `{{ messageid }}` messages
@@ -778,6 +877,9 @@ class {{ class_name }}:
         Args:
             data_array (typing.List[{{ type_name }}]): Array of message data objects
         {%- if isCloudEvent %}
+        {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
+            _{{ attrname }} (str): CloudEvents required attribute '{{ attrname }}'
+        {%- endfor %}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
         {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
             _{{ placeholder | snake }} (str): Value for placeholder {{ placeholder }} in attribute {{ attrname }}
@@ -787,10 +889,31 @@ class {{ class_name }}:
             _{{ attrname }} ({% if not attribute.required %}typing.Optional[str]{% else %}str{% endif %}): CloudEvent {{ attrname }} attribute
         {%- endfor %}
         {%- endif %}
+        {%- for argname in protocol_option_arg_names.items %}
+            _{{ argname }} (str): Value for AMQP protocol option placeholder {{ argname }}
+        {%- endfor %}
             content_type (str): The content type of the message data
         """
         for data in data_array:
-            self.send_{{ messagename | snake }}(data, {% if isCloudEvent %}{% for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}{% for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}_{{ placeholder | snake }}, {% endfor %}{% endfor %}{% for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}_{{ attrname }}, {% endfor %}{% endif %}content_type)
+            self.send_{{ messagename | snake }}(
+                data=data,
+                {%- if isCloudEvent %}
+                {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
+                _{{ attrname }}=_{{ attrname }},
+                {%- endfor %}
+                {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+                _{{ placeholder | snake }}=_{{ placeholder | snake }},
+                {%- endfor %}
+                {%- endfor %}
+                {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
+                _{{ attrname }}=_{{ attrname }},
+                {%- endfor %}
+                {%- endif %}
+                {%- for argname in protocol_option_arg_names.items %}
+                _{{ argname }}=_{{ argname }},
+                {%- endfor %}
+                content_type=content_type)
     {% endfor %}
     
     def close(self) -> None:

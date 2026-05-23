@@ -505,6 +505,28 @@ def test_amqpproducer_non_cloudevent_body_is_bytes_with_inferred_true():
     )
 
 
+def test_amqpproducer_protocoloptions_application_properties_codegen():
+    """AMQP protocoloptions.application_properties must become send
+    parameters and qpid-proton application-properties.
+    """
+    src = _generate_amqp_producer_src("test/xreg/lightbulb-amqp.xreg.json")
+    sig_start = src.index("def send_turned_on(")
+    sig_end = src.index(") -> None:", sig_start)
+    send_signature = src[sig_start:sig_end]
+    batch_sig_start = src.index("def send_turned_on_batch(")
+    batch_sig_end = src.index(") -> None:", batch_sig_start)
+    batch_signature = src[batch_sig_start:batch_sig_end]
+    assert send_signature.count("_tenantid: str") == 1
+    assert send_signature.count("_deviceid: str") == 1
+    assert batch_signature.count("_tenantid: str") == 1
+    assert batch_signature.count("_deviceid: str") == 1
+    assert 'amqp_msg.subject = "{tenantid}".format(tenantid=_tenantid)' in src
+    assert 'app_properties["water_shortname"] = "{deviceid}".format(deviceid=_deviceid)' in src
+    assert "_tenantid=_tenantid" in src
+    assert "_deviceid=_deviceid" in src
+    assert "amqp_msg.properties.update(app_properties)" in src
+
+
 def test_mqttclient_body_is_bytes_not_str():
     """The MQTT PUBLISH payload MUST be bytes. ``to_byte_array`` returns
     ``str`` for text content types; the client must coerce to bytes

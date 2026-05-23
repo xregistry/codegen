@@ -7,11 +7,20 @@
                     "description": "Event for when the bulb is turned on",
                     "protocol": "AMQP/1.0",
                     "protocoloptions": {
-                        "application_properties": {
+                        "properties": {
                             "subject": {
+                                "type": "uritemplate",
                                 "required": true,
-                                "value": "Fabrikam.Lumen.TurnedOn",
-                                "description": "Event raised when the bulb is turned on"
+                                "value": "{tenantid}",
+                                "description": "AMQP message subject for routing"
+                            }
+                        },
+                        "application_properties": {
+                            "water_shortname": {
+                                "type": "uritemplate",
+                                "required": true,
+                                "value": "{deviceid}",
+                                "description": "Application property used by AMQP routers and filters"
                             }
                         }
                     },
