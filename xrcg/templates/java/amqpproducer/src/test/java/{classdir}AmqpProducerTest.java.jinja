@@ -337,17 +337,7 @@ public class {{ class_name | strip_namespace }} {
             {%- endfor -%}
             {%- endif -%}
             {%- elif amqp.is_amqp(message) -%}
-            {%- if message.metadata -%}
-            {%- for attrname, attribute in message.metadata.items() -%}
-            {%- if attribute.type == "uritemplate" -%}
-            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
-            , "test-{{ placeholder }}"
-            {%- endfor -%}
-            {%- elif attribute.value is not defined -%}
-            , "test-{{ attrname }}"
-            {%- endif -%}
-            {%- endfor -%}
-            {%- endif -%}
+            {{- amqp.SampleUriTemplateArguments(message) -}}
             {%- endif -%}
             );
         }

@@ -339,7 +339,13 @@ def test_amqpproducer_azure_cbs_codegen(target, expected_audience):
     # pyproject must include azure deps
     pyproject_files = glob.glob(os.path.join(tmpdirname, "**", "pyproject.toml"), recursive=True)
     assert pyproject_files, "no pyproject.toml emitted"
-    pyp = open(pyproject_files[0], encoding="utf-8").read()
+    pyp = None
+    for pyproject_file in pyproject_files:
+        content = open(pyproject_file, encoding="utf-8").read()
+        if "python-qpid-proton" in content:
+            pyp = content
+            break
+    assert pyp is not None, "producer pyproject.toml not emitted"
     assert "azure-identity" in pyp
     assert "azure-core" in pyp
 

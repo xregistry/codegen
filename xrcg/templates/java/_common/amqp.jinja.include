@@ -70,6 +70,45 @@ import org.apache.qpid.jms.provider.amqp.AmqpConnection;
 {%- endif -%}
 {%- endmacro -%}
 
+{%- macro SampleUriTemplateArguments(message) -%}
+{%- if message.protocoloptions %}
+{%- set protocoloptions = message.protocoloptions -%}
+{%- set message_annotations = protocoloptions["message_annotations"] if "message_annotations" in protocoloptions else (protocoloptions["message-annotations"] if "message-annotations" in protocoloptions else none) -%}
+{%- set delivery_annotations = protocoloptions["delivery_annotations"] if "delivery_annotations" in protocoloptions else (protocoloptions["delivery-annotations"] if "delivery-annotations" in protocoloptions else none) -%}
+{%- set application_properties = protocoloptions["application_properties"] if "application_properties" in protocoloptions else (protocoloptions["application-properties"] if "application-properties" in protocoloptions else none) -%}
+{%- set emitted = namespace(args=[]) -%}
+{%- for props in [protocoloptions.header if protocoloptions.header else none, protocoloptions.footer if protocoloptions.footer else none, message_annotations, delivery_annotations, protocoloptions.properties if protocoloptions.properties else none, application_properties] if props -%}
+{%- for propname, prop in props.items() -%}
+{%- if prop.type == "uritemplate" -%}
+{%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if placeholder not in emitted.args -%}
+, "test-{{ placeholder }}"
+{%- set _ = emitted.args.append(placeholder) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- elif prop.value is not defined and propname not in emitted.args -%}
+, "test-{{ propname | replace('-', '_') }}"
+{%- set _ = emitted.args.append(propname) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro TestValue(prop, propname) -%}
+{%- if prop.value is defined -%}
+{%- if prop.type == "integer" or prop.type == "number" or prop.type == "boolean" -%}
+{{ prop.value }}
+{%- elif prop.type == "uritemplate" -%}
+"{{ prop.value }}"{%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}.replace("{{ '{' }}{{ placeholder }}{{ '}' }}", "test-{{ placeholder }}"){%- endfor -%}
+{%- else -%}
+"{{ prop.value }}"
+{%- endif -%}
+{%- else -%}
+"test-{{ propname | replace('-', '_') }}"
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro JavaValue(prop, propname) -%}
 {%- if prop.value is defined -%}
 {%- if prop.type == "integer" or prop.type == "number" or prop.type == "boolean" -%}

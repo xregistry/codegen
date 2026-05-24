@@ -24,6 +24,8 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 {%- set class_name = (groupname | strip_namespace) + "EventConsumer" %}
 
@@ -469,57 +471,96 @@ public class {{ class_name }} {
     
     {%- if uses_amqp_message %}
     private void dispatchAmqpMessage(Message<?> message, MessageContext context, Logger log) throws Exception {
-        // Extract subject from application properties
-        Object subjectObj = message.property("subject");
-        String subject = subjectObj != null ? subjectObj.toString() : null;
+        String amqpSubject = message.subject();
+        Object appSubjectObj = message.property("subject");
+        String appSubject = appSubjectObj != null ? appSubjectObj.toString() : null;
         
-        log.info("Dispatching AMQP message with subject: " + subject);
+        log.info("Dispatching AMQP message with AMQP subject: " + amqpSubject + ", application subject: " + appSubject);
         
-        if (subject != null) {
-            switch (subject) {
-                {% for messageid, message in messagegroup.messages.items() -%}
-                {%- set messagename = messageid | pascal | strip_namespace %}
-                {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
-                {%- if not cloudEvents.isCloudEvent(message) %}
-                case "{{ messageid }}":
-                    if ({{ messagename | lower }}Handler != null) {
-                        byte[] data = (byte[]) message.body();
-                        {{ message_body_type }} payload;
-                        
-                        // Determine deserialization format from content-type
-                        String contentType = message.contentType();
-                        {%- set schemaObj = schema_object(root, message.get('dataschemauri') or message.get('dataschema')) %}
-                        {%- if schemaObj and "format" in schemaObj %}
-                        {%- if schemaObj.format.lower().startswith("avro") %}
-                        if (contentType != null && contentType.contains("avro")) {
-                            payload = {{ message_body_type }}.fromData(data, "Avro");
-                        } else {
-                            // Default to JSON if content type doesn't specify avro
-                            payload = new com.fasterxml.jackson.databind.ObjectMapper().readValue(data, {{ message_body_type }}.class);
-                        }
-                        {%- elif schemaObj.format.lower().startswith("protobuf") %}
-                        payload = {{ message_body_type }}.parseFrom(data);
-                        {%- else %}
-                        payload = new com.fasterxml.jackson.databind.ObjectMapper().readValue(data, {{ message_body_type }}.class);
-                        {%- endif %}
-                        {%- else %}
-                        payload = new com.fasterxml.jackson.databind.ObjectMapper().readValue(data, {{ message_body_type }}.class);
-                        {%- endif %}
-                        {{ messagename | lower }}Handler.accept(context, message, payload);
-                    } else {
-                        log.warn("No handler registered for " + subject);
-                    }
-                    break;
+        {% for messageid, message in messagegroup.messages.items() -%}
+        {%- set messagename = messageid | pascal | strip_namespace %}
+        {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
+        {%- if not cloudEvents.isCloudEvent(message) %}
+        {%- set protocolopts = message.get('protocoloptions', {}) %}
+        {%- set amqp_properties = protocolopts.get('properties') if protocolopts else none %}
+        {%- set application_properties = protocolopts.get('application_properties') or protocolopts.get('application-properties') if protocolopts else none %}
+        {%- set amqp_subject = amqp_properties.get('subject') if amqp_properties else none %}
+        {%- set application_subject = application_properties.get('subject') if application_properties else none %}
+        if (
+            {%- if amqp_subject %}
+            {%- if amqp_subject.value is defined %}
+            {%- if amqp_subject.type == "uritemplate" -%}
+            matchesUriTemplate(amqpSubject, "{{ amqp_subject.value }}")
+            {%- else -%}
+            "{{ amqp_subject.value }}".equals(amqpSubject)
+            {%- endif %}
+            {%- else -%}
+            amqpSubject != null
+            {%- endif %}
+            {%- elif application_subject %}
+            {%- if application_subject.value is defined %}
+            {%- if application_subject.type == "uritemplate" -%}
+            matchesUriTemplate(appSubject, "{{ application_subject.value }}")
+            {%- else -%}
+            "{{ application_subject.value }}".equals(appSubject)
+            {%- endif %}
+            {%- else -%}
+            appSubject != null
+            {%- endif %}
+            {%- else -%}
+            "{{ messageid }}".equals(amqpSubject) || "{{ messageid }}".equals(appSubject)
+            {%- endif -%}
+        ) {
+            if ({{ messagename | lower }}Handler != null) {
+                byte[] data = (byte[]) message.body();
+                {{ message_body_type }} payload;
+                // Determine deserialization format from content-type
+                String contentType = message.contentType();
+                {%- set schemaObj = schema_object(root, message.get('dataschemauri') or message.get('dataschema')) %}
+                {%- if schemaObj and "format" in schemaObj %}
+                {%- if schemaObj.format.lower().startswith("avro") %}
+                if (contentType != null && contentType.contains("avro")) {
+                    payload = {{ message_body_type }}.fromData(data, "Avro");
+                } else {
+                    // Default to JSON if content type doesn't specify avro
+                    payload = new com.fasterxml.jackson.databind.ObjectMapper().readValue(data, {{ message_body_type }}.class);
+                }
+                {%- elif schemaObj.format.lower().startswith("protobuf") %}
+                payload = {{ message_body_type }}.parseFrom(data);
+                {%- else %}
+                payload = new com.fasterxml.jackson.databind.ObjectMapper().readValue(data, {{ message_body_type }}.class);
                 {%- endif %}
-                {% endfor %}
-                default:
-                    log.warn("Unhandled message subject: " + subject);
-                    if (unhandledMessageHandler != null) {
-                        unhandledMessageHandler.accept(context, message, null);
-                    }
-                    break;
+                {%- else %}
+                payload = new com.fasterxml.jackson.databind.ObjectMapper().readValue(data, {{ message_body_type }}.class);
+                {%- endif %}
+                {{ messagename | lower }}Handler.accept(context, message, payload);
+            } else {
+                log.warn("No handler registered for AMQP message {{ messageid }}");
             }
+            return;
         }
+        {%- endif %}
+        {% endfor %}
+        log.warn("Unhandled AMQP message with AMQP subject: " + amqpSubject + ", application subject: " + appSubject);
+        if (unhandledMessageHandler != null) {
+            unhandledMessageHandler.accept(context, message, null);
+        }
+    }
+    private boolean matchesUriTemplate(String value, String template) {
+        if (value == null || template == null) {
+            return false;
+        }
+        Matcher matcher = Pattern.compile("\\{[A-Za-z0-9_]+\\}").matcher(template);
+        StringBuilder regex = new StringBuilder("^");
+        int last = 0;
+        while (matcher.find()) {
+            regex.append(Pattern.quote(template.substring(last, matcher.start())));
+            regex.append("[^/]+");
+            last = matcher.end();
+        }
+        regex.append(Pattern.quote(template.substring(last)));
+        regex.append("$");
+        return Pattern.compile(regex.toString()).matcher(value).matches();
     }
     
     private <T> T deserialize(byte[] data, Class<T> clazz) throws Exception {
