@@ -482,8 +482,12 @@ public class {{ class_name }} {
         {%- set message_body_type = util.get_data_type(data_project_name, root, message) %}
         {%- if not cloudEvents.isCloudEvent(message) %}
         {%- set protocolopts = message.get('protocoloptions', {}) %}
-        {%- set amqp_properties = protocolopts.get('properties') if protocolopts else none %}
-        {%- set application_properties = protocolopts.get('application_properties') or protocolopts.get('application-properties') if protocolopts else none %}
+        {%- set amqp_properties = none %}
+        {%- set application_properties = none %}
+        {%- if protocolopts %}
+        {%- set amqp_properties = protocolopts.get('properties') %}
+        {%- set application_properties = protocolopts.get('application_properties') or protocolopts.get('application-properties') %}
+        {%- endif %}
         {%- set amqp_subject = amqp_properties.get('subject') if amqp_properties else none %}
         {%- set application_subject = application_properties.get('subject') if application_properties else none %}
         if (
