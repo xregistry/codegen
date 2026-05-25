@@ -2,7 +2,7 @@
 # This file is monitored by Dependabot and read by the dependency() function in templates
 
 # Runtime dependencies
-azure-eventhub>=5.12.1
+azure-eventhub>=5.15.1
 azure-eventhub-checkpointstoreblob-aio>=1.2.0
 azure-identity>=1.17.0
 azure-servicebus>=7.14.3
