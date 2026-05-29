@@ -159,7 +159,7 @@ def test_codegen_py_kafkaproducer_basemessageuri():
     ``protocolmetadata.key.value``) to specify the Kafka partition key.
 
     This reproduces the bug reported in
-    https://github.com/xregistry/codegen/issues/XXX where Jinja rendering
+    https://github.com/xregistry/codegen/issues/362 where Jinja rendering
     failed with:
       UndefinedError: 'dict object' has no attribute 'envelopemetadata'
     """
