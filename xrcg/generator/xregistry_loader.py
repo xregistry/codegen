@@ -718,28 +718,32 @@ class ResourceResolver:
 class MessageResolver:
     """Resolves basemessage references in message definitions.
 
-    Two attribute names are honored:
+    Three attribute names are honored:
 
     * ``basemessage`` — the current xRegistry message spec (1.0-rc2+) name.
       An XID pointing to another message definition, e.g.
       ``/messagegroups/group1/messages/msg1``.
+    * ``basemessageuri`` — the canonical URI form used in xRegistry manifests
+      in the wild (e.g. ``/messagegroups/group1/messages/msg1``).  Treated as
+      a synonym for ``basemessage``.
     * ``basemessageurl`` — the legacy name used by earlier drafts and still
       emitted by some tooling. Treated as a synonym for ``basemessage``.
 
-    If a message specifies both, ``basemessage`` takes precedence.
+    If a message specifies more than one, priority is given in the order
+    listed above (``basemessage`` > ``basemessageuri`` > ``basemessageurl``).
     """
 
     # Attribute names that may carry a base-message reference, in priority order.
-    _BASEMESSAGE_KEYS = ("basemessage", "basemessageurl")
+    _BASEMESSAGE_KEYS = ("basemessage", "basemessageuri", "basemessageurl")
 
     def __init__(self, loader: 'XRegistryLoader'):
         self.loader = loader
         self.logger = logging.getLogger(__name__ + ".MessageResolver")
 
     def _get_basemessage_ref(self, message: Dict[str, Any]) -> Optional[str]:
-        """Return the base-message reference from a message, honoring both spec
-        names (``basemessage`` and the legacy ``basemessageurl``). Returns the
-        first non-empty value found, or None."""
+        """Return the base-message reference from a message, honoring all spec
+        names (``basemessage``, ``basemessageuri``, and the legacy
+        ``basemessageurl``). Returns the first non-empty value found, or None."""
         for key in self._BASEMESSAGE_KEYS:
             value = message.get(key)
             if value:
@@ -1532,7 +1536,9 @@ class XRegistryLoader:
             if depth > 16:
                 return
             _record_uri(message.get("dataschemauri"))
-            base = message.get("basemessageurl") or message.get("basemessage")
+            base = (message.get("basemessage")
+                    or message.get("basemessageuri")
+                    or message.get("basemessageurl"))
             if isinstance(base, str) and base not in visited:
                 visited.add(base)
                 resolved = _resolve_base(base)

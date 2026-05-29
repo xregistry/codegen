@@ -109,6 +109,8 @@ def parse_cloudevent(msg: Message) -> CloudEvent:
 {%- set msg_key_holder = [] %}
 {%- if "protocolmetadata" in message and "key" in message.protocolmetadata and "value" in message.protocolmetadata.key %}
 {%- set _ = msg_key_holder.append(message.protocolmetadata.key.value) %}
+{%- elif "protocoloptions" in message and "key" in message.protocoloptions %}
+{%- set _ = msg_key_holder.append(message.protocoloptions.key) %}
 {%- elif endpoint_kafka_key %}
 {%- set _ = msg_key_holder.append(endpoint_kafka_key[-1]) %}
 {%- endif %}
