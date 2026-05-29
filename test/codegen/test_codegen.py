@@ -150,3 +150,32 @@ def test_codegen_java_kafka_inkjet_proto_generates():
                 '--output', output_dir,
                 '--projectname', 'JavaKafkaInkjetProto']
     assert xrcg.cli() == 0
+
+
+def test_codegen_py_kafkaproducer_basemessageuri():
+    """Regression test: kafkaproducer (py) must generate without error when
+    Kafka overlay messages use the canonical ``basemessageuri`` attribute
+    (instead of ``basemessageurl``) and ``protocoloptions.key`` (instead of
+    ``protocolmetadata.key.value``) to specify the Kafka partition key.
+
+    This reproduces the bug reported in
+    https://github.com/xregistry/codegen/issues/362 where Jinja rendering
+    failed with:
+      UndefinedError: 'dict object' has no attribute 'envelopemetadata'
+    """
+    output_dir = os.path.join(
+        tempfile.gettempdir(),
+        'tmp/test/py/kafkaproducer-basemessageuri'.replace('/', os.path.sep))
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir, ignore_errors=True)
+
+    sys.argv = ['xrcg', 'generate',
+                '--style', 'kafkaproducer',
+                '--language', 'py',
+                '--definitions', os.path.join(
+                    project_root,
+                    'test/xreg/inkjet-kafka-basemessageuri.xreg.json'.replace('/', os.path.sep)),
+                '--output', output_dir,
+                '--projectname', 'test_kafkaproducer_basemessageuri']
+    assert xrcg.cli() == 0
+

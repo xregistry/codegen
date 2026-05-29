@@ -1,0 +1,86 @@
+{
+  "specversion": "1.0-rc2",
+  "description": "Fabrikam InkJet Printer Kafka overlay using canonical basemessageuri and protocoloptions.key",
+  "messagegroups": {
+    "Fabrikam.InkJetPrinter.CloudEvents": {
+      "messagegroupid": "Fabrikam.InkJetPrinter.CloudEvents",
+      "description": "Base CloudEvents message group for Fabrikam InkJet Printer events",
+      "messages": {
+        "Fabrikam.InkJetPrinter.CloudEvents.PrintJobStarted": {
+          "messageid": "Fabrikam.InkJetPrinter.CloudEvents.PrintJobStarted",
+          "description": "Event for when a print job starts",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.PrintJobStarted",
+              "description": "Event raised when a print job is initiated"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "Source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "subject": {
+              "type": "string",
+              "description": "Identifier of the print job"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "JSONSchema/draft-07"
+        },
+        "Fabrikam.InkJetPrinter.CloudEvents.PrintJobCompleted": {
+          "messageid": "Fabrikam.InkJetPrinter.CloudEvents.PrintJobCompleted",
+          "description": "Event for when a print job is completed",
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "required": true
+            },
+            "type": {
+              "value": "Fabrikam.InkJetPrinter.PrintJobCompleted",
+              "description": "Event raised when a print job is completed"
+            },
+            "source": {
+              "type": "uritemplate",
+              "description": "Source of the event",
+              "value": "{tenantid}/{deviceid}"
+            },
+            "time": {
+              "required": true
+            }
+          },
+          "dataschemaformat": "JSONSchema/draft-07"
+        }
+      }
+    },
+    "Fabrikam.InkJetPrinter.Kafka": {
+      "messagegroupid": "Fabrikam.InkJetPrinter.Kafka",
+      "description": "Kafka overlay message group using canonical basemessageuri and protocoloptions.key",
+      "messages": {
+        "Fabrikam.InkJetPrinter.Kafka.PrintJobStarted": {
+          "messageid": "Fabrikam.InkJetPrinter.Kafka.PrintJobStarted",
+          "description": "Kafka variant of PrintJobStarted using basemessageuri",
+          "basemessageuri": "/messagegroups/Fabrikam.InkJetPrinter.CloudEvents/messages/Fabrikam.InkJetPrinter.CloudEvents.PrintJobStarted",
+          "protocol": "KAFKA",
+          "protocoloptions": {
+            "key": "{tenantid}-{deviceid}"
+          }
+        },
+        "Fabrikam.InkJetPrinter.Kafka.PrintJobCompleted": {
+          "messageid": "Fabrikam.InkJetPrinter.Kafka.PrintJobCompleted",
+          "description": "Kafka variant of PrintJobCompleted using basemessageuri",
+          "basemessageuri": "/messagegroups/Fabrikam.InkJetPrinter.CloudEvents/messages/Fabrikam.InkJetPrinter.CloudEvents.PrintJobCompleted",
+          "protocol": "KAFKA",
+          "protocoloptions": {
+            "key": "{tenantid}-{deviceid}"
+          }
+        }
+      }
+    }
+  }
+}

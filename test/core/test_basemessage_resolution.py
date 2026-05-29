@@ -923,6 +923,101 @@ class TestBasemessageSpecAttributeName(unittest.TestCase):
         self.assertNotIn("basemessage", derived)
         self.assertNotIn("basemessageurl", derived)
 
+    def test_basemessageuri_cross_messagegroup(self):
+        """``basemessageuri`` (canonical URI form) is resolved exactly like
+        ``basemessage`` and ``basemessageurl`` for cross-group Kafka overlay
+        messages.  This is the canonical reproduction from the GitHub issue
+        where kafkaproducer fails with
+        'dict object has no attribute envelopemetadata'."""
+        doc = {
+            "specversion": "1.0-rc2",
+            "messagegroups": {
+                "demo": {
+                    "messagegroupid": "demo",
+                    "messages": {
+                        "demo.Hello": {
+                            "messageid": "demo.Hello",
+                            "envelope": "CloudEvents/1.0",
+                            "envelopemetadata": {
+                                "type":    {"value": "demo.hello", "required": True},
+                                "source":  {"value": "/devices/{deviceid}",
+                                            "type": "uritemplate"},
+                            },
+                            "dataschemaformat": "JSONSchema/draft-07",
+                        },
+                    },
+                },
+                "demo.kafka": {
+                    "messagegroupid": "demo.kafka",
+                    "messages": {
+                        "demo.kafka.Hello": {
+                            "messageid": "demo.kafka.Hello",
+                            "basemessageuri": "/messagegroups/demo/messages/demo.Hello",
+                            "protocol": "KAFKA",
+                            "protocoloptions": {"key": "{deviceid}"},
+                        },
+                    },
+                },
+            },
+        }
+        result = self._load(doc)
+        kafka = result["messagegroups"]["demo.kafka"]["messages"]["demo.kafka.Hello"]
+        # Inherited from base via basemessageuri
+        self.assertEqual(kafka["envelope"], "CloudEvents/1.0")
+        self.assertEqual(kafka["envelopemetadata"]["type"]["value"], "demo.hello")
+        self.assertTrue(kafka["envelopemetadata"]["type"]["required"])
+        self.assertEqual(kafka["envelopemetadata"]["source"]["value"], "/devices/{deviceid}")
+        self.assertEqual(kafka["dataschemaformat"], "JSONSchema/draft-07")
+        # Own Kafka fields preserved
+        self.assertEqual(kafka["protocol"], "KAFKA")
+        self.assertEqual(kafka["protocoloptions"]["key"], "{deviceid}")
+        # Marker is removed after resolution
+        self.assertNotIn("basemessageuri", kafka)
+        self.assertNotIn("basemessage", kafka)
+        self.assertNotIn("basemessageurl", kafka)
+
+    def test_basemessageuri_takes_lower_priority_than_basemessage(self):
+        """When both ``basemessage`` and ``basemessageuri`` are present,
+        ``basemessage`` wins (higher priority)."""
+        doc = {
+            "specversion": "1.0-rc2",
+            "messagegroups": {
+                "g": {
+                    "messagegroupid": "g",
+                    "messages": {
+                        "Real": {
+                            "messageid": "Real",
+                            "envelope": "CloudEvents/1.0",
+                            "envelopemetadata": {
+                                "source": {"value": "from-real"},
+                            },
+                        },
+                        "Other": {
+                            "messageid": "Other",
+                            "envelope": "CloudEvents/1.0",
+                            "envelopemetadata": {
+                                "source": {"value": "from-other"},
+                            },
+                        },
+                        "Derived": {
+                            "messageid": "Derived",
+                            "basemessage":    "/messagegroups/g/messages/Real",
+                            "basemessageuri": "/messagegroups/g/messages/Other",
+                            "envelopemetadata": {
+                                "type": {"value": "d.type"},
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        result = self._load(doc)
+        derived = result["messagegroups"]["g"]["messages"]["Derived"]
+        self.assertEqual(derived["envelopemetadata"]["source"]["value"], "from-real")
+        self.assertNotIn("basemessage", derived)
+        self.assertNotIn("basemessageuri", derived)
+        self.assertNotIn("basemessageurl", derived)
+
 
 if __name__ == '__main__':
     unittest.main()

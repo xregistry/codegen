@@ -80,10 +80,12 @@ class {{ class_name }}:
     {%- for messageid, message in messagegroup.messages.items() -%}
     {%- set message_snake = messageid | dotunderscore | snake %}
     {%- set data_type = util.DeclareDataType( data_project_name, root, message ) %}
-    {#- Determine the Kafka key for this message: message-level protocolmetadata wins, then endpoint-level -#}
+    {#- Determine the Kafka key for this message: message-level protocolmetadata wins, then message-level protocoloptions, then endpoint-level -#}
     {%- set msg_key_holder = [] %}
     {%- if "protocolmetadata" in message and "key" in message.protocolmetadata and "value" in message.protocolmetadata.key %}
     {%- set _ = msg_key_holder.append(message.protocolmetadata.key.value) %}
+    {%- elif "protocoloptions" in message and "key" in message.protocoloptions %}
+    {%- set _ = msg_key_holder.append(message.protocoloptions.key) %}
     {%- elif endpoint_kafka_key %}
     {%- set _ = msg_key_holder.append(endpoint_kafka_key[-1]) %}
     {%- endif %}
