@@ -175,14 +175,15 @@ async def {{ test_function_name | dotunderscore }}(service_bus_emulator):
     # Send 5 messages to test message settlement and ordering
     for i in range(5):
         await producer.send_{{ message_snake.split('.')[-1] }}(
-            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined %}
+            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined and attrname != 'time' %}
             _{{ attrname }}=f"test_{{ attrname }}_{i}",
             {%- endfor %}
-            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != 'time' %}
             {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
             _{{ placeholder | snake }}=f"test_{{ placeholder }}_{i}",
             {%- endfor %}
             {%- endfor %}
+            _time=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             data=test_data
         )
     

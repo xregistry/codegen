@@ -491,7 +491,10 @@ def _load_generated_python_module_from_document(document, style, entrypoint_name
             for target in node.targets
         ):
             selected_nodes.append(node)
-        elif isinstance(node, ast.FunctionDef) and node.name == "_normalize_cloudevents_time":
+        elif isinstance(node, ast.FunctionDef) and node.name in {
+            "_normalize_cloudevents_time",
+            "_resolve_cloudevents_time",
+        }:
             selected_nodes.append(node)
     helper_module = ast.Module(
         body=[
@@ -653,12 +656,12 @@ def test_amqpproducer_emits_cloudevents_prefix_not_ce_prefix():
 
 
 def test_kafkaproducer_time_uritemplate_is_normalized_before_cloudevent_creation():
-    """Kafka producer must normalize mapped CloudEvents time before sending."""
+    """Kafka producer must expose an explicit time override on send."""
     src = _generate_kafka_producer_src_from_document(_build_kafka_time_document())
-    assert "def _normalize_cloudevents_time(value: typing.Any) -> typing.Optional[str]:" in src
-    assert "if 'time' in attributes:" in src
-    assert "normalized_time = _normalize_cloudevents_time(attributes['time'])" in src
-    assert "del attributes['time']" in src
+    assert "def _resolve_cloudevents_time(" in src
+    assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
+    assert "_event_time : str" not in src
+    assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
 
 
 def test_amqpproducer_body_is_bytes_with_inferred_true():
@@ -791,14 +794,12 @@ def test_amqpproducer_group_level_message_annotations_codegen():
 
 
 def test_amqpproducer_time_uritemplate_sets_ce_and_creation_time():
-    """AMQP producer must not drop CloudEvents time URI templates and should
-    project parseable values onto AMQP properties.creation-time.
-    """
+    """AMQP producer must expose an explicit time override and project it to creation_time."""
     src = _generate_amqp_producer_src_from_document(_build_amqp_time_document())
-    assert "_time_tag: str" in src
-    assert '"{time_tag}".format(time_tag=_time_tag)' in src
-    assert "None,  # Will be auto-generated" not in src
-    assert "normalized_time = _normalize_cloudevents_time(attributes['time'])" in src
+    assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
+    assert "_time_tag: str" not in src
+    assert '"{time_tag}".format(time_tag=_time_tag)' not in src
+    assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
     assert "amqp_creation_time = self._coerce_amqp_timestamp(attributes.get('time'))" in src
     assert "amqp_msg.creation_time = amqp_creation_time" in src
 
@@ -831,12 +832,11 @@ def test_mqttclient_body_is_bytes_not_str():
 
 
 def test_mqttclient_time_uritemplate_is_normalized_before_cloudevent_creation():
-    """MQTT client must normalize mapped CloudEvents time before publishing."""
+    """MQTT client must expose an explicit time override on publish."""
     src = _generate_mqtt_client_src_from_document(_build_mqtt_time_document())
-    assert "def _normalize_cloudevents_time(value: typing.Any) -> typing.Optional[str]:" in src
-    assert "if 'time' in attributes:" in src
-    assert "normalized_time = _normalize_cloudevents_time(attributes['time'])" in src
-    assert "del attributes['time']" in src
+    assert "def _resolve_cloudevents_time(" in src
+    assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
+    assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
 
 
 @pytest.mark.parametrize("style,entrypoint_name,document_builder", [
@@ -844,8 +844,8 @@ def test_mqttclient_time_uritemplate_is_normalized_before_cloudevent_creation():
     ("amqpproducer", "producer.py", _build_amqp_time_document),
     ("mqttclient", "client.py", _build_mqtt_time_document),
 ])
-def test_generated_py_cloudevents_time_normalizer_validates_rfc3339(style, entrypoint_name, document_builder):
-    """Generated Python CloudEvents helpers must validate and normalize time."""
+def test_generated_py_cloudevents_time_helpers_validate_and_resolve(style, entrypoint_name, document_builder):
+    """Generated Python CloudEvents helpers must validate and resolve time values."""
     module = _load_generated_python_module_from_document(
         document_builder(),
         style,
@@ -855,6 +855,9 @@ def test_generated_py_cloudevents_time_normalizer_validates_rfc3339(style, entry
     assert module._normalize_cloudevents_time(datetime(2024, 1, 2, 3, 4, 5)) == "2024-01-02T03:04:05Z"
     assert module._normalize_cloudevents_time("2024-01-02T03:04:05.123456") == "2024-01-02T03:04:05.123456Z"
     assert module._normalize_cloudevents_time("2024-01-02t03:04:05z") == "2024-01-02T03:04:05Z"
+    assert module._resolve_cloudevents_time(None, "2024-01-02T03:04:05.123456") == "2024-01-02T03:04:05.123456Z"
+    assert module._resolve_cloudevents_time("2024-01-02t03:04:05z", "2024-01-01T00:00:00Z") == "2024-01-02T03:04:05Z"
+    assert module._resolve_cloudevents_time(None, None).endswith("Z")
     with pytest.raises(ValueError, match="RFC 3339"):
         module._normalize_cloudevents_time("2024-01-02")
 
@@ -925,6 +928,14 @@ def test_ehproducer_body_is_bytes_not_str():
     )
 
 
+def test_ehproducer_exposes_time_override_argument():
+    """Event Hubs producer must expose a dedicated CloudEvents time override."""
+    src = _generate_eh_producer_src("test/xreg/lightbulb.xreg.json")
+    assert "def _resolve_cloudevents_time(" in src
+    assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
+    assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
+
+
 def test_sbproducer_emits_cloudevents_prefix():
     """Service Bus producer already maps to 'cloudEvents:' — guard the
     mapping against regressions.
@@ -950,3 +961,11 @@ def test_sbproducer_body_is_bytes_not_str():
         "sbproducer must coerce cloudevents-sdk body str to bytes before "
         "constructing ServiceBusMessage"
     )
+
+
+def test_sbproducer_exposes_time_override_argument():
+    """Service Bus producer must expose a dedicated CloudEvents time override."""
+    src = _generate_sb_producer_src("test/xreg/lightbulb.xreg.json")
+    assert "def _resolve_cloudevents_time(" in src
+    assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
+    assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src

@@ -183,14 +183,15 @@ async def {{ test_function_name | dotunderscore }}(event_hub_emulator):
     # Send 5 messages to test message settlement and ordering
     for i in range(5):
         await producer_instance.send_{{ messageid | dotunderscore | snake }}(
-            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined -%}
-                _{{ attrname }} = {{ "f'test_{i}'" if not attrname == 'time' else 'datetime.datetime.now().isoformat()' }},
+            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined and attrname != 'time' -%}
+                _{{ attrname }} = f'test_{{ attrname }}_{i}',
             {%- endfor -%}
-            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" -%}
+            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != 'time' -%}
                 {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}_{{ placeholder | snake }} = f'test_{i}', {% endfor -%}
             {%- endfor -%}
+            _time = datetime.datetime.now(datetime.timezone.utc).isoformat(),
             data = event_data
-            {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined -%}
+            {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined and attrname != 'time' -%}
                 , _{{ attrname }} = ''
             {%- endfor -%}
         )

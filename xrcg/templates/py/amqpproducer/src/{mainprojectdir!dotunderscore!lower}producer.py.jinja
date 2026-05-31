@@ -740,7 +740,7 @@ class {{ class_name }}:
     {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
     {%- set _ = ce_arg_names.items.append(attrname | snake) %}
     {%- endfor %}
-    {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+    {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
     {%- set argname = placeholder | snake %}
     {%- if argname not in ce_arg_names.items %}
@@ -773,7 +773,7 @@ class {{ class_name }}:
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         _{{ attrname }}: str,
         {%- endfor %}
-        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
         {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
         _{{ placeholder | snake }}: str,
         {%- endfor %}
@@ -785,6 +785,7 @@ class {{ class_name }}:
         {%- for argname in protocol_option_arg_names.items %}
         _{{ argname }}: str,
         {%- endfor %}
+        _time: typing.Optional[typing.Union[str, datetime]] = None,
         content_type: str = 'application/json') -> None:
         """
         Send the `{{ messageid }}` message
@@ -797,7 +798,7 @@ class {{ class_name }}:
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
             _{{ attrname }} (str): CloudEvents required attribute '{{ attrname }}'
         {%- endfor %}
-        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
         {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
             _{{ placeholder | snake }} (str): Value for placeholder {{ placeholder }} in attribute {{ attrname }}
         {%- endfor %}
@@ -809,6 +810,7 @@ class {{ class_name }}:
         {%- for argname in protocol_option_arg_names.items %}
             _{{ argname }} (str): Value for AMQP protocol option placeholder {{ argname }}
         {%- endfor %}
+            _time (typing.Optional[typing.Union[str, datetime]]): CloudEvents time override. Defaults to current UTC when no catalog time is used.
             data ({{ type_name }}): The message data object
             content_type (str): The content type of the message data (default: 'application/json')
         """
@@ -823,15 +825,10 @@ class {{ class_name }}:
             {%- if attrname == "id" %}
             str(uuid.uuid4()),
             {%- elif attrname == "time" %}
-            {%- if attribute.value %}
-            {%- if attribute.type == "uritemplate" %}
-            {%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
-            "{{ attribute.value }}"{% if phs %}.format({% for placeholder in phs %}{{ placeholder }}=_{{ placeholder | snake }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %},
-            {%- else %}
+            {%- if attribute.value and attribute.type != "uritemplate" %}
             "{{ attribute.value }}",
-            {%- endif %}
             {%- else %}
-            None,  # Will be auto-generated
+            None,
             {%- endif %}
             {%- elif attrname == "datacontenttype" %}
             content_type,
@@ -849,12 +846,7 @@ class {{ class_name }}:
             {%- endif %}
         {%- endfor %}
         }
-        if 'time' in attributes:
-            normalized_time = _normalize_cloudevents_time(attributes['time'])
-            if normalized_time is None:
-                del attributes['time']
-            else:
-                attributes['time'] = normalized_time
+        attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))
         
         # Remove None values
         attributes = {k: v for k, v in attributes.items() if v is not None}
@@ -948,7 +940,7 @@ class {{ class_name }}:
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         _{{ attrname }}: str,
         {%- endfor %}
-        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
         {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
         _{{ placeholder | snake }}: str,
         {%- endfor %}
@@ -960,6 +952,7 @@ class {{ class_name }}:
         {%- for argname in protocol_option_arg_names.items %}
         _{{ argname }}: str,
         {%- endfor %}
+        _time: typing.Optional[typing.Union[str, datetime]] = None,
         content_type: str = 'application/json') -> None:
         """
         Send multiple `{{ messageid }}` messages
@@ -970,7 +963,7 @@ class {{ class_name }}:
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
             _{{ attrname }} (str): CloudEvents required attribute '{{ attrname }}'
         {%- endfor %}
-        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
         {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
             _{{ placeholder | snake }} (str): Value for placeholder {{ placeholder }} in attribute {{ attrname }}
         {%- endfor %}
@@ -978,6 +971,7 @@ class {{ class_name }}:
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
             _{{ attrname }} ({% if not attribute.required %}typing.Optional[str]{% else %}str{% endif %}): CloudEvent {{ attrname }} attribute
         {%- endfor %}
+            _time (typing.Optional[typing.Union[str, datetime]]): CloudEvents time override. Defaults to current UTC when no catalog time is used.
         {%- endif %}
         {%- for argname in protocol_option_arg_names.items %}
             _{{ argname }} (str): Value for AMQP protocol option placeholder {{ argname }}
@@ -991,7 +985,7 @@ class {{ class_name }}:
                 {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
                 _{{ attrname }}=_{{ attrname }},
                 {%- endfor %}
-                {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+                {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
                 {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
                 _{{ placeholder | snake }}=_{{ placeholder | snake }},
                 {%- endfor %}
@@ -999,6 +993,7 @@ class {{ class_name }}:
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
                 _{{ attrname }}=_{{ attrname }},
                 {%- endfor %}
+                _time=_time,
                 {%- endif %}
                 {%- for argname in protocol_option_arg_names.items %}
                 _{{ argname }}=_{{ argname }},
