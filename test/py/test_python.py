@@ -403,8 +403,8 @@ def test_amqpproducer_password_mode_uses_artemis_safe_blocking_sender():
     assert "sender_options = AtMostOnce() if self.username and self.password else None" in src
     assert "self._sender = self._connection.create_sender(self.address, options=sender_options)" in src
     assert "self._sender.send(amqp_msg, timeout=timeout)" in src
-    assert "lambda: self._sender.link.queued == 0" in src
-    assert 'msg=f"Flushing sender {self._sender.link.name}"' in src
+    assert "self._connection.conn.transport.pending() == 0" in src
+    assert 'msg=f"Flushing sender {self._sender.link.name} transport"' in src
     assert "self._send_via_blocking_sender(amqp_msg)" in src
     assert "self._connection.create_sender(self.address)\n" not in src
     assert "BlockingConnection(connection_url, timeout=30)" not in src
