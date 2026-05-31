@@ -6,6 +6,7 @@ import sys
 import os
 import tempfile
 import json
+from datetime import datetime
 import pytest
 
 project_root = os.path.abspath(
@@ -420,6 +421,75 @@ def _generate_amqp_producer_src_from_document(document):
         os.unlink(manifest_path)
 
 
+def _generate_python_entrypoint_from_document(document, style, entrypoint_name):
+    """Generate a Python entrypoint file from an inline xRegistry document."""
+    import glob
+    import uuid
+
+    with tempfile.NamedTemporaryFile("w", suffix=".xreg.json", delete=False, encoding="utf-8") as fp:
+        json.dump(document, fp)
+        manifest_path = fp.name
+    try:
+        tmpdirname = tempfile.mkdtemp()
+        projectname = f"test_{style}_{uuid.uuid4().hex[:8]}"
+        _generate_with_template_args(
+            manifest_path,
+            tmpdirname,
+            projectname,
+            style,
+            [],
+        )
+        entrypoint_files = glob.glob(os.path.join(tmpdirname, "**", entrypoint_name), recursive=True)
+        assert entrypoint_files, f"no {entrypoint_name} emitted under {tmpdirname}"
+        return tmpdirname, entrypoint_files[0]
+    finally:
+        os.unlink(manifest_path)
+
+
+def _generate_kafka_producer_src_from_document(document):
+    """Generate the Python Kafka producer for an inline xRegistry document."""
+    _, producer_file = _generate_python_entrypoint_from_document(document, "kafkaproducer", "producer.py")
+    return open(producer_file, encoding="utf-8").read()
+
+
+def _generate_mqtt_client_src_from_document(document):
+    """Generate the Python MQTT client for an inline xRegistry document."""
+    _, client_file = _generate_python_entrypoint_from_document(document, "mqttclient", "client.py")
+    return open(client_file, encoding="utf-8").read()
+
+
+def _load_generated_python_module_from_document(document, style, entrypoint_name):
+    """Load the generated CloudEvents time normalizer from emitted source."""
+    import ast
+    import types
+
+    _, entrypoint_file = _generate_python_entrypoint_from_document(document, style, entrypoint_name)
+    entrypoint_src = open(entrypoint_file, encoding="utf-8").read()
+    parsed = ast.parse(entrypoint_src, filename=entrypoint_file)
+    selected_nodes = []
+    for node in parsed.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "_RFC3339_TIMESTAMP_PATTERN"
+            for target in node.targets
+        ):
+            selected_nodes.append(node)
+        elif isinstance(node, ast.FunctionDef) and node.name == "_normalize_cloudevents_time":
+            selected_nodes.append(node)
+    helper_module = ast.Module(
+        body=[
+            ast.Import(names=[ast.alias(name="re")]),
+            ast.Import(names=[ast.alias(name="typing")]),
+            ast.ImportFrom(module="datetime", names=[ast.alias(name="datetime"), ast.alias(name="timezone")], level=0),
+            *selected_nodes,
+        ],
+        type_ignores=[],
+    )
+    ast.fix_missing_locations(helper_module)
+    namespace = {}
+    exec(compile(helper_module, entrypoint_file, "exec"), namespace)
+    return types.SimpleNamespace(**namespace)
+
+
 def _generate_mqtt_client_src(xreg_relpath="test/xreg/lightbulb.xreg.json"):
     """Generate the Python MQTT client for the given fixture and return the
     contents of the generated client.py as a string.
@@ -456,6 +526,92 @@ def _generate_mqtt_client_src(xreg_relpath="test/xreg/lightbulb.xreg.json"):
 #      ``inferred=True`` so the body becomes an AMQP binary section.
 # ---------------------------------------------------------------------------
 
+
+def _build_kafka_time_document():
+    return {
+        "messagegroups": {
+            "Example.Kafka": {
+                "envelope": "CloudEvents/1.0",
+                "messages": {
+                    "Example.Event": {
+                        "envelope": "CloudEvents/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"value": "urn:test"},
+                            "time": {"type": "uritemplate", "value": "{event_time}"},
+                            "datacontenttype": {"value": "application/json"},
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {
+                            "type": "object",
+                            "properties": {"value": {"type": "string"}},
+                        },
+                    }
+                }
+            }
+        }
+    }
+
+
+def _build_amqp_time_document():
+    return {
+        "messagegroups": {
+            "Example.Amqp": {
+                "envelope": "CloudEvents/1.0",
+                "protocol": "AMQP/1.0",
+                "messages": {
+                    "Example.Event": {
+                        "envelope": "CloudEvents/1.0",
+                        "protocol": "AMQP/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"type": "uritemplate", "value": "{feedurl}"},
+                            "subject": {"type": "uritemplate", "value": "{spacecraft}"},
+                            "time": {"type": "uritemplate", "value": "{time_tag}"},
+                            "datacontenttype": {"value": "application/json"}
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {
+                            "type": "object",
+                            "properties": {"value": {"type": "string"}}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+def _build_mqtt_time_document():
+    return {
+        "messagegroups": {
+            "Example.Mqtt": {
+                "envelope": "CloudEvents/1.0",
+                "protocol": "MQTT/5.0",
+                "messages": {
+                    "Example.Event": {
+                        "envelope": "CloudEvents/1.0",
+                        "protocol": "MQTT/5.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"value": "urn:test"},
+                            "time": {"type": "uritemplate", "value": "{event_time}"},
+                            "datacontenttype": {"value": "application/json"},
+                        },
+                        "protocoloptions": {
+                            "topic_name": "example/{event_time}"
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {
+                            "type": "object",
+                            "properties": {"value": {"type": "string"}},
+                        },
+                    }
+                }
+            }
+        }
+    }
+
 def test_amqpproducer_emits_cloudevents_prefix_not_ce_prefix():
     """CloudEvents AMQP §3.1: application-properties prefix MUST be
     ``cloudEvents:``. The legacy ``ce-`` HTTP-binding prefix MUST NOT
@@ -476,6 +632,15 @@ def test_amqpproducer_emits_cloudevents_prefix_not_ce_prefix():
         "producer.py must not assign the raw cloudevents-sdk headers "
         "dict (which has 'ce-' prefixes) to amqp_msg.properties"
     )
+
+
+def test_kafkaproducer_time_uritemplate_is_normalized_before_cloudevent_creation():
+    """Kafka producer must normalize mapped CloudEvents time before sending."""
+    src = _generate_kafka_producer_src_from_document(_build_kafka_time_document())
+    assert "def _normalize_cloudevents_time(value: typing.Any) -> typing.Optional[str]:" in src
+    assert "if 'time' in attributes:" in src
+    assert "normalized_time = _normalize_cloudevents_time(attributes['time'])" in src
+    assert "del attributes['time']" in src
 
 
 def test_amqpproducer_body_is_bytes_with_inferred_true():
@@ -611,35 +776,11 @@ def test_amqpproducer_time_uritemplate_sets_ce_and_creation_time():
     """AMQP producer must not drop CloudEvents time URI templates and should
     project parseable values onto AMQP properties.creation-time.
     """
-    src = _generate_amqp_producer_src_from_document({
-        "messagegroups": {
-            "Example.Amqp": {
-                "envelope": "CloudEvents/1.0",
-                "protocol": "AMQP/1.0",
-                "messages": {
-                    "Example.Event": {
-                        "envelope": "CloudEvents/1.0",
-                        "protocol": "AMQP/1.0",
-                        "envelopemetadata": {
-                            "type": {"value": "Example.Event"},
-                            "source": {"type": "uritemplate", "value": "{feedurl}"},
-                            "subject": {"type": "uritemplate", "value": "{spacecraft}"},
-                            "time": {"type": "uritemplate", "value": "{time_tag}"},
-                            "datacontenttype": {"value": "application/json"}
-                        },
-                        "dataschemaformat": "JsonSchema/draft-07",
-                        "dataschema": {
-                            "type": "object",
-                            "properties": {"value": {"type": "string"}}
-                        }
-                    }
-                }
-            }
-        }
-    })
+    src = _generate_amqp_producer_src_from_document(_build_amqp_time_document())
     assert "_time_tag: str" in src
     assert '"{time_tag}".format(time_tag=_time_tag)' in src
     assert "None,  # Will be auto-generated" not in src
+    assert "normalized_time = _normalize_cloudevents_time(attributes['time'])" in src
     assert "amqp_creation_time = self._coerce_amqp_timestamp(attributes.get('time'))" in src
     assert "amqp_msg.creation_time = amqp_creation_time" in src
 
@@ -669,6 +810,35 @@ def test_mqttclient_body_is_bytes_not_str():
         "client.py must coerce str payload to bytes before publish so the "
         "wire representation matches the declared content-type byte-for-byte"
     )
+
+
+def test_mqttclient_time_uritemplate_is_normalized_before_cloudevent_creation():
+    """MQTT client must normalize mapped CloudEvents time before publishing."""
+    src = _generate_mqtt_client_src_from_document(_build_mqtt_time_document())
+    assert "def _normalize_cloudevents_time(value: typing.Any) -> typing.Optional[str]:" in src
+    assert "if 'time' in attributes:" in src
+    assert "normalized_time = _normalize_cloudevents_time(attributes['time'])" in src
+    assert "del attributes['time']" in src
+
+
+@pytest.mark.parametrize("style,entrypoint_name,document_builder", [
+    ("kafkaproducer", "producer.py", _build_kafka_time_document),
+    ("amqpproducer", "producer.py", _build_amqp_time_document),
+    ("mqttclient", "client.py", _build_mqtt_time_document),
+])
+def test_generated_py_cloudevents_time_normalizer_validates_rfc3339(style, entrypoint_name, document_builder):
+    """Generated Python CloudEvents helpers must validate and normalize time."""
+    module = _load_generated_python_module_from_document(
+        document_builder(),
+        style,
+        entrypoint_name,
+    )
+    assert module._normalize_cloudevents_time(None) is None
+    assert module._normalize_cloudevents_time(datetime(2024, 1, 2, 3, 4, 5)) == "2024-01-02T03:04:05Z"
+    assert module._normalize_cloudevents_time("2024-01-02T03:04:05.123456") == "2024-01-02T03:04:05.123456Z"
+    assert module._normalize_cloudevents_time("2024-01-02t03:04:05z") == "2024-01-02T03:04:05Z"
+    with pytest.raises(ValueError, match="RFC 3339"):
+        module._normalize_cloudevents_time("2024-01-02")
 
 
 def _generate_eh_producer_src(xreg_relpath="test/xreg/lightbulb.xreg.json"):

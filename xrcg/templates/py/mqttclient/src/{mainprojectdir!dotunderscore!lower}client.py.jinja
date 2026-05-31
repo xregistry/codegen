@@ -1,4 +1,5 @@
 {%- import "util.include.jinja" as util -%}
+{%- import "cloudevents.jinja.include" as cloudEvents -%}
 
 # pylint: disable=unused-import, line-too-long, missing-module-docstring, missing-function-docstring, missing-class-docstring, consider-using-f-string, trailing-whitespace, trailing-newlines
 import json
@@ -6,6 +7,7 @@ import re
 import typing
 from typing import Callable, Awaitable, Optional, Dict, List
 import asyncio
+from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 try:
     # paho-mqtt 2.x exposes MQTT5 Properties for the PUBLISH packet type.
@@ -40,6 +42,8 @@ import {{ data_project_name | dotunderscore | lower }}
 
 # URI template regex pattern
 _URI_TEMPLATE_PATTERN = re.compile(r'\{([A-Za-z0-9_]+)\}')
+
+{{ cloudEvents.DeclareRfc3339TimeNormalizer() }}
 
 
 def _topic_to_mqtt_wildcard(topic: str) -> str:
@@ -516,6 +520,12 @@ class {{ class_name }}(_ClientBase):
         {%- endfor %}
         }
         attributes["datacontenttype"] = content_type
+        if 'time' in attributes:
+            normalized_time = _normalize_cloudevents_time(attributes['time'])
+            if normalized_time is None:
+                del attributes['time']
+            else:
+                attributes['time'] = normalized_time
         byte_data = data.to_byte_array(content_type) if data is not None else b''
         # to_byte_array returns str for text content types (e.g. JSON);
         # paho-mqtt will UTF-8 encode str payloads, but cloudevents-sdk's
