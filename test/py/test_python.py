@@ -392,6 +392,18 @@ def test_amqpproducer_no_azure_cbs_has_no_azure_deps():
     assert "azure-identity" not in pyp
 
 
+def test_amqpproducer_password_mode_uses_artemis_safe_blocking_sender():
+    """Password-mode AMQP producers must use the Artemis-safe blocking sender path."""
+    src = _generate_amqp_producer_src("test/xreg/lightbulb-amqp.xreg.json")
+    assert "from proton.reactor import AtMostOnce" in src
+    assert "def _init_blocking_sender(self) -> None:" in src
+    assert "connection_timeout = 120 if self.username and self.password else 30" in src
+    assert "sender_options = AtMostOnce() if self.username and self.password else None" in src
+    assert "self._sender = self._connection.create_sender(self.address, options=sender_options)" in src
+    assert "self._connection.create_sender(self.address)\n" not in src
+    assert "BlockingConnection(connection_url, timeout=30)" not in src
+
+
 def _generate_amqp_producer_src(xreg_relpath="test/xreg/lightbulb-amqp.xreg.json", template_args=None):
     """Generate the Python AMQP producer for the given fixture and return
     the contents of the generated producer.py as a string.
