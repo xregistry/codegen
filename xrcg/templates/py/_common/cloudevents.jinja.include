@@ -9,7 +9,7 @@
 
 {%- macro DeclareRfc3339TimeNormalizer() -%}
 _RFC3339_TIMESTAMP_PATTERN = re.compile(
-    r'^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$'
+    r'^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})?$'
 )
 
 
@@ -38,7 +38,7 @@ def _normalize_cloudevents_time(value: typing.Any) -> typing.Optional[str]:
     except ValueError as exc:
         raise ValueError("CloudEvents 'time' must be an RFC 3339 timestamp") from exc
     if parsed.tzinfo is None:
-        raise ValueError("CloudEvents 'time' must be an RFC 3339 timestamp")
+        parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.isoformat().replace('+00:00', 'Z')
 {%- endmacro -%}
 

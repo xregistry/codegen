@@ -835,6 +835,7 @@ def test_generated_py_cloudevents_time_normalizer_validates_rfc3339(style, entry
     )
     assert module._normalize_cloudevents_time(None) is None
     assert module._normalize_cloudevents_time(datetime(2024, 1, 2, 3, 4, 5)) == "2024-01-02T03:04:05Z"
+    assert module._normalize_cloudevents_time("2024-01-02T03:04:05.123456") == "2024-01-02T03:04:05.123456Z"
     assert module._normalize_cloudevents_time("2024-01-02t03:04:05z") == "2024-01-02T03:04:05Z"
     with pytest.raises(ValueError, match="RFC 3339"):
         module._normalize_cloudevents_time("2024-01-02")
