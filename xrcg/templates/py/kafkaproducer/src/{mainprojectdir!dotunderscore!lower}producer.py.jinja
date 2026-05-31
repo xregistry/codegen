@@ -1,14 +1,18 @@
 {%- import "util.include.jinja" as util -%}
+{%- import "cloudevents.jinja.include" as cloudEvents -%}
 
 # pylint: disable=unused-import, line-too-long, missing-module-docstring, missing-function-docstring, missing-class-docstring, consider-using-f-string, trailing-whitespace, trailing-newlines
 import sys
 import json
+import re
 import uuid
 import typing
-from datetime import datetime
+from datetime import datetime, timezone
 from confluent_kafka import Producer, KafkaException, Message
 from cloudevents.kafka import to_binary, to_structured, KafkaMessage
 from cloudevents.http import CloudEvent
+
+{{ cloudEvents.DeclareRfc3339TimeNormalizer() }}
 
 {%- set messagegroups = root.messagegroups %}
 {%- set imports = [] %}
@@ -186,6 +190,12 @@ class {{ class_name }}:
         {%- endfor %}
         }
         attributes["datacontenttype"] = content_type
+        if 'time' in attributes:
+            normalized_time = _normalize_cloudevents_time(attributes['time'])
+            if normalized_time is None:
+                del attributes['time']
+            else:
+                attributes['time'] = normalized_time
         event = CloudEvent.create(attributes, data)
         if self.content_mode == "structured":
             message = to_structured(event, data_marshaller=lambda x: {% if data_type != "object"%}json.loads(x.to_json()){%else%}json.dumps(x){%endif%}, key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key))

@@ -7,6 +7,41 @@
 {{- (attrname in ['source', 'type'] and attrname not in message.envelopemetadata) -}}
 {%- endmacro -%}
 
+{%- macro DeclareRfc3339TimeNormalizer() -%}
+_RFC3339_TIMESTAMP_PATTERN = re.compile(
+    r'^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$'
+)
+
+
+def _normalize_cloudevents_time(value: typing.Any) -> typing.Optional[str]:
+    """Validate and normalize CloudEvents ``time`` to RFC 3339."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat().replace('+00:00', 'Z')
+    text = str(value).strip()
+    if not text:
+        raise ValueError("CloudEvents 'time' must be an RFC 3339 timestamp")
+    if not _RFC3339_TIMESTAMP_PATTERN.fullmatch(text):
+        raise ValueError("CloudEvents 'time' must be an RFC 3339 timestamp")
+    normalized = text
+    if normalized[10] == 't':
+        normalized = normalized[:10] + 'T' + normalized[11:]
+    if normalized.endswith('z'):
+        normalized = normalized[:-1] + 'Z'
+    if normalized.endswith('Z'):
+        normalized = normalized[:-1] + '+00:00'
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError("CloudEvents 'time' must be an RFC 3339 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("CloudEvents 'time' must be an RFC 3339 timestamp")
+    return parsed.isoformat().replace('+00:00', 'Z')
+{%- endmacro -%}
+
 # Generates a list of arguments for "send" methods that correspond to placeholders in uritemplates
 {%- macro DeclareUriTemplateArguments(message) -%}
 {%- for attrname in message.envelopemetadata if attrname not in ["datacontenttype", "dataschema"] -%}

@@ -55,6 +55,7 @@ import sys
 import typing
 import uuid
 import json
+import re
 import threading
 import queue
 import concurrent.futures
@@ -64,6 +65,8 @@ from proton import Message, symbol
 from proton.utils import BlockingConnection
 from cloudevents.http import CloudEvent
 from cloudevents.conversion import to_binary, to_structured
+
+{{ cloudEvents.DeclareRfc3339TimeNormalizer() }}
 {%- if _azure_cbs_target %}
 
 # --- Azure CBS support (azure_cbs_target={{ _azure_cbs_target }}) ---
@@ -825,6 +828,12 @@ class {{ class_name }}:
             {%- endif %}
         {%- endfor %}
         }
+        if 'time' in attributes:
+            normalized_time = _normalize_cloudevents_time(attributes['time'])
+            if normalized_time is None:
+                del attributes['time']
+            else:
+                attributes['time'] = normalized_time
         
         # Remove None values
         attributes = {k: v for k, v in attributes.items() if v is not None}
