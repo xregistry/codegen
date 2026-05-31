@@ -432,6 +432,14 @@ class {{ class_name }}(_ClientBase):
             {%- endfor %}
         {%- endif %}
     {%- endif %}
+    {%- set time_uri_template_vars = [] %}
+    {%- if 'time' in message.envelopemetadata and message.envelopemetadata['time'].value and message.envelopemetadata['time'].type == "uritemplate" -%}
+        {%- for placeholder in message.envelopemetadata['time'].value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+            {%- if placeholder not in uri_template_vars and placeholder not in time_uri_template_vars -%}
+                {%- set _ = time_uri_template_vars.append(placeholder) -%}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- endif %}
     {#- Per-message QoS and retain defaults pulled from protocoloptions.
         Supports both the direct-scalar form (protocoloptions.qos = 1) and the
         spec's properties-map form (protocoloptions.properties.qos.value = 1). -#}
@@ -468,6 +476,9 @@ class {{ class_name }}(_ClientBase):
         topic: Optional[str] = None,
         qos: Optional[int] = None,
         retain: Optional[bool] = None,
+        {%- for var in time_uri_template_vars %}
+        {{ var | snake }}: Optional[str] = None,
+        {%- endfor %}
         _time: typing.Optional[typing.Union[str, datetime]] = None,
         content_type: str = "application/json") -> None:
         """
@@ -487,6 +498,9 @@ class {{ class_name }}(_ClientBase):
                 with URI template placeholders substituted from the keyword arguments.
             qos: Optional MQTT QoS override. If not provided, uses the message default ({{ default_qos }}).
             retain: Optional MQTT retain flag override. If not provided, uses the message default ({{ default_retain }}).
+        {%- for var in time_uri_template_vars %}
+            {{ var | snake }}: Legacy compatibility placeholder for CloudEvents time.
+        {%- endfor %}
             _time: Optional CloudEvents time override. Defaults to current UTC when no catalog time is used.
             content_type: The content type for the event data.
         """
@@ -503,11 +517,7 @@ class {{ class_name }}(_ClientBase):
         {%- for attrname, attribute in message.envelopemetadata.items() %}
              "{{ attrname }}":
             {%- if attrname == "time" -%}
-            {%- if attribute.value and attribute.type != "uritemplate" -%}
-            "{{ attribute.value }}"
-            {%- else -%}
-            None
-            {%- endif -%}
+            {{ cloudEvents.RenderLegacyTimeFallback(attribute, "") }}
             {%- elif attribute.value -%}
             "{{ attribute.value }}"
             {%- if attribute.type == "uritemplate" -%}

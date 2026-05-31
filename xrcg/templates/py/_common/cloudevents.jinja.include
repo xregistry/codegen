@@ -54,6 +54,21 @@ def _resolve_cloudevents_time(
     return _normalize_cloudevents_time(datetime.now(timezone.utc))
 {%- endmacro -%}
 
+{%- macro RenderLegacyTimeFallback(attribute, placeholder_prefix) -%}
+{%- if attribute.value and attribute.type == "uritemplate" -%}
+{%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if phs -%}
+("{{ attribute.value }}".format({% for placeholder in phs %}{{ placeholder }}={{ placeholder_prefix }}{{ placeholder | snake }}{% if not loop.last %}, {% endif %}{% endfor %}) if {% for placeholder in phs %}{{ placeholder_prefix }}{{ placeholder | snake }} is not None{% if not loop.last %} and {% endif %}{% endfor %} else None)
+{%- else -%}
+"{{ attribute.value }}"
+{%- endif -%}
+{%- elif attribute.value and attribute.type != "uritemplate" -%}
+"{{ attribute.value }}"
+{%- else -%}
+None
+{%- endif -%}
+{%- endmacro -%}
+
 # Generates a list of arguments for "send" methods that correspond to placeholders in uritemplates
 {%- macro DeclareUriTemplateArguments(message) -%}
 {%- for attrname in message.envelopemetadata if attrname not in ["datacontenttype", "dataschema"] -%}

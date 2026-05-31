@@ -766,6 +766,15 @@ class {{ class_name }}:
     {%- endfor %}
     {%- endfor %}
     {%- endfor %}
+    {%- set time_arg_names = namespace(items=[]) %}
+    {%- if isCloudEvent and 'time' in message.envelopemetadata and message.envelopemetadata['time'].type == "uritemplate" and message.envelopemetadata['time'].value %}
+    {%- for placeholder in message.envelopemetadata['time'].value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+    {%- set argname = placeholder | snake %}
+    {%- if argname not in ce_arg_names.items and argname not in protocol_option_arg_names.items and argname not in time_arg_names.items %}
+    {%- set _ = time_arg_names.items.append(argname) %}
+    {%- endif %}
+    {%- endfor %}
+    {%- endif %}
     
     def send_{{ messagename | snake }}(self,
         data: {{ type_name }},
@@ -784,6 +793,9 @@ class {{ class_name }}:
         {%- endif %}
         {%- for argname in protocol_option_arg_names.items %}
         _{{ argname }}: str,
+        {%- endfor %}
+        {%- for argname in time_arg_names.items %}
+        _{{ argname }}: typing.Optional[str] = None,
         {%- endfor %}
         _time: typing.Optional[typing.Union[str, datetime]] = None,
         content_type: str = 'application/json') -> None:
@@ -810,6 +822,9 @@ class {{ class_name }}:
         {%- for argname in protocol_option_arg_names.items %}
             _{{ argname }} (str): Value for AMQP protocol option placeholder {{ argname }}
         {%- endfor %}
+        {%- for argname in time_arg_names.items %}
+            _{{ argname }} (typing.Optional[str]): Legacy compatibility placeholder for CloudEvents time.
+        {%- endfor %}
             _time (typing.Optional[typing.Union[str, datetime]]): CloudEvents time override. Defaults to current UTC when no catalog time is used.
             data ({{ type_name }}): The message data object
             content_type (str): The content type of the message data (default: 'application/json')
@@ -825,11 +840,7 @@ class {{ class_name }}:
             {%- if attrname == "id" %}
             str(uuid.uuid4()),
             {%- elif attrname == "time" %}
-            {%- if attribute.value and attribute.type != "uritemplate" %}
-            "{{ attribute.value }}",
-            {%- else %}
-            None,
-            {%- endif %}
+            {{ cloudEvents.RenderLegacyTimeFallback(attribute, "_") }},
             {%- elif attrname == "datacontenttype" %}
             content_type,
             {%- elif attrname == "dataschema" %}
@@ -952,6 +963,9 @@ class {{ class_name }}:
         {%- for argname in protocol_option_arg_names.items %}
         _{{ argname }}: str,
         {%- endfor %}
+        {%- for argname in time_arg_names.items %}
+        _{{ argname }}: typing.Optional[str] = None,
+        {%- endfor %}
         _time: typing.Optional[typing.Union[str, datetime]] = None,
         content_type: str = 'application/json') -> None:
         """
@@ -970,6 +984,9 @@ class {{ class_name }}:
         {%- endfor %}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
             _{{ attrname }} ({% if not attribute.required %}typing.Optional[str]{% else %}str{% endif %}): CloudEvent {{ attrname }} attribute
+        {%- endfor %}
+        {%- for argname in time_arg_names.items %}
+            _{{ argname }} (typing.Optional[str]): Legacy compatibility placeholder for CloudEvents time.
         {%- endfor %}
             _time (typing.Optional[typing.Union[str, datetime]]): CloudEvents time override. Defaults to current UTC when no catalog time is used.
         {%- endif %}
@@ -992,6 +1009,9 @@ class {{ class_name }}:
                 {%- endfor %}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
                 _{{ attrname }}=_{{ attrname }},
+                {%- endfor %}
+                {%- for argname in time_arg_names.items %}
+                _{{ argname }}=_{{ argname }},
                 {%- endfor %}
                 _time=_time,
                 {%- endif %}

@@ -476,6 +476,18 @@ def _generate_mqtt_client_src_from_document(document):
     return open(client_file, encoding="utf-8").read()
 
 
+def _generate_eh_producer_src_from_document(document):
+    """Generate the Python Event Hubs producer for an inline xRegistry document."""
+    _, producer_file = _generate_python_entrypoint_from_document(document, "ehproducer", "producer.py")
+    return open(producer_file, encoding="utf-8").read()
+
+
+def _generate_sb_producer_src_from_document(document):
+    """Generate the Python Service Bus producer for an inline xRegistry document."""
+    _, producer_file = _generate_python_entrypoint_from_document(document, "sbproducer", "producer.py")
+    return open(producer_file, encoding="utf-8").read()
+
+
 def _load_generated_python_module_from_document(document, style, entrypoint_name):
     """Load the generated CloudEvents time normalizer from emitted source."""
     import ast
@@ -620,7 +632,58 @@ def _build_mqtt_time_document():
                             "datacontenttype": {"value": "application/json"},
                         },
                         "protocoloptions": {
-                            "topic_name": "example/{event_time}"
+                            "topic_name": "example/events"
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {
+                            "type": "object",
+                            "properties": {"value": {"type": "string"}},
+                        },
+                    }
+                }
+            }
+        }
+    }
+ 
+ 
+def _build_eh_time_document():
+    return {
+        "messagegroups": {
+            "Example.Eh": {
+                "envelope": "CloudEvents/1.0",
+                "messages": {
+                    "Example.Event": {
+                        "envelope": "CloudEvents/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"value": "urn:test"},
+                            "time": {"type": "uritemplate", "value": "{time_tag}"},
+                            "datacontenttype": {"value": "application/json"},
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {
+                            "type": "object",
+                            "properties": {"value": {"type": "string"}},
+                        },
+                    }
+                }
+            }
+        }
+    }
+
+def _build_sb_time_document():
+    return {
+        "messagegroups": {
+            "Example.Sb": {
+                "envelope": "CloudEvents/1.0",
+                "messages": {
+                    "Example.Event": {
+                        "envelope": "CloudEvents/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"value": "urn:test"},
+                            "time": {"type": "uritemplate", "value": "{time_tag}"},
+                            "datacontenttype": {"value": "application/json"},
                         },
                         "dataschemaformat": "JsonSchema/draft-07",
                         "dataschema": {
@@ -656,11 +719,12 @@ def test_amqpproducer_emits_cloudevents_prefix_not_ce_prefix():
 
 
 def test_kafkaproducer_time_uritemplate_is_normalized_before_cloudevent_creation():
-    """Kafka producer must expose an explicit time override on send."""
+    """Kafka producer must expose `_time` while still accepting legacy time placeholders."""
     src = _generate_kafka_producer_src_from_document(_build_kafka_time_document())
     assert "def _resolve_cloudevents_time(" in src
     assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
-    assert "_event_time : str" not in src
+    assert "_event_time: typing.Optional[str] = None" in src
+    assert '"{event_time}".format(event_time=_event_time)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
 
 
@@ -794,11 +858,11 @@ def test_amqpproducer_group_level_message_annotations_codegen():
 
 
 def test_amqpproducer_time_uritemplate_sets_ce_and_creation_time():
-    """AMQP producer must expose an explicit time override and project it to creation_time."""
+    """AMQP producer must keep legacy time placeholders and project time to creation_time."""
     src = _generate_amqp_producer_src_from_document(_build_amqp_time_document())
     assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
-    assert "_time_tag: str" not in src
-    assert '"{time_tag}".format(time_tag=_time_tag)' not in src
+    assert "_time_tag: typing.Optional[str] = None" in src
+    assert '"{time_tag}".format(time_tag=_time_tag)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
     assert "amqp_creation_time = self._coerce_amqp_timestamp(attributes.get('time'))" in src
     assert "amqp_msg.creation_time = amqp_creation_time" in src
@@ -832,10 +896,12 @@ def test_mqttclient_body_is_bytes_not_str():
 
 
 def test_mqttclient_time_uritemplate_is_normalized_before_cloudevent_creation():
-    """MQTT client must expose an explicit time override on publish."""
+    """MQTT client must expose `_time` while still accepting legacy time placeholders."""
     src = _generate_mqtt_client_src_from_document(_build_mqtt_time_document())
     assert "def _resolve_cloudevents_time(" in src
     assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
+    assert "event_time: Optional[str] = None" in src
+    assert '"{event_time}".format(event_time=event_time)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
 
 
@@ -929,10 +995,12 @@ def test_ehproducer_body_is_bytes_not_str():
 
 
 def test_ehproducer_exposes_time_override_argument():
-    """Event Hubs producer must expose a dedicated CloudEvents time override."""
-    src = _generate_eh_producer_src("test/xreg/lightbulb.xreg.json")
+    """Event Hubs producer must expose `_time` while preserving legacy placeholders."""
+    src = _generate_eh_producer_src_from_document(_build_eh_time_document())
     assert "def _resolve_cloudevents_time(" in src
     assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
+    assert "_time_tag: typing.Optional[str] = None" in src
+    assert '"{time_tag}".format(time_tag=_time_tag)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
 
 
@@ -964,8 +1032,10 @@ def test_sbproducer_body_is_bytes_not_str():
 
 
 def test_sbproducer_exposes_time_override_argument():
-    """Service Bus producer must expose a dedicated CloudEvents time override."""
-    src = _generate_sb_producer_src("test/xreg/lightbulb.xreg.json")
+    """Service Bus producer must expose `_time` while preserving legacy placeholders."""
+    src = _generate_sb_producer_src_from_document(_build_sb_time_document())
     assert "def _resolve_cloudevents_time(" in src
     assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
+    assert "_time_tag: typing.Optional[str] = None" in src
+    assert '"{time_tag}".format(time_tag=_time_tag)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src

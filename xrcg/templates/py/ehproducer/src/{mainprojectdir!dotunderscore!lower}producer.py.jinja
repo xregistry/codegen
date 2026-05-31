@@ -59,9 +59,21 @@ class {{ class_name }}:
     {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" -%}
         {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}_{{ placeholder | snake }} : str, {% endfor -%}
     {%- endfor -%}
+    {%- set time_placeholder_params = [] -%}
+    {%- if 'time' in message.envelopemetadata and message.envelopemetadata['time'].type == "uritemplate" and message.envelopemetadata['time'].value -%}
+        {%- for placeholder in message.envelopemetadata['time'].value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+            {%- set placeholder_name = placeholder | snake -%}
+            {%- if placeholder_name not in time_placeholder_params -%}
+                {%- set _ = time_placeholder_params.append(placeholder_name) -%}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- endif -%}
     data: {{ util.DeclareDataType( project_name, root, message ) | strip_namespace -}}, content_type: str = "application/json"
     {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined and attrname != "time" -%}
         , _{{ attrname }}: typing.Optional[str] = None
+    {%- endfor -%}
+    {%- for placeholder_name in time_placeholder_params -%}
+        , _{{ placeholder_name }}: typing.Optional[str] = None
     {%- endfor -%}, _time: typing.Optional[typing.Union[str, datetime]] = None ) -> None:
         """
         Sends the '{{ messageid }}' event to the EventHub
@@ -83,6 +95,9 @@ class {{ class_name }}:
         {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined and attrname != "time" %}
             _{{ attrname }}(typing.Optional[str]): {{ attribute.description if attribute.description else "CloudEvents attribute '"+attrname+"'" }}
         {%- endfor %}
+        {%- for placeholder_name in time_placeholder_params %}
+            _{{ placeholder_name }}(typing.Optional[str]): Legacy compatibility placeholder for CloudEvents time.
+        {%- endfor %}
             _time(typing.Optional[typing.Union[str, datetime]]): CloudEvents time override. Defaults to current UTC when no catalog time is used.
         """
 
@@ -93,11 +108,7 @@ class {{ class_name }}:
         {%- for attrname, attribute in message.envelopemetadata.items() %}
              "{{ attrname }}":
             {%- if attrname == "time" -%}
-            {%- if attribute.value and attribute.type != "uritemplate" -%}
-            "{{ attribute.value }}"
-            {%- else -%}
-            None
-            {%- endif -%}
+            {{ cloudEvents.RenderLegacyTimeFallback(attribute, "_") }}
             {%- elif attribute.value -%}
             "{{ attribute.value }}"
             {%- if attribute.type == "uritemplate" -%}
