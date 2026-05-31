@@ -6,6 +6,7 @@
 Tests for {{ main_project_name }}
 """
 import base64
+import datetime
 import json
 import os
 import sys
@@ -348,7 +349,7 @@ class Test{{ class_name }}:
             assert producer.content_mode == 'structured'
             {%- set extra_args = namespace(items=[]) %}
             {%- if isCloudEvent %}
-                {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+                {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
                     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
                         {%- set _ = extra_args.items.append('_' + (placeholder | snake)) %}
                     {%- endfor %}
@@ -374,6 +375,7 @@ class Test{{ class_name }}:
                 {%- for arg in extra_args.items %}
                     {{ arg }}="value",
                 {%- endfor %}
+                    _time=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     content_type="application/json"
                 )
 

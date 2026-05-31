@@ -145,25 +145,18 @@ async def test_{{groupName}}_{{messagename.split('.')[-1]}}_py(mosquitto_broker)
         await publisher_client.publish_{{messagename.split('.')[-1]}}(
             topic=test_topic,
             {%- for attrname, attribute in message.envelopemetadata.items() %}
-            {%- if attribute.type == "uritemplate" and attribute.value %}
+            {%- if attribute.type == "uritemplate" and attribute.value and attrname != "time" %}
             {%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
             {%- if phs %}
             {%- for placeholder in phs %}
-            {%- if attrname == "time" %}
-            {{ placeholder | snake }}=datetime.datetime.now().isoformat(),
-            {%- else %}
             {{ placeholder | snake }}=f"test_{{placeholder}}_{i}",
-            {%- endif %}
             {%- endfor %}
             {%- endif %}
-            {%- elif not attribute.value %}
-            {%- if attrname == "time" %}
-            _{{ attrname | snake }}=datetime.datetime.now().isoformat(),
-            {%- else %}
+            {%- elif not attribute.value and attrname != "time" %}
             _{{ attrname | snake }}=f"test_{{attrname}}_{i}",
             {%- endif %}
-            {%- endif %}
             {%- endfor %}
+            _time=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             data=test_data,
             content_type="application/json"
         )

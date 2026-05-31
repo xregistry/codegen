@@ -40,6 +40,33 @@ def _normalize_cloudevents_time(value: typing.Any) -> typing.Optional[str]:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.isoformat().replace('+00:00', 'Z')
+
+
+def _resolve_cloudevents_time(
+    override: typing.Any = None,
+    fallback: typing.Any = None,
+) -> str:
+    """Resolve CloudEvents ``time`` from override, fallback, or current UTC."""
+    if override is not None:
+        return _normalize_cloudevents_time(override)
+    if fallback is not None:
+        return _normalize_cloudevents_time(fallback)
+    return _normalize_cloudevents_time(datetime.now(timezone.utc))
+{%- endmacro -%}
+
+{%- macro RenderLegacyTimeFallback(attribute, placeholder_prefix) -%}
+{%- if attribute.value and attribute.type == "uritemplate" -%}
+{%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if phs -%}
+("{{ attribute.value }}".format({% for placeholder in phs %}{{ placeholder }}={{ placeholder_prefix }}{{ placeholder | snake }}{% if not loop.last %}, {% endif %}{% endfor %}) if {% for placeholder in phs %}{{ placeholder_prefix }}{{ placeholder | snake }} is not None{% if not loop.last %} and {% endif %}{% endfor %} else None)
+{%- else -%}
+"{{ attribute.value }}"
+{%- endif -%}
+{%- elif attribute.value and attribute.type != "uritemplate" -%}
+"{{ attribute.value }}"
+{%- else -%}
+None
+{%- endif -%}
 {%- endmacro -%}
 
 # Generates a list of arguments for "send" methods that correspond to placeholders in uritemplates
