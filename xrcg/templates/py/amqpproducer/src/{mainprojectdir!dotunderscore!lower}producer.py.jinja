@@ -633,8 +633,18 @@ class {{ class_name }}:
         # Artemis-class brokers can stall unsettled BlockingSender sends on
         # SASL PLAIN links; a pre-settled sender avoids the timeout loop.
         sender_options = AtMostOnce() if self.username and self.password else None
+        self._blocking_sender_is_presettled = sender_options is not None
         self._connection = BlockingConnection(connection_url, timeout=connection_timeout)
         self._sender = self._connection.create_sender(self.address, options=sender_options)
+
+    def _send_via_blocking_sender(self, amqp_msg: Message, timeout: float = 30.0) -> None:
+        self._sender.send(amqp_msg, timeout=timeout)
+        if self._blocking_sender_is_presettled:
+            self._connection.wait(
+                lambda: self._sender.link.queued == 0,
+                msg=f"Flushing sender {self._sender.link.name}",
+                timeout=timeout,
+            )
     
     def _build_connection_url(self) -> str:
         if self.username and self.password:
@@ -922,9 +932,9 @@ class {{ class_name }}:
         if getattr(self, "_handler", None) is not None:
             self._send_via_reactor(amqp_msg)
         else:
-            self._sender.send(amqp_msg)
+            self._send_via_blocking_sender(amqp_msg)
         {%- else %}
-        self._sender.send(amqp_msg)
+        self._send_via_blocking_sender(amqp_msg)
         {%- endif %}
     
     def send_{{ messagename | snake }}_batch(self,

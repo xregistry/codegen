@@ -397,9 +397,15 @@ def test_amqpproducer_password_mode_uses_artemis_safe_blocking_sender():
     src = _generate_amqp_producer_src("test/xreg/lightbulb-amqp.xreg.json")
     assert "from proton.reactor import AtMostOnce" in src
     assert "def _init_blocking_sender(self) -> None:" in src
+    assert "self._blocking_sender_is_presettled = sender_options is not None" in src
+    assert "def _send_via_blocking_sender(self, amqp_msg: Message, timeout: float = 30.0) -> None:" in src
     assert "connection_timeout = 120 if self.username and self.password else 30" in src
     assert "sender_options = AtMostOnce() if self.username and self.password else None" in src
     assert "self._sender = self._connection.create_sender(self.address, options=sender_options)" in src
+    assert "self._sender.send(amqp_msg, timeout=timeout)" in src
+    assert "lambda: self._sender.link.queued == 0" in src
+    assert 'msg=f"Flushing sender {self._sender.link.name}"' in src
+    assert "self._send_via_blocking_sender(amqp_msg)" in src
     assert "self._connection.create_sender(self.address)\n" not in src
     assert "BlockingConnection(connection_url, timeout=30)" not in src
 
