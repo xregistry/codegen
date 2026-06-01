@@ -132,7 +132,7 @@ jobs:
         run: ls -lh dist/
 
       - name: Create / update Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: "proton-windows-${{ github.event.inputs.proton_version }}+xrcg${{ github.event.inputs.xrcg_build }}"
           name: "python-qpid-proton ${{ github.event.inputs.proton_version }}+xrcg${{ github.event.inputs.xrcg_build }} (Windows OpenSSL)"
