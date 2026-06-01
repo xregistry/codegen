@@ -1,5 +1,6 @@
 import platform
 import re
+import json
 import xrcg
 import random
 import string
@@ -179,3 +180,161 @@ def test_codegen_py_kafkaproducer_basemessageuri():
                 '--projectname', 'test_kafkaproducer_basemessageuri']
     assert xrcg.cli() == 0
 
+
+def test_codegen_py_kafkaproducer_keeps_jstruct_exports_with_unused_avro_schemas():
+    """Regression test for issue #371.
+
+    Full-document generation must not treat inline schema bodies under
+    ``schemagroups`` as additional top-level schema references. Doing so makes
+    the Python data package process alternate schema encodings twice and can
+    overwrite ``__init__.py`` exports for JsonStructure-only types.
+    """
+    work_dir = tempfile.mkdtemp()
+    try:
+        definitions_path = os.path.join(work_dir, 'issue-371.xreg.json')
+        output_dir = os.path.join(work_dir, 'out')
+
+        document = {
+            "specversion": "1.0-rc2",
+            "endpoints": {
+                "Test.Reference.Kafka": {
+                    "usage": ["producer"],
+                    "protocol": "KAFKA",
+                    "envelope": "CloudEvents/1.0",
+                    "envelopeoptions": {
+                        "mode": "structured",
+                        "format": "application/cloudevents+json"
+                    },
+                    "protocoloptions": {
+                        "options": {
+                            "topic": "issue-371",
+                            "key": "{entity_id}"
+                        }
+                    },
+                    "messagegroups": [
+                        "#/messagegroups/Test.Reference"
+                    ]
+                }
+            },
+            "messagegroups": {
+                "Test.Reference": {
+                    "messages": {
+                        "Test.Reference.Info": {
+                            "name": "Info",
+                            "envelope": "CloudEvents/1.0",
+                            "description": "Referenced JsonStructure message.",
+                            "envelopemetadata": {
+                                "type": {"value": "Test.Reference.Info"},
+                                "source": {
+                                    "value": "https://example.test/issue-371",
+                                    "type": "uritemplate"
+                                },
+                                "subject": {
+                                    "value": "{entity_id}",
+                                    "type": "uritemplate"
+                                }
+                            },
+                            "dataschemaformat": "JsonStructure/draft-02",
+                            "dataschemauri": "#/schemagroups/Test.jstruct/schemas/Test.Reference.Info"
+                        }
+                    }
+                }
+            },
+            "schemagroups": {
+                "Test.jstruct": {
+                    "schemas": {
+                        "Test.Reference.Info": {
+                            "defaultversionid": "v1",
+                            "versions": {
+                                "v1": {
+                                    "schemaid": "Test.Reference.Info",
+                                    "format": "JsonStructure/draft-02",
+                                    "schema": {
+                                        "$schema": "https://json-structure.org/meta/core/v0/#",
+                                        "name": "Info",
+                                        "type": "object",
+                                        "description": "JsonStructure-only reference data type.",
+                                        "properties": {
+                                            "entity_id": {
+                                                "type": "string",
+                                                "description": "Stable identifier."
+                                            },
+                                            "name": {
+                                                "type": "string",
+                                                "description": "Display name."
+                                            }
+                                        },
+                                        "required": ["entity_id", "name"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "Test.avro": {
+                    "schemas": {
+                        "Test.Reference.Unused": {
+                            "defaultversionid": "v1",
+                            "versions": {
+                                "v1": {
+                                    "schemaid": "Test.Reference.Unused",
+                                    "format": "Avro/1.11.3",
+                                    "schema": {
+                                        "type": "record",
+                                        "name": "Unused",
+                                        "namespace": "Test.Reference",
+                                        "doc": "Unreferenced alternate schema format.",
+                                        "fields": [
+                                            {
+                                                "name": "entity_id",
+                                                "type": "string",
+                                                "doc": "Stable identifier."
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        with open(definitions_path, 'w', encoding='utf-8') as handle:
+            json.dump(document, handle, indent=2)
+
+        sys.argv = [
+            'xrcg', 'generate',
+            '--style', 'kafkaproducer',
+            '--language', 'py',
+            '--definitions', definitions_path,
+            '--output', output_dir,
+            '--projectname', 'test_issue_371'
+        ]
+        assert xrcg.cli() == 0
+
+        init_path = os.path.join(
+            output_dir,
+            'test_issue_371_data',
+            'src',
+            'test_issue_371_data',
+            '__init__.py'
+        )
+        with open(init_path, 'r', encoding='utf-8') as handle:
+            init_contents = handle.read()
+
+        producer_path = os.path.join(
+            output_dir,
+            'test_issue_371_kafka_producer',
+            'src',
+            'test_issue_371_kafka_producer',
+            'producer.py'
+        )
+        with open(producer_path, 'r', encoding='utf-8') as handle:
+            producer_contents = handle.read()
+
+        assert 'from .info import Info' in init_contents
+        assert '"Info"' in init_contents
+        assert 'from test_issue_371_data import Info' in producer_contents
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
