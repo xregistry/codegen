@@ -1212,21 +1212,14 @@ class TemplateRenderer:
             return None
 
         # Extract names
+        schema_group_id = self._extract_namespace_from_ref(schema_ref)
         schema_id = schema_version.get("schemaid") or parent_schema.get("schemaid", "")
-        class_name = schema_id
+        class_name = schema_id or self._extract_class_name_from_ref(schema_ref)
 
-        # Extract group from reference path
-        schema_group_id = ""
-        if schema_ref.startswith("#"):
-            path_parts = schema_ref.split("/")
-            for i, part in enumerate(path_parts):
-                if part == "schemagroups" and i + 1 < len(path_parts):
-                    schema_group_id = path_parts[i + 1]
-                    break
-
-        # Build qualified class name
-        if schema_group_id and class_name and not class_name.startswith(schema_group_id):
+        if schema_group_id and class_name and "." not in class_name:
             class_name = f"{schema_group_id}.{class_name}"
+
+        namespace = JinjaFilters.namespace(class_name) or schema_group_id
 
         format_short = self._get_format_short(schema_format)
 
@@ -1236,6 +1229,7 @@ class TemplateRenderer:
             "format": schema_format,
             "format_short": format_short,
             "class_name": class_name,
+            "namespace": namespace,
             "schema_id": schema_id,
             "schema_group_id": schema_group_id
         }
