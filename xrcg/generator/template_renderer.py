@@ -1007,6 +1007,18 @@ class TemplateRenderer:
     def collect_schema_references_from_document(self, document: JsonNode) -> set[str]:
         """Collect all schema references from the composed document."""
         schema_refs = set()
+
+        def should_collect_inline_schema(current_path: str) -> bool:
+            """Only collect direct inline schema bodies outside schemagroups.
+
+            Schema versions under ``schemagroups/.../versions/.../schema`` are
+            already reachable through ``dataschema*`` references. Collecting the
+            raw inline body again causes the same logical schema set to be
+            processed twice (for example JsonStructure plus Avro variants in the
+            same manifest), which can overwrite generated package exports.
+            """
+            normalized_path = current_path.replace("\\", "/")
+            return "/schemagroups/" not in f"/{normalized_path}"
         
         def scan_for_schemas(obj: JsonNode, path: str = "") -> None:
             if isinstance(obj, dict):
@@ -1019,8 +1031,10 @@ class TemplateRenderer:
                     
                     # Look for inline schemas
                     elif key == "schema" and isinstance(value, (dict, str)):
-                        schema_pointer = f"#{path}/schema"
-                        schema_refs.add(schema_pointer)
+                        if should_collect_inline_schema(current_path):
+                            schema_pointer = f"#{path}/schema"
+                            schema_refs.add(schema_pointer)
+                        continue
                     
                     # Recursively scan nested objects
                     scan_for_schemas(value, current_path)
