@@ -50,7 +50,7 @@ jobs:
 
       - name: Cache vcpkg
         id: vcpkg-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             C:/vcpkg/installed
@@ -122,7 +122,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Download all wheel artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: wheel-*
           path: dist
@@ -132,7 +132,7 @@ jobs:
         run: ls -lh dist/
 
       - name: Create / update Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: "proton-windows-${{ github.event.inputs.proton_version }}+xrcg${{ github.event.inputs.xrcg_build }}"
           name: "python-qpid-proton ${{ github.event.inputs.proton_version }}+xrcg${{ github.event.inputs.xrcg_build }} (Windows OpenSSL)"
