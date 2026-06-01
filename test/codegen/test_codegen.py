@@ -12,6 +12,8 @@ import time
 import tempfile
 
 import pytest
+from xrcg.generator.generator_context import GeneratorContext
+from xrcg.generator.template_renderer import TemplateRenderer
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '../..'))
@@ -338,3 +340,42 @@ def test_codegen_py_kafkaproducer_keeps_jstruct_exports_with_unused_avro_schemas
         assert 'from test_issue_371_data import Info' in producer_contents
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def test_extract_schema_info_keeps_names_for_top_level_schemagroup_refs():
+    """Top-level schemagroup refs must retain class and namespace metadata.
+
+    Issue #371 stopped collecting inline ``.../versions/.../schema`` refs under
+    ``schemagroups`` to avoid processing alternate encodings twice. The
+    top-level schema ref path still needs to supply the name/namespace metadata
+    required for JSONSchema-to-Avro conversion in the C#/Java generators.
+    """
+    with open(os.path.join(project_root, 'test/xreg/contoso-erp.xreg.json'), 'r', encoding='utf-8') as handle:
+        document = json.load(handle)
+
+    renderer = TemplateRenderer(
+        GeneratorContext(),
+        'test_project',
+        'cs',
+        'amqpconsumer',
+        os.path.join(tempfile.gettempdir(), 'tmp', 'schema-info-check'),
+        '',
+        {},
+        [],
+        {},
+        False,
+        False
+    )
+    schema_ref = '#/schemagroups/Contoso.ERP.Events/schemas/purchaseOrderData'
+    schema_data = renderer.resolve_schema_reference_in_document(schema_ref, document)
+    assert schema_data is not None
+
+    schema_info = renderer.extract_schema_info_from_resolved_data(schema_ref, schema_data)
+    assert schema_info is not None
+    assert schema_info['class_name'] == 'Contoso.ERP.Events.purchaseOrderData'
+    assert schema_info['namespace'] == 'Contoso.ERP.Events'
+
+    renderer.convert_json_to_avro_if_needed(schema_info)
+    assert schema_info['format_short'] == 'avro'
+    assert schema_info['content']['name'] == 'PurchaseOrderData'
+    assert schema_info['content']['namespace'] == 'Contoso.ERP.Events'
