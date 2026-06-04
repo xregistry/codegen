@@ -312,6 +312,104 @@ def _generate_with_template_args(xreg_file, output_dir, projectname, style, temp
     assert xrcg.cli() == 0
 
 
+def _generate_python_project(xreg_relpath, style, project_prefix, template_args=None):
+    """Generate a Python project from a repository fixture and return its path."""
+    import uuid
+
+    tmpdirname = tempfile.mkdtemp()
+    projectname = f"{project_prefix}_{uuid.uuid4().hex[:8]}"
+    _generate_with_template_args(
+        os.path.join(project_root, xreg_relpath.replace('/', os.sep)),
+        tmpdirname,
+        projectname,
+        style,
+        template_args or [],
+    )
+    return tmpdirname, projectname
+
+
+def _load_generated_python_module_from_path(module_path, extra_paths=None):
+    """Load a generated Python module from disk with temporary import paths."""
+    import importlib.util
+    import uuid
+
+    old_sys_path = sys.path[:]
+    try:
+        for extra_path in reversed(extra_paths or []):
+            sys.path.insert(0, extra_path)
+        spec = importlib.util.spec_from_file_location(
+            f"generated_{uuid.uuid4().hex}",
+            module_path,
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path[:] = old_sys_path
+
+
+def _generate_python_sample(xreg_relpath, style, project_prefix):
+    """Generate a Python sample and return its source plus import search paths."""
+    import glob
+
+    tmpdirname, projectname = _generate_python_project(xreg_relpath, style, project_prefix)
+    sample_files = glob.glob(os.path.join(tmpdirname, "**", "sample.py"), recursive=True)
+    assert sample_files, f"no sample.py emitted under {tmpdirname}"
+    src_dirs = sorted(
+        path
+        for path in glob.glob(os.path.join(tmpdirname, "**", "src"), recursive=True)
+        if os.path.isdir(path)
+    )
+    sample_file = sample_files[0]
+    sample_src = open(sample_file, encoding="utf-8").read()
+    return projectname, sample_file, sample_src, src_dirs
+
+
+def _generate_python_project_from_document(document, style, project_prefix, template_args=None):
+    """Generate a Python project from an inline xRegistry document."""
+    with tempfile.NamedTemporaryFile("w", suffix=".xreg.json", delete=False, encoding="utf-8") as fp:
+        json.dump(document, fp)
+        manifest_path = fp.name
+    try:
+        tmpdirname = tempfile.mkdtemp()
+        import uuid
+        projectname = f"{project_prefix}_{uuid.uuid4().hex[:8]}"
+        _generate_with_template_args(
+            manifest_path,
+            tmpdirname,
+            projectname,
+            style,
+            template_args or [],
+        )
+        return tmpdirname, projectname
+    finally:
+        os.unlink(manifest_path)
+
+
+def _create_generated_python_data_instance(xreg_relpath):
+    """Create one generated Python data instance from the emitted data tests."""
+    import glob
+
+    tmpdirname, _ = _generate_python_project(xreg_relpath, "kafkaproducer", "test_data_bytes")
+    src_dirs = sorted(
+        path
+        for path in glob.glob(os.path.join(tmpdirname, "**", "src"), recursive=True)
+        if os.path.isdir(path)
+    )
+    test_modules = glob.glob(os.path.join(tmpdirname, "*_data", "tests", "test_*.py"))
+    assert test_modules, f"no generated data tests emitted under {tmpdirname}"
+    for test_module in test_modules:
+        module = _load_generated_python_module_from_path(test_module, extra_paths=src_dirs)
+        for candidate in vars(module).values():
+            if isinstance(candidate, type) and hasattr(candidate, "create_instance"):
+                instance = candidate.create_instance()
+                if hasattr(instance, "to_byte_array"):
+                    return instance
+    raise AssertionError(f"no generated data test helper found under {tmpdirname}")
+
+
 @pytest.mark.parametrize("target,expected_audience", [
     ("eventhubs", "https://eventhubs.azure.net/.default"),
     ("servicebus", "https://servicebus.azure.net/.default"),
@@ -443,26 +541,15 @@ def _generate_amqp_producer_src_from_document(document):
 def _generate_python_entrypoint_from_document(document, style, entrypoint_name):
     """Generate a Python entrypoint file from an inline xRegistry document."""
     import glob
-    import uuid
 
-    with tempfile.NamedTemporaryFile("w", suffix=".xreg.json", delete=False, encoding="utf-8") as fp:
-        json.dump(document, fp)
-        manifest_path = fp.name
-    try:
-        tmpdirname = tempfile.mkdtemp()
-        projectname = f"test_{style}_{uuid.uuid4().hex[:8]}"
-        _generate_with_template_args(
-            manifest_path,
-            tmpdirname,
-            projectname,
-            style,
-            [],
-        )
-        entrypoint_files = glob.glob(os.path.join(tmpdirname, "**", entrypoint_name), recursive=True)
-        assert entrypoint_files, f"no {entrypoint_name} emitted under {tmpdirname}"
-        return tmpdirname, entrypoint_files[0]
-    finally:
-        os.unlink(manifest_path)
+    tmpdirname, _ = _generate_python_project_from_document(
+        document,
+        style,
+        f"test_{style}",
+    )
+    entrypoint_files = glob.glob(os.path.join(tmpdirname, "**", entrypoint_name), recursive=True)
+    assert entrypoint_files, f"no {entrypoint_name} emitted under {tmpdirname}"
+    return tmpdirname, entrypoint_files[0]
 
 
 def _generate_kafka_producer_src_from_document(document):
@@ -552,13 +639,170 @@ def _generate_mqtt_client_src(xreg_relpath="test/xreg/lightbulb.xreg.json"):
 #      ``ce-`` headers; the producer MUST translate them. Assigning the
 #      raw dict to ``amqp_msg.properties`` produces wire-noncompliant
 #      messages that no CE-AMQP consumer will recognize.
-#   2. The generated dataclass ``to_byte_array("application/json")``
-#      returns ``str``; if passed straight to ``proton.Message(body=...)``
-#      proton emits an AMQP string section containing JSON (double-encoded
-#      on the wire). Same hazard for paho-mqtt PUBLISH payloads. The
-#      producer/client MUST coerce to ``bytes`` and proton MUST be told
-#      ``inferred=True`` so the body becomes an AMQP binary section.
+#   2. Generated Python dataclasses MUST return ``bytes`` from
+#      ``to_byte_array("application/json")``. Transports still defensively
+#      coerce ``str`` payloads because older generated code, or upstream
+#      regressions, would otherwise land on the wire double-encoded.
 # ---------------------------------------------------------------------------
+
+
+def test_kafkaproducer_sample_uses_package_root_imports_and_valid_connection_string_alias():
+    """Kafka producer samples must import data types from the package root."""
+    projectname, sample_file, sample_src, src_dirs = _generate_python_sample(
+        "test/xreg/lightbulb.xreg.json",
+        "kafkaproducer",
+        "test_kafka_sample",
+    )
+    assert "parser.add_argument('-c', '--connection-string'" in sample_src
+    assert f"from {projectname}_data import " in sample_src
+    assert f"from {projectname}_data." not in sample_src
+    _load_generated_python_module_from_path(sample_file, extra_paths=src_dirs)
+
+
+def test_kafkaconsumer_sample_uses_package_root_imports():
+    """Kafka consumer samples must import data types from the package root."""
+    projectname, sample_file, sample_src, src_dirs = _generate_python_sample(
+        "test/xreg/lightbulb.xreg.json",
+        "kafkaconsumer",
+        "test_kafka_consumer_sample",
+    )
+    assert f"from {projectname}_data import " in sample_src
+    assert f"from {projectname}_data." not in sample_src
+    _load_generated_python_module_from_path(sample_file, extra_paths=src_dirs)
+
+
+def test_kafkaproducer_jstruct_sample_uses_package_root_imports():
+    """Kafka producer samples must use package-root imports for JsonStructure data."""
+    projectname, sample_file, sample_src, src_dirs = _generate_python_sample(
+        "test/xreg/inkjet-jstruct.xreg.json",
+        "kafkaproducer",
+        "test_kafka_jstruct_sample",
+    )
+    assert f"from {projectname}_data import " in sample_src
+    assert f"from {projectname}_data." not in sample_src
+    _load_generated_python_module_from_path(sample_file, extra_paths=src_dirs)
+
+
+@pytest.mark.parametrize("xreg_relpath", [
+    "test/xreg/lightbulb.xreg.json",
+    "test/xreg/inkjet-jstruct.xreg.json",
+])
+def test_generated_python_data_to_byte_array_returns_bytes_for_json(xreg_relpath):
+    """Generated Python data classes must emit bytes for JSON payloads."""
+    instance = _create_generated_python_data_instance(xreg_relpath)
+    payload = instance.to_byte_array("application/json")
+    assert isinstance(payload, bytes)
+
+
+def _build_transport_test_module_document():
+    return {
+        "messagegroups": {
+            "Example.Transport": {
+                "messages": {
+                    "Example.TrafficFlowMeasurement": {
+                        "name": "TrafficFlowMeasurement",
+                        "envelope": "CloudEvents/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.TrafficFlowMeasurement"},
+                            "source": {"value": "urn:test:traffic"}
+                        },
+                        "dataschemaformat": "JSONStructure/draft-02",
+                        "dataschemauri": "#/schemagroups/Example.Transport/schemas/Example.TrafficFlowMeasurement",
+                    },
+                    "Example.RoadEvent": {
+                        "name": "RoadEvent",
+                        "envelope": "CloudEvents/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.RoadEvent"},
+                            "source": {"value": "urn:test:road"}
+                        },
+                        "dataschemaformat": "JSONStructure/draft-02",
+                        "dataschemauri": "#/schemagroups/Example.Transport/schemas/Example.RoadEvent",
+                    },
+                }
+            }
+        },
+        "schemagroups": {
+            "Example.Transport": {
+                "schemas": {
+                    "Example.TrafficFlowMeasurement": {
+                        "format": "JSONStructure/draft-02",
+                        "defaultversionid": "1",
+                        "versions": {
+                            "1": {
+                                "format": "JSONStructure/draft-02",
+                                "schema": {
+                                    "$schema": "https://json-structure.org/meta/core/v0/#",
+                                    "name": "TrafficFlowMeasurement",
+                                    "type": "object",
+                                    "properties": {
+                                        "speed": {"type": "number"}
+                                    },
+                                },
+                            }
+                        },
+                    },
+                    "Example.RoadEvent": {
+                        "format": "JSONStructure/draft-02",
+                        "defaultversionid": "1",
+                        "versions": {
+                            "1": {
+                                "format": "JSONStructure/draft-02",
+                                "schema": {
+                                    "$schema": "https://json-structure.org/meta/core/v0/#",
+                                    "name": "RoadEvent",
+                                    "type": "object",
+                                    "properties": {
+                                        "description": {"type": "string"}
+                                    },
+                                },
+                            }
+                        },
+                    },
+                },
+            }
+        }
+    }
+
+
+@pytest.mark.parametrize(("style", "test_entrypoint"), [
+    ("kafkaproducer", "test_producer.py"),
+    ("mqttclient", "test_client.py"),
+    ("amqpproducer", "test_producer.py"),
+])
+def test_python_transport_tests_import_existing_top_level_data_test_modules(style, test_entrypoint):
+    """Transport tests must import the generated data test modules that exist."""
+    import ast
+    import glob
+
+    tmpdirname, projectname = _generate_python_project_from_document(
+        _build_transport_test_module_document(),
+        style,
+        f"test_issue366_{style}",
+    )
+    transport_test_files = glob.glob(os.path.join(tmpdirname, "**", test_entrypoint), recursive=True)
+    assert transport_test_files, f"no {test_entrypoint} emitted under {tmpdirname}"
+    transport_test_src = open(transport_test_files[0], encoding="utf-8").read()
+    transport_test_ast = ast.parse(transport_test_src, filename=transport_test_files[0])
+    imported_test_modules = {
+        node.module.split(".")[-1]
+        for node in ast.walk(transport_test_ast)
+        if isinstance(node, ast.ImportFrom)
+        and node.module
+        and any(alias.name.startswith("Test_") for alias in node.names)
+    }
+    data_test_modules = {
+        os.path.splitext(os.path.basename(path))[0]
+        for path in glob.glob(
+            os.path.join(tmpdirname, "**", f"{projectname}_data", "tests", "test_*.py"),
+            recursive=True,
+        )
+    }
+
+    assert {"test_trafficflowmeasurement", "test_roadevent"} <= imported_test_modules
+    assert imported_test_modules <= data_test_modules
+    assert f"test_{projectname}_data_trafficflowmeasurement" not in imported_test_modules
+    assert f"test_{projectname}_data_roadevent" not in imported_test_modules
 
 
 def _build_kafka_time_document():
@@ -723,10 +967,15 @@ def test_kafkaproducer_time_uritemplate_is_normalized_before_cloudevent_creation
     """Kafka producer must expose `_time` while still accepting legacy time placeholders."""
     src = _generate_kafka_producer_src_from_document(_build_kafka_time_document())
     assert "def _resolve_cloudevents_time(" in src
+    assert "def __binary_data_marshaller(data: typing.Any) -> bytes:" in src
+    assert 'payload = data.to_byte_array("application/json")' in src
+    assert "if isinstance(payload, str):" in src
+    assert "payload = payload.encode('utf-8')" in src
     assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
     assert "_event_time: typing.Optional[str] = None" in src
     assert '"{event_time}".format(event_time=_event_time)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
+    assert "data_marshaller=lambda x: self.__binary_data_marshaller(x)" in src
 
 
 def test_amqpproducer_body_is_bytes_with_inferred_true():
