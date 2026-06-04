@@ -12,6 +12,7 @@ import avrotize
 
 from xrcg.cli import logger
 from xrcg.generator.jinja_filters import JinjaFilters
+from xrcg.generator.python_codegen_postprocessor import apply_python_avrotize_fixes
 
 JsonNode = Union[Dict[str, 'JsonNode'], List['JsonNode'], str, bool, int, float, None]
 
@@ -161,6 +162,7 @@ class SchemaProcessor(ResourceProcessor):
                 merged_schema, project_data_dir, package_name=data_project_name,
                 dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled
             )
+            apply_python_avrotize_fixes(project_data_dir)
         elif language == "cs":
             avrotize.convert_avro_schema_to_csharp(
                 merged_schema, project_data_dir, base_namespace=JinjaFilters.pascal(data_project_name),

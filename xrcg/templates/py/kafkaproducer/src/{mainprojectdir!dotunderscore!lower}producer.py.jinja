@@ -81,6 +81,14 @@ class {{ class_name }}:
         elif default_key is not None:
             return default_key
         return f"{x['type']}:{x['source']}-{x.get('subject', '')}"
+
+    @staticmethod
+    def __binary_data_marshaller(data: typing.Any) -> bytes:
+        """Serialize dataclass payloads to bytes for Kafka binary mode."""
+        payload = data.to_byte_array("application/json")
+        if isinstance(payload, str):
+            payload = payload.encode('utf-8')
+        return payload
     {%- for messageid, message in messagegroup.messages.items() -%}
     {%- set message_snake = messageid | dotunderscore | snake %}
     {%- set data_type = util.DeclareDataType( data_project_name, root, message ) %}
@@ -222,7 +230,7 @@ class {{ class_name }}:
         else:
             # For binary mode, datacontenttype is already set in attributes above
             # The to_binary() function will create the ce_datacontenttype header
-            message = to_binary(event, data_marshaller=lambda x: {% if data_type != "object"%}x.to_byte_array("application/json"){%else%}json.dumps(x){%endif%}, key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key))
+            message = to_binary(event, data_marshaller=lambda x: {% if data_type != "object"%}self.__binary_data_marshaller(x){%else%}json.dumps(x){%endif%}, key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key))
         self.producer.produce(self.topic, key=message.key, value=message.value, headers=message.headers)
         if flush_producer:
             self.producer.flush()

@@ -12,3 +12,18 @@
 {%- endif -%}
 {{ dataType }}
 {%- endmacro -%}
+
+{%- macro DeclareDataTestModule(data_project_name, type_name) -%}
+{%- set root_package = data_project_name | dotunderscore | lower -%}
+{%- set relative_type_name = type_name | replace(root_package + ".", "", 1) -%}
+{%- if "." in relative_type_name -%}
+{%- set flat_package = type_name | dotunderscore | lower -%}
+{%- if flat_package.startswith('test_') -%}
+{{ flat_package }}
+{%- else -%}
+{{ "test_" + flat_package }}
+{%- endif -%}
+{%- else -%}
+{{ "test_" + (type_name | strip_namespace | lower) }}
+{%- endif -%}
+{%- endmacro -%}

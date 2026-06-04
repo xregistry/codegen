@@ -25,6 +25,7 @@ from xrcg.cli import logger
 from xrcg.generator.generator_context import GeneratorContext
 from xrcg.generator.jinja_extensions import JinjaExtensions, TemplateError
 from xrcg.generator.jinja_filters import JinjaFilters
+from xrcg.generator.python_codegen_postprocessor import apply_python_avrotize_fixes
 from xrcg.generator.schema_utils import SchemaUtils
 from xrcg.generator.url_utils import URLUtils
 
@@ -282,6 +283,7 @@ class TemplateRenderer:
                         merged_schema, project_data_dir, package_name=self.data_project_name,
                         dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled
                     )
+                    apply_python_avrotize_fixes(project_data_dir)
                 elif self.language == "cs":
                     avrotize.convert_avro_schema_to_csharp(
                         merged_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
@@ -351,6 +353,7 @@ class TemplateRenderer:
                 jstruct_schema, project_data_dir, package_name=self.data_project_name,
                 dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled
             )
+            apply_python_avrotize_fixes(project_data_dir)
         elif self.language == "cs":
             convert_structure_schema_to_csharp(
                 jstruct_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
