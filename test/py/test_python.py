@@ -1,6 +1,8 @@
 """Test the Python code generation and integration with the generated code."""
 
+import copy
 import platform
+import re
 import subprocess
 import sys
 import os
@@ -941,6 +943,15 @@ def _build_sb_time_document():
         }
     }
 
+
+def _build_untyped_time_placeholder_document(document_builder):
+    document = copy.deepcopy(document_builder())
+    messagegroup = next(iter(document["messagegroups"].values()))
+    message = next(iter(messagegroup["messages"].values()))
+    message["envelopemetadata"]["time"] = {"value": "{event_time}"}
+    return document
+
+
 def test_amqpproducer_emits_cloudevents_prefix_not_ce_prefix():
     """CloudEvents AMQP §3.1: application-properties prefix MUST be
     ``cloudEvents:``. The legacy ``ce-`` HTTP-binding prefix MUST NOT
@@ -1152,6 +1163,21 @@ def test_mqttclient_time_uritemplate_is_normalized_before_cloudevent_creation():
     assert "_time: typing.Optional[typing.Union[str, datetime]] = None" in src
     assert "event_time: Optional[str] = None" in src
     assert '"{event_time}".format(event_time=event_time)' in src
+    assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
+
+
+@pytest.mark.parametrize("source_builder,document_builder", [
+    (_generate_kafka_producer_src_from_document, _build_kafka_time_document),
+    (_generate_amqp_producer_src_from_document, _build_amqp_time_document),
+    (_generate_mqtt_client_src_from_document, _build_mqtt_time_document),
+    (_generate_eh_producer_src_from_document, _build_eh_time_document),
+    (_generate_sb_producer_src_from_document, _build_sb_time_document),
+])
+def test_generated_py_time_placeholder_without_uritemplate_type_falls_back_to_now(source_builder, document_builder):
+    """Placeholder-looking catalog time values without ``type: uritemplate`` must not survive into runtime validation."""
+    src = source_builder(_build_untyped_time_placeholder_document(document_builder))
+    assert '"time": "{event_time}"' not in src
+    assert re.search(r'"time":\s*None\b', src), src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
 
 
