@@ -63,7 +63,12 @@ def _resolve_cloudevents_time(
 "{{ attribute.value }}"
 {%- endif -%}
 {%- elif attribute.value and attribute.type != "uritemplate" -%}
+{%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if phs -%}
+None
+{%- else -%}
 "{{ attribute.value }}"
+{%- endif -%}
 {%- else -%}
 None
 {%- endif -%}
