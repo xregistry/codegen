@@ -340,6 +340,9 @@ def _load_generated_python_module_from_path(module_path, extra_paths=None):
     try:
         for extra_path in reversed(extra_paths or []):
             sys.path.insert(0, extra_path)
+        module_dir = os.path.dirname(module_path)
+        if module_dir:
+            sys.path.insert(0, module_dir)
         spec = importlib.util.spec_from_file_location(
             f"generated_{uuid.uuid4().hex}",
             module_path,
@@ -1286,61 +1289,66 @@ def test_mqttclient_time_uritemplate_is_normalized_before_cloudevent_creation():
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("callback_style", ["v1", "v2"])
-async def test_mqttclient_connect_waits_for_successful_authentication(callback_style):
+def test_mqttclient_connect_waits_for_successful_authentication(callback_style):
     """Generated MQTT connect() must not return until on_connect reports success."""
-    _, client_class = _load_generated_mqtt_client_module_from_document(_build_mqtt_time_document())
-    loop = asyncio.get_running_loop()
-    fake_client = _DelayedMqttConnectFakeClient(loop, outcome="success", callback_style=callback_style)
-    generated_client = client_class(fake_client, loop=loop)
-    await generated_client.connect("mqtt.example", keepalive=1)
-    assert fake_client.connect_calls == [("mqtt.example", 1883, 1)]
-    assert fake_client.loop_start_calls == 1
-    assert fake_client.loop_stop_calls == 0
-    assert fake_client.authenticated is True
+    async def exercise():
+        _, client_class = _load_generated_mqtt_client_module_from_document(_build_mqtt_time_document())
+        loop = asyncio.get_running_loop()
+        fake_client = _DelayedMqttConnectFakeClient(loop, outcome="success", callback_style=callback_style)
+        generated_client = client_class(fake_client, loop=loop)
+        await generated_client.connect("mqtt.example", keepalive=1)
+        assert fake_client.connect_calls == [("mqtt.example", 1883, 1)]
+        assert fake_client.loop_start_calls == 1
+        assert fake_client.loop_stop_calls == 0
+        assert fake_client.authenticated is True
 
+    asyncio.run(exercise())
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("callback_style", ["v1", "v2"])
-async def test_mqttclient_connect_raises_on_failed_authentication(callback_style):
+def test_mqttclient_connect_raises_on_failed_authentication(callback_style):
     """Generated MQTT connect() must surface auth failures instead of returning early."""
-    _, client_class = _load_generated_mqtt_client_module_from_document(_build_mqtt_time_document())
-    loop = asyncio.get_running_loop()
-    fake_client = _DelayedMqttConnectFakeClient(loop, outcome="connect-failure", callback_style=callback_style)
-    generated_client = client_class(fake_client, loop=loop)
-    with pytest.raises(ConnectionError, match="MQTT connect failed"):
-        await generated_client.connect("mqtt.example", keepalive=1)
-    assert fake_client.loop_start_calls == 1
-    assert fake_client.loop_stop_calls == 1
-    assert fake_client.authenticated is False
+    async def exercise():
+        _, client_class = _load_generated_mqtt_client_module_from_document(_build_mqtt_time_document())
+        loop = asyncio.get_running_loop()
+        fake_client = _DelayedMqttConnectFakeClient(loop, outcome="connect-failure", callback_style=callback_style)
+        generated_client = client_class(fake_client, loop=loop)
+        with pytest.raises(ConnectionError, match="MQTT connect failed"):
+            await generated_client.connect("mqtt.example", keepalive=1)
+        assert fake_client.loop_start_calls == 1
+        assert fake_client.loop_stop_calls == 1
+        assert fake_client.authenticated is False
 
+    asyncio.run(exercise())
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("callback_style", ["v1", "v2"])
-async def test_mqttclient_connect_raises_when_disconnected_before_connack(callback_style):
+def test_mqttclient_connect_raises_when_disconnected_before_connack(callback_style):
     """Generated MQTT connect() must fail deterministically if the broker drops the connection mid-handshake."""
-    _, client_class = _load_generated_mqtt_client_module_from_document(_build_mqtt_time_document())
-    loop = asyncio.get_running_loop()
-    fake_client = _DelayedMqttConnectFakeClient(loop, outcome="disconnect-failure", callback_style=callback_style)
-    generated_client = client_class(fake_client, loop=loop)
-    with pytest.raises(ConnectionError, match="MQTT connect failed"):
-        await generated_client.connect("mqtt.example", keepalive=1)
-    assert fake_client.loop_start_calls == 1
-    assert fake_client.loop_stop_calls == 1
+    async def exercise():
+        _, client_class = _load_generated_mqtt_client_module_from_document(_build_mqtt_time_document())
+        loop = asyncio.get_running_loop()
+        fake_client = _DelayedMqttConnectFakeClient(loop, outcome="disconnect-failure", callback_style=callback_style)
+        generated_client = client_class(fake_client, loop=loop)
+        with pytest.raises(ConnectionError, match="MQTT connect failed"):
+            await generated_client.connect("mqtt.example", keepalive=1)
+        assert fake_client.loop_start_calls == 1
+        assert fake_client.loop_stop_calls == 1
 
+    asyncio.run(exercise())
 
-@pytest.mark.asyncio
-async def test_mqttclient_connect_propagates_sync_connect_errors():
+def test_mqttclient_connect_propagates_sync_connect_errors():
     """Synchronous client.connect() failures must propagate immediately without starting the network loop."""
-    _, client_class = _load_generated_mqtt_client_module_from_document(_build_mqtt_time_document())
-    loop = asyncio.get_running_loop()
-    fake_client = _DelayedMqttConnectFakeClient(loop, outcome="sync-error")
-    generated_client = client_class(fake_client, loop=loop)
-    with pytest.raises(OSError, match="socket setup failed"):
-        await generated_client.connect("mqtt.example", keepalive=1)
-    assert fake_client.loop_start_calls == 0
-    assert fake_client.loop_stop_calls == 0
+    async def exercise():
+        _, client_class = _load_generated_mqtt_client_module_from_document(_build_mqtt_time_document())
+        loop = asyncio.get_running_loop()
+        fake_client = _DelayedMqttConnectFakeClient(loop, outcome="sync-error")
+        generated_client = client_class(fake_client, loop=loop)
+        with pytest.raises(OSError, match="socket setup failed"):
+            await generated_client.connect("mqtt.example", keepalive=1)
+        assert fake_client.loop_start_calls == 0
+        assert fake_client.loop_stop_calls == 0
+
+    asyncio.run(exercise())
 
 
 @pytest.mark.parametrize("source_builder,document_builder", [
