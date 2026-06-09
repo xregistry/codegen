@@ -45,13 +45,16 @@ This document tracks tests that are temporarily skipped due to known issues.
 3. ❌ Custom wait strategy implementation - API incompatibility
 4. ❌ Removing `.withExposedPorts()` - breaks host connectivity
 
-**Workaround:** Added conditional skip logic to generated test template:
+**Workaround:** The repository's TypeScript pytest harness sets `SKIP_SERVICEBUS_TESTS=true`
+for `sbproducer` and `sbconsumer` runs on GitHub Actions unless
+`ENABLE_SERVICEBUS_TESTS=true` is explicitly set. The generated test templates honor
+that environment variable with:
 ```typescript
-const SKIP_SERVICEBUS_TESTS = process.env.CI === 'true' && process.env.ENABLE_SERVICEBUS_TESTS !== 'true';
+const SKIP_SERVICEBUS_TESTS = process.env.SKIP_SERVICEBUS_TESTS === 'true';
 const describeTest = SKIP_SERVICEBUS_TESTS ? describe.skip : describe;
 ```
 
-Tests automatically skip in CI environments unless `ENABLE_SERVICEBUS_TESTS=true` is explicitly set. This allows:
+This allows:
 - ✅ Local development testing with adequate resources
 - ✅ Manual CI runs with extended timeouts when needed  
 - ✅ Code compilation and type checking (tests still compile and build)
@@ -223,4 +226,3 @@ to:
 ```
 
 **Resolution:** All JSON Structure tests now pass across all 5 languages.
-
