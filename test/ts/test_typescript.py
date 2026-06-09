@@ -15,6 +15,15 @@ sys.path.append(os.path.join(project_root))
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
 
+def _typescript_test_environment(style: str) -> dict[str, str]:
+    """Return subprocess environment overrides for generated TypeScript tests."""
+    env = os.environ.copy()
+    if IN_GITHUB_ACTIONS and style in {"sbproducer", "sbconsumer"}:
+        if env.get("ENABLE_SERVICEBUS_TESTS") != "true":
+            env.setdefault("SKIP_SERVICEBUS_TESTS", "true")
+    return env
+
+
 def run_typescript_test(xreg_file: str, output_dir: str, projectname: str, style: str):
     """
     Run npm test on the generated TypeScript project.
@@ -37,6 +46,7 @@ def run_typescript_test(xreg_file: str, output_dir: str, projectname: str, style
                 '--language', "ts"]
     print(f"sys.argv: {sys.argv}")
     assert xrcg.cli() == 0
+    test_env = _typescript_test_environment(style)
     
     # The generated TypeScript project is in a subdirectory based on the style
     # Map style to directory name (e.g., kafkaproducer -> TestProjectKafkaProducer)
@@ -66,16 +76,16 @@ def run_typescript_test(xreg_file: str, output_dir: str, projectname: str, style
     # First, install and build the data project if it exists
     if os.path.exists(data_project_dir):
         print(f"\n=== Installing data project in {data_project_dir} ===")
-        subprocess.check_call(['npm', 'install'], cwd=data_project_dir, shell=use_shell)
+        subprocess.check_call(['npm', 'install'], cwd=data_project_dir, shell=use_shell, env=test_env)
         
         print(f"\n=== Building data project in {data_project_dir} ===")
-        subprocess.check_call(['npm', 'run', 'build'], cwd=data_project_dir, shell=use_shell)
+        subprocess.check_call(['npm', 'run', 'build'], cwd=data_project_dir, shell=use_shell, env=test_env)
     
     # Run npm install in main project
-    subprocess.check_call(['npm', 'install'], cwd=project_dir, shell=use_shell)
+    subprocess.check_call(['npm', 'install'], cwd=project_dir, shell=use_shell, env=test_env)
     
     # Run npm test
-    subprocess.check_call(['npm', 'test'], cwd=project_dir, shell=use_shell)
+    subprocess.check_call(['npm', 'test'], cwd=project_dir, shell=use_shell, env=test_env)
 
 
 def test_kafkaproducer_contoso_erp_ts():
@@ -490,5 +500,4 @@ def test_ts_sbproducer_emits_cloudevents_prefix_not_ce_underscore():
         assert bad not in src, (
             f'ts/sbproducer must not emit non-spec CE prefix: {bad}'
         )
-
 

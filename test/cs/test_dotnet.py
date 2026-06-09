@@ -15,6 +15,14 @@ sys.path.append(os.path.join(project_root))
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
 
+def _dotnet_test_environment() -> dict[str, str]:
+    """Return subprocess environment overrides for generated C# tests."""
+    env = os.environ.copy()
+    if IN_GITHUB_ACTIONS:
+        env.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
+    return env
+
+
 
 # this test invokes the xregistry command line tool to generate a C# proxy and a consumer
 # and then builds the proxy and the consumer and runs a prepared test that integrates both
@@ -44,7 +52,12 @@ def run_dotnet_test(xreg_file: str, output_dir: str, projectname: str, style: st
     
     # Use shell=True on Windows for .cmd files, direct execution on Linux
     use_shell = platform.system() == 'Windows'
-    subprocess.check_call(['dotnet', 'test', output_dir], cwd=os.path.dirname(__file__), shell=use_shell)
+    subprocess.check_call(
+        ['dotnet', 'test', output_dir],
+        cwd=os.path.dirname(__file__),
+        shell=use_shell,
+        env=_dotnet_test_environment(),
+    )
 
 
 def _generate_dotnet_amqp_producer_src(xreg_relpath="test/xreg/lightbulb-amqp.xreg.json"):
