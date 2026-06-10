@@ -1,16 +1,18 @@
 """Test the TypeScript code generation and integration with the generated code."""
 
+import json
 import platform
 import subprocess
 import sys
 import os
 import tempfile
-import xrcg
 import pytest
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '../..'))
-sys.path.append(os.path.join(project_root))
+sys.path.insert(0, os.path.join(project_root))
+
+import xrcg
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
@@ -76,6 +78,45 @@ def run_typescript_test(xreg_file: str, output_dir: str, projectname: str, style
     
     # Run npm test
     subprocess.check_call(['npm', 'test'], cwd=project_dir, shell=use_shell)
+
+
+def test_generated_typescript_time_placeholder_falls_back_to_now():
+    """TypeScript CloudEvents time placeholders must avoid invalid Date parsing."""
+    import glob
+
+    document = {
+        "messagegroups": {
+            "Example.Group": {
+                "messages": {
+                    "Example.Event": {
+                        "name": "Event",
+                        "envelope": "CloudEvents/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"value": "urn:test"},
+                            "time": {"value": "{event_time}"},
+                            "datacontenttype": {"value": "application/json"},
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {"type": "object", "properties": {"value": {"type": "string"}}},
+                    }
+                }
+            }
+        }
+    }
+    tmpdirname = tempfile.mkdtemp()
+    tmpfile = os.path.join(tmpdirname, "document.json")
+    with open(tmpfile, "w", encoding="utf-8") as handle:
+        json.dump(document, handle)
+
+    sys.argv = ['xrcg', 'generate', '--definitions', tmpfile, '--output', tmpdirname, '--projectname', 'TestProject', '--style', 'producerhttp', '--language', 'ts']
+    assert xrcg.cli() == 0
+
+    candidates = glob.glob(os.path.join(tmpdirname, "**", "producer.ts"), recursive=True)
+    assert candidates, "no producer.ts emitted under " + tmpdirname
+    src = open(candidates[0], encoding="utf-8").read()
+    assert 'new Date().toISOString()' in src
+    assert 'new Date("{event_time}").toUTCString()' not in src
 
 
 def test_kafkaproducer_contoso_erp_ts():

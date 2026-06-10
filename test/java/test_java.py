@@ -5,6 +5,7 @@ Tests generate Java code from xRegistry files, compile with Maven, and run JUnit
 This mirrors the C# test pattern in test/cs/test_dotnet.py.
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -122,6 +123,53 @@ def test_amqpproducer_protocoloptions_message_annotations_codegen_java():
     assert '.replace("{deviceid}", String.valueOf(deviceid))' in src
     assert 'partitionKey1 = partitionKey1.substring(0, 128);' in src
     assert 'message.annotation("x-opt-partition-key", messageAnnotationValue1);' in src
+
+
+def test_generated_java_time_placeholder_does_not_parse_placeholder_value():
+    """Java CloudEvents generation should not parse placeholder-looking time strings."""
+    import glob
+
+    spec = {
+        "xregistry": "https://xregistry.io/spec/main",
+        "messagegroups": {
+            "mg": {
+                "messages": {
+                    "m": {
+                        "envelope": "CloudEvents/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "demo.type"},
+                            "source": {"value": "/demo"},
+                            "time": {"value": "{event_time}"},
+                        },
+                        "schema": {"type": "string"},
+                    }
+                }
+            }
+        },
+    }
+
+    tmpdirname = tempfile.mkdtemp()
+    xreg_file = os.path.join(tmpdirname, "mini.xreg.json")
+    with open(xreg_file, "w", encoding="utf-8") as f:
+        json.dump(spec, f)
+
+    sys.argv = [
+        'xrcg',
+        'generate',
+        '--definitions', xreg_file,
+        '--output', tmpdirname,
+        '--projectname', 'MiniProj',
+        '--style', 'amqpproducer',
+        '--language', 'java',
+    ]
+    assert xrcg.cli() == 0
+
+    candidates = glob.glob(os.path.join(tmpdirname, "MiniProj", "**", "*EventProducer.java"), recursive=True)
+    assert candidates, "no EventProducer.java emitted under " + tmpdirname
+
+    src = open(candidates[0], encoding="utf-8").read()
+    assert '"{event_time}"' not in src
+    assert 'OffsetDateTime.now()' in src
 
 
 # AMQP Producer Tests

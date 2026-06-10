@@ -34,13 +34,17 @@ true
   {%- set attribute = message.envelopemetadata[attrname] -%}
   {%- if attrname in ["time"] %}
   {{ attrname }} : {% if attribute.value -%}
-  {%- if attribute.value == "0001-01-01T00:00:00+00:00" -%}
-  new Date().toUTCString()
-  {%- else -%}   
-  new Date("{{- attribute.value -}}").toUTCString()
+  {%- set placeholders = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+  {%- if placeholders -%}
+  new Date().toISOString()
+  {%- else -%}
+  (() => {
+     const candidate = new Date("{{- attribute.value -}}");
+     return Number.isNaN(candidate.getTime()) ? new Date().toISOString() : candidate.toISOString();
+  })()
   {%- endif -%}
   {%- else -%}
-  new Date().toUTCString()
+  new Date().toISOString()
   {%- endif -%}
   {%- endif -%}
   {%- if attrname in ["id"] %}
