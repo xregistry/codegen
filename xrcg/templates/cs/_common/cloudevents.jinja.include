@@ -67,13 +67,14 @@ CloudEvent {{ variable }} = new CloudEvent()
 {%- endif -%}
 {%- if attrname in ["time"] %}
     {{ attrname | pascal }} = {% if attribute.value -%}
-        {%- if attribute.value == "0001-01-01T00:00:00+00:00" -%}
-            DateTime.UtcNow
-        {%- else -%}   
-            DateTime.Parse("{{- attribute.value -}}")
+        {%- set placeholders = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+        {%- if placeholders -%}
+            System.DateTime.UtcNow
+        {%- else -%}
+            System.DateTime.TryParse("{{- attribute.value -}}", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsedTime) ? parsedTime : System.DateTime.UtcNow
         {%- endif -%}
         {%- else -%}
-            DateTime.UtcNow
+            System.DateTime.UtcNow
         {%- endif -%},
 {%- endif -%}
 {%- if attrname in ["id"] %}
