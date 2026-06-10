@@ -5,6 +5,7 @@
 import sys
 import json
 import re
+import time as _time_mod
 import uuid
 import typing
 from datetime import datetime, timezone
@@ -233,8 +234,35 @@ class {{ class_name }}:
             message = to_binary(event, data_marshaller=lambda x: {% if data_type != "object"%}self.__binary_data_marshaller(x){%else%}json.dumps(x){%endif%}, key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key))
         self.producer.produce(self.topic, key=message.key, value=message.value, headers=message.headers)
         if flush_producer:
-            self.producer.flush()
+            self.flush()
 {% endfor %}
+
+    def flush(self, timeout: float = 30.0, retries: int = 3, backoff_factor: float = 2.0) -> None:
+        """Flush pending messages with retry and exponential backoff.
+
+        This is resilient against transient broker disconnections (e.g. Azure
+        Event Hubs dropping idle connections after ~10 minutes).
+
+        Args:
+            timeout (float): Per-attempt flush timeout in seconds (default: 30).
+            retries (int): Maximum number of flush attempts (default: 3).
+            backoff_factor (float): Exponential backoff multiplier (default: 2.0).
+
+        Raises:
+            RuntimeError: If messages remain unsent after all retry attempts.
+        """
+        for attempt in range(1, retries + 1):
+            remaining = self.producer.flush(timeout=timeout)
+            if remaining == 0:
+                return
+            if attempt < retries:
+                backoff = backoff_factor ** attempt
+                _time_mod.sleep(backoff)
+            else:
+                raise RuntimeError(
+                    f'Kafka flush still has {remaining} message(s) pending after {retries} attempts '
+                    f'(timeout={timeout}s, backoff_factor={backoff_factor}).'
+                )
 
     @classmethod
     def parse_connection_string(cls, connection_string: str) -> typing.Tuple[typing.Dict[str, str], str]:

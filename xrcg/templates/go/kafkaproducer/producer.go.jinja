@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
@@ -88,6 +89,35 @@ func (p *{{ class_name }}) Close() error {
 		return p.writer.Close()
 	}
 	return nil
+}
+
+// Flush sends any buffered messages with retry and exponential backoff.
+// Resilient against transient broker disconnections (e.g. Azure Event Hubs
+// dropping idle connections after ~10 minutes).
+func (p *{{ class_name }}) Flush(ctx context.Context, retries int, backoffFactor float64) error {
+	if retries <= 0 {
+		retries = 3
+	}
+	if backoffFactor <= 0 {
+		backoffFactor = 2.0
+	}
+	for attempt := 1; attempt <= retries; attempt++ {
+		// kafka-go Writer auto-flushes on WriteMessages; this explicitly
+		// closes and re-creates to force a flush of any internal buffer.
+		stats := p.writer.Stats()
+		if stats.Messages == 0 {
+			return nil
+		}
+		if attempt < retries {
+			backoff := time.Duration(math.Pow(backoffFactor, float64(attempt))) * time.Second
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+	}
+	return fmt.Errorf("kafka flush: messages may still be pending after %d attempts", retries)
 }
 
 // GetWriter returns the underlying Kafka writer
@@ -226,7 +256,7 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 		}
 	}
 	
-	if err := p.writer.WriteMessages(ctx, msg); err != nil {
+	if err := p.writeWithRetry(ctx, msg, 3, 2.0); err != nil {
 		return fmt.Errorf("failed to write message: %w", err)
 	}
 	
@@ -265,7 +295,7 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 		Value: value,
 	}
 	
-	if err := p.writer.WriteMessages(ctx, msg); err != nil {
+	if err := p.writeWithRetry(ctx, msg, 3, 2.0); err != nil {
 		return fmt.Errorf("failed to write message: %w", err)
 	}
 	
@@ -274,4 +304,25 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 {%- endif %}
 
 {% endfor %}
+
+// writeWithRetry sends a message with retry and exponential backoff.
+func (p *{{ class_name }}) writeWithRetry(ctx context.Context, msg kafka.Message, retries int, backoffFactor float64) error {
+	var lastErr error
+	for attempt := 1; attempt <= retries; attempt++ {
+		lastErr = p.writer.WriteMessages(ctx, msg)
+		if lastErr == nil {
+			return nil
+		}
+		if attempt < retries {
+			backoff := time.Duration(math.Pow(backoffFactor, float64(attempt)) * float64(time.Second))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+	}
+	return lastErr
+}
+
 {% endfor %}
