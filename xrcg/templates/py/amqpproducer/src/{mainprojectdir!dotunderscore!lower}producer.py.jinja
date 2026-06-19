@@ -762,7 +762,7 @@ class {{ class_name }}:
     {%- for propname, prop in propmap.items() if prop.value is defined %}
     {%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
     {%- set argname = placeholder | snake %}
-    {%- if argname not in ce_arg_names.items and argname not in protocol_option_arg_names.items %}
+    {%- if argname not in ce_arg_names.items and argname not in protocol_option_arg_names.items and argname != 'time' %}
     {%- set _ = protocol_option_arg_names.items.append(argname) %}
     {%- endif %}
     {%- endfor %}
@@ -772,7 +772,7 @@ class {{ class_name }}:
     {%- if isCloudEvent and 'time' in message.envelopemetadata and message.envelopemetadata['time'].type == "uritemplate" and message.envelopemetadata['time'].value %}
     {%- for placeholder in message.envelopemetadata['time'].value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
     {%- set argname = placeholder | snake %}
-    {%- if argname not in ce_arg_names.items and argname not in protocol_option_arg_names.items and argname not in time_arg_names.items %}
+    {%- if argname not in ce_arg_names.items and argname not in protocol_option_arg_names.items and argname not in time_arg_names.items and argname != 'time' %}
     {%- set _ = time_arg_names.items.append(argname) %}
     {%- endif %}
     {%- endfor %}
@@ -785,7 +785,7 @@ class {{ class_name }}:
         _{{ attrname }}: str,
         {%- endfor %}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}
         _{{ placeholder | snake }}: str,
         {%- endfor %}
         {%- endfor %}
@@ -954,7 +954,7 @@ class {{ class_name }}:
         _{{ attrname }}: str,
         {%- endfor %}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}
         _{{ placeholder | snake }}: str,
         {%- endfor %}
         {%- endfor %}
@@ -1005,7 +1005,7 @@ class {{ class_name }}:
                 _{{ attrname }}=_{{ attrname }},
                 {%- endfor %}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
-                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}
                 _{{ placeholder | snake }}=_{{ placeholder | snake }},
                 {%- endfor %}
                 {%- endfor %}

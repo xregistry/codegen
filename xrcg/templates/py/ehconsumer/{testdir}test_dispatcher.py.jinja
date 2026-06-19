@@ -197,7 +197,8 @@ async def {{ test_function_name | dotunderscore }}(event_hub_emulator):
         event_data.content_type = "application/json"
         {%- if isCloudEvent %}
         event_data.properties = {
-            "cloudEvents_type": "{{ messageid }}",
+            {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
+            "cloudEvents_type": "{{ ce_type_value }}",
             "cloudEvents_specversion": "1.0",
             "cloudEvents_source": "/test",
             "cloudEvents_id": "test-id"

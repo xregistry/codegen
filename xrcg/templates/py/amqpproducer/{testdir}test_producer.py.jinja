@@ -333,6 +333,7 @@ class Test{{ class_name }}:
     
     {%- for messageid, message in messagegroup.messages.items() %}
     {%- set messagename = messageid | pascal | strip_namespace %}
+    {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
     {%- set isCloudEvent = (message | exists("envelope","CloudEvents/1.0")) %}
     {%- set type_name = util.DeclareDataType( data_project_name, root, message ) | strip_namespace %}
     {%- set group_protocoloptions = messagegroup.protocoloptions if messagegroup.protocoloptions is defined and messagegroup.protocoloptions else {} %}
@@ -381,7 +382,7 @@ class Test{{ class_name }}:
             {%- if isCloudEvent %}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
                     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
-                        {%- set _ = extra_args.items.append('_' + (placeholder | snake)) %}
+                        {%- if (placeholder | snake) != 'time' %}{%- set _ = extra_args.items.append('_' + (placeholder | snake)) %}{%- endif %}
                     {%- endfor %}
                 {%- endfor %}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
@@ -392,7 +393,7 @@ class Test{{ class_name }}:
                 {%- for propname, prop in propmap.items() if prop.value is defined %}
                     {%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
                         {%- set arg = '_' + (placeholder | snake) %}
-                        {%- if arg not in extra_args.items %}
+                        {%- if arg not in extra_args.items and (placeholder | snake) != 'time' %}
                             {%- set _ = extra_args.items.append(arg) %}
                         {%- endif %}
                     {%- endfor %}
@@ -428,7 +429,7 @@ class Test{{ class_name }}:
                     else:
                         body_text = str(body)
                     cloud_event_payload = json.loads(body_text)
-                    assert cloud_event_payload.get("type") == "{{ messageid }}"
+                    assert cloud_event_payload.get("type") == "{{ ce_type_value }}"
                     # Verify data section exists (either as data or data_base64)
                     assert "data" in cloud_event_payload or "data_base64" in cloud_event_payload
                 else:
@@ -485,7 +486,7 @@ class Test{{ class_name }}:
             {%- if isCloudEvent %}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
                     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
-                        {%- set _ = extra_args.items.append('_' + (placeholder | snake)) %}
+                        {%- if (placeholder | snake) != 'time' %}{%- set _ = extra_args.items.append('_' + (placeholder | snake)) %}{%- endif %}
                     {%- endfor %}
                 {%- endfor %}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
@@ -496,7 +497,7 @@ class Test{{ class_name }}:
                 {%- for propname, prop in propmap.items() if prop.value is defined %}
                     {%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
                         {%- set arg = '_' + (placeholder | snake) %}
-                        {%- if arg not in extra_args.items %}
+                        {%- if arg not in extra_args.items and (placeholder | snake) != 'time' %}
                             {%- set _ = extra_args.items.append(arg) %}
                         {%- endif %}
                     {%- endfor %}
@@ -518,7 +519,7 @@ class Test{{ class_name }}:
         annotations = received.annotations or {}
 
         {%- if isCloudEvent %}
-        assert properties.get('cloudEvents:type') == '{{ messageid }}'
+        assert properties.get('cloudEvents:type') == '{{ ce_type_value }}'
         {%- else %}
         {%- if ('subject' not in message_properties) and ('subject' not in message_application_properties) %}
         assert properties.get('subject') == '{{ messageid }}'

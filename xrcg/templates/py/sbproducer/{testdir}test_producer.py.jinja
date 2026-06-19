@@ -144,6 +144,7 @@ async def service_bus_emulator():
 {%- for messageid, message in messagegroup.messages.items() if (message | exists("envelope","CloudEvents/1.0")) %}
 {%- set messagename = messageid | pascal | strip_dots | strip_namespace %}
 {%- set message_snake = messageid | dotunderscore | snake %}
+{%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
 {%- set test_function_name = "test_" + groupname | lower | replace(" ", "_") + "_" + messagename | lower | replace(" ", "_") %}
 {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
 
@@ -171,7 +172,7 @@ async def {{ test_function_name | dotunderscore }}(service_bus_emulator):
             _{{ attrname }}=f"test_{{ attrname }}_{i}",
             {%- endfor %}
             {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != 'time' %}
-            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}
             _{{ placeholder | snake }}=f"test_{{ placeholder }}_{i}",
             {%- endfor %}
             {%- endfor %}
@@ -198,19 +199,19 @@ async def {{ test_function_name | dotunderscore }}(service_bus_emulator):
                     body_data = json.loads(str(msg))
                     if "type" in body_data:
                         # Structured mode
-                        assert body_data["type"] == "{{ messageid }}"
+                        assert body_data["type"] == "{{ ce_type_value }}"
                     else:
                         # Binary mode - check application_properties
                         app_props = msg.application_properties or {}
                         assert "cloudEvents:type" in app_props or "cloudEvents_type" in app_props, f"CloudEvents type not found in application_properties: {app_props}"
                         ce_type = app_props.get("cloudEvents:type") or app_props.get("cloudEvents_type")
-                        assert ce_type == "{{ messageid }}"
+                        assert ce_type == "{{ ce_type_value }}"
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     # Binary mode - check application_properties
                     app_props = msg.application_properties or {}
                     assert "cloudEvents:type" in app_props or "cloudEvents_type" in app_props, f"CloudEvents type not found in application_properties: {app_props}"
                     ce_type = app_props.get("cloudEvents:type") or app_props.get("cloudEvents_type")
-                    assert ce_type == "{{ messageid }}"
+                    assert ce_type == "{{ ce_type_value }}"
                 
                 await receiver.complete_message(msg)
 
