@@ -178,7 +178,7 @@ async def {{ test_function_name | dotunderscore }}(event_hub_emulator):
                 _{{ attrname }} = f'test_{{ attrname }}_{i}',
             {%- endfor -%}
             {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != 'time' -%}
-                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}_{{ placeholder | snake }} = f'test_{i}', {% endfor -%}
+                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}_{{ placeholder | snake }} = f'test_{i}', {% endfor -%}
             {%- endfor -%}
             _time = datetime.datetime.now(datetime.timezone.utc).isoformat(),
             data = event_data

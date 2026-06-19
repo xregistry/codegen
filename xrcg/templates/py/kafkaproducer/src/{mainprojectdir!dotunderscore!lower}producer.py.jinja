@@ -120,7 +120,7 @@ class {{ class_name }}:
     {%- if 'time' in message.envelopemetadata and message.envelopemetadata['time'].type == "uritemplate" and message.envelopemetadata['time'].value -%}
         {%- for placeholder in message.envelopemetadata['time'].value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
             {%- set placeholder_name = placeholder | snake -%}
-            {%- if placeholder_name not in declared_params and placeholder_name not in kafka_key_param_names and placeholder_name not in time_placeholder_params -%}
+            {%- if placeholder_name not in declared_params and placeholder_name not in kafka_key_param_names and placeholder_name not in time_placeholder_params and placeholder_name != 'time' -%}
                 {%- set _ = time_placeholder_params.append(placeholder_name) -%}
             {%- endif -%}
         {%- endfor -%}
@@ -134,11 +134,11 @@ class {{ class_name }}:
         _{{ attrname }}: str, {{ '' }}
         {%- endfor -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" -%}
-            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}_{{ placeholder | snake }} : str, {% endfor -%}
+            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}_{{ placeholder | snake }} : str, {% endfor -%}
         {%- endfor -%}
         {%- if kafka_key_value -%}
             {%- for placeholder in kafka_key_value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
-                {%- if (placeholder | snake) not in declared_params %}_{{ placeholder | snake }}: str, {% endif -%}
+                {%- if (placeholder | snake) not in declared_params and (placeholder | snake) != 'time' %}_{{ placeholder | snake }}: str, {% endif -%}
             {%- endfor -%}
         {%- endif -%}
         data: {{ data_type | strip_namespace -}}, content_type: str = "application/json"

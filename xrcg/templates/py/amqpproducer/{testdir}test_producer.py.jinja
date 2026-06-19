@@ -382,7 +382,7 @@ class Test{{ class_name }}:
             {%- if isCloudEvent %}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
                     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
-                        {%- set _ = extra_args.items.append('_' + (placeholder | snake)) %}
+                        {%- if (placeholder | snake) != 'time' %}{%- set _ = extra_args.items.append('_' + (placeholder | snake)) %}{%- endif %}
                     {%- endfor %}
                 {%- endfor %}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
@@ -393,7 +393,7 @@ class Test{{ class_name }}:
                 {%- for propname, prop in propmap.items() if prop.value is defined %}
                     {%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
                         {%- set arg = '_' + (placeholder | snake) %}
-                        {%- if arg not in extra_args.items %}
+                        {%- if arg not in extra_args.items and (placeholder | snake) != 'time' %}
                             {%- set _ = extra_args.items.append(arg) %}
                         {%- endif %}
                     {%- endfor %}
@@ -486,7 +486,7 @@ class Test{{ class_name }}:
             {%- if isCloudEvent %}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
                     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
-                        {%- set _ = extra_args.items.append('_' + (placeholder | snake)) %}
+                        {%- if (placeholder | snake) != 'time' %}{%- set _ = extra_args.items.append('_' + (placeholder | snake)) %}{%- endif %}
                     {%- endfor %}
                 {%- endfor %}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}
@@ -497,7 +497,7 @@ class Test{{ class_name }}:
                 {%- for propname, prop in propmap.items() if prop.value is defined %}
                     {%- for placeholder in prop.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
                         {%- set arg = '_' + (placeholder | snake) %}
-                        {%- if arg not in extra_args.items %}
+                        {%- if arg not in extra_args.items and (placeholder | snake) != 'time' %}
                             {%- set _ = extra_args.items.append(arg) %}
                         {%- endif %}
                     {%- endfor %}

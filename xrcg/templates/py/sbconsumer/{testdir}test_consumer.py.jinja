@@ -177,9 +177,10 @@ async def {{ test_function_name | dotunderscore }}(service_bus_emulator):
         serialized_data = {}
     
     # Create CloudEvent with required attributes
+    {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
     attributes = {
         "specversion": "1.0",
-        "type": "{{ messageid }}",
+        "type": "{{ ce_type_value }}",
         "source": "test",
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined %}
         "{{ attrname }}": {{ "'test'" if not attrname == 'time' else 'datetime.datetime.now().isoformat()' }},

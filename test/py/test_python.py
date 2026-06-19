@@ -1347,6 +1347,49 @@ def test_amqpproducer_protocol_option_time_placeholder_does_not_collide_with_res
     assert "time=_time" in src
 
 
+def _build_nontime_time_placeholder_document(document_builder):
+    """Take a per-style time document and force a ``{time}`` placeholder into a
+    non-time attribute (``source``). That placeholder would otherwise be emitted
+    as a second ``_time`` parameter, colliding with the reserved CloudEvents
+    ``_time`` override every producer injects (issue #466).
+    """
+    document = copy.deepcopy(document_builder())
+    messagegroup = next(iter(document["messagegroups"].values()))
+    message = next(iter(messagegroup["messages"].values()))
+    message["envelopemetadata"]["source"] = {
+        "type": "uritemplate",
+        "value": "/feed/{date}/{time}",
+    }
+    return document
+
+
+@pytest.mark.parametrize("source_builder,document_builder", [
+    (_generate_kafka_producer_src_from_document, _build_kafka_time_document),
+    (_generate_amqp_producer_src_from_document, _build_amqp_time_document),
+    (_generate_eh_producer_src_from_document, _build_eh_time_document),
+    (_generate_sb_producer_src_from_document, _build_sb_time_document),
+])
+def test_generated_py_nontime_time_placeholder_does_not_collide_with_reserved_time(source_builder, document_builder):
+    """Regression for #466 across producer styles: a ``{time}`` placeholder in a
+    non-time uritemplate attribute must not emit a second ``_time`` parameter.
+    The duplicate argument made the generated module unimportable with
+    ``SyntaxError: duplicate argument '_time' in function definition``.
+    """
+    src = source_builder(_build_nontime_time_placeholder_document(document_builder))
+    # The whole module must be syntactically valid -- the exact #466 failure mode.
+    compile(src, "<generated producer.py>", "exec")
+    # The reserved CloudEvents time override is present (>=1: some styles emit a
+    # batch fan-out method alongside the single send). compile() above already
+    # guarantees no duplicate _time *within* any one signature.
+    assert src.count("_time: typing.Optional[typing.Union[str, datetime]]") >= 1
+    # The {time} placeholder must NOT be surfaced as its own ``_time`` parameter.
+    assert "_time : str" not in src and "_time: str" not in src
+    # The sibling {date} placeholder is still surfaced as a parameter.
+    assert "_date" in src
+    # The {time} placeholder still resolves, binding to the reserved _time arg.
+    assert "time=_time" in re.sub(r"\s", "", src)
+
+
 def _build_amqp_map_key_differs_from_type_document():
     """Map key carries a transport infix ('.amqp.') but the CloudEvents type
     resolves to a transport-independent value -- reproducing #467.

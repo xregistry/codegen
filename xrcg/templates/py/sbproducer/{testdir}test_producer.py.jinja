@@ -172,7 +172,7 @@ async def {{ test_function_name | dotunderscore }}(service_bus_emulator):
             _{{ attrname }}=f"test_{{ attrname }}_{i}",
             {%- endfor %}
             {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != 'time' %}
-            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}
             _{{ placeholder | snake }}=f"test_{{ placeholder }}_{i}",
             {%- endfor %}
             {%- endfor %}
