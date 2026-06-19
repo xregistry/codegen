@@ -969,9 +969,11 @@ class _DelayedMqttConnectFakeClient:
         self.loop_stop_calls = 0
         self.disconnect_calls = 0
         self.authenticated = False
+        self.connect_properties = None
 
-    def connect(self, broker, port, keepalive):
+    def connect(self, broker, port, keepalive, properties=None):
         self.connect_calls.append((broker, port, keepalive))
+        self.connect_properties = properties
         if self.outcome == "sync-error":
             raise OSError("socket setup failed")
         if self.outcome == "success":
@@ -1110,6 +1112,29 @@ def test_kafkaproducer_time_uritemplate_is_normalized_before_cloudevent_creation
     assert '"{event_time}".format(event_time=_event_time)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
     assert "data_marshaller=lambda x: self.__binary_data_marshaller(x)" in src
+
+
+def test_kafkaproducer_exposes_resilient_flush_helper():
+    """Regression for #430: the generated Kafka producer must expose a
+    ``flush(timeout, retries, backoff_factor)`` helper that retries with
+    exponential backoff and raises RuntimeError when messages remain unsent,
+    so bridges no longer hand-roll flush-with-retry boilerplate around brokers
+    that drop idle connections (Azure Event Hubs, Confluent Cloud, ...).
+    """
+    src = _generate_kafka_producer_src_from_document(_build_kafka_time_document())
+    # Module must stay syntactically valid with the new method.
+    compile(src, "<generated kafka producer.py>", "exec")
+    assert "import time" in src
+    assert (
+        "def flush(self, timeout: float = 30, retries: int = 3, "
+        "backoff_factor: float = 2.0) -> None:"
+    ) in src
+    # Retry loop with exponential backoff and a hard failure after exhaustion.
+    assert "for attempt in range(1, retries + 1):" in src
+    assert "remaining = self.producer.flush(timeout)" in src
+    assert "time.sleep(backoff_factor ** attempt)" in src
+    assert "raise RuntimeError(" in src
+    assert "Kafka flush left" in src
 
 
 def test_amqpproducer_body_is_bytes_with_inferred_true():
@@ -1252,6 +1277,129 @@ def test_amqpproducer_time_uritemplate_sets_ce_and_creation_time():
     assert "amqp_msg.creation_time = amqp_creation_time" in src
 
 
+def _build_amqp_protocol_option_time_document():
+    """Manifest reproducing issue #466: a protocol-option uritemplate whose
+    placeholder is literally named ``time``. That placeholder is emitted as a
+    ``_time`` parameter, colliding with the reserved CloudEvents ``_time``
+    override the AMQP producer always injects.
+    """
+    return {
+        "messagegroups": {
+            "Example.Amqp": {
+                "envelope": "CloudEvents/1.0",
+                "protocol": "AMQP/1.0",
+                "messages": {
+                    "Example.Event": {
+                        "envelope": "CloudEvents/1.0",
+                        "protocol": "AMQP/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"type": "uritemplate", "value": "{feedurl}"},
+                            "datacontenttype": {"value": "application/json"},
+                        },
+                        "protocoloptions": {
+                            "properties": {
+                                "subject": {
+                                    "type": "uritemplate",
+                                    "value": "jp.tepco.denkiyoho/{date}/{time}",
+                                }
+                            },
+                            "message_annotations": {
+                                "x-opt-partition-key": {
+                                    "type": "uritemplate",
+                                    "value": "jp.tepco.denkiyoho/{date}/{time}",
+                                }
+                            },
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {
+                            "type": "object",
+                            "properties": {"value": {"type": "string"}},
+                        },
+                    }
+                }
+            }
+        }
+    }
+
+
+def test_amqpproducer_protocol_option_time_placeholder_does_not_collide_with_reserved_time():
+    """Regression for #466: a protocol-option (or envelope) placeholder named
+    ``time`` must not emit a second ``_time`` parameter. The duplicate argument
+    made the generated module unimportable with
+    ``SyntaxError: duplicate argument '_time' in function definition``.
+    """
+    src = _generate_amqp_producer_src_from_document(
+        _build_amqp_protocol_option_time_document()
+    )
+    # The whole module must be syntactically valid. This is the exact failure
+    # mode #466 reports: a duplicate ``_time`` arg (and the matching duplicate
+    # keyword in the batch fan-out call) raises SyntaxError at import time.
+    compile(src, "<generated amqp producer.py>", "exec")
+    sig_start = src.index("def send_event(")
+    sig_end = src.index(") -> None:", sig_start)
+    send_signature = src[sig_start:sig_end]
+    # Exactly one reserved CloudEvents time override -- no duplicate from {time}.
+    assert send_signature.count("_time:") == 1
+    # The non-reserved placeholder is still surfaced as a parameter.
+    assert send_signature.count("_date: str") == 1
+    # The {time} placeholder still resolves, binding to the reserved _time arg.
+    assert "time=_time" in src
+
+
+def _build_amqp_map_key_differs_from_type_document():
+    """Map key carries a transport infix ('.amqp.') but the CloudEvents type
+    resolves to a transport-independent value -- reproducing #467.
+    """
+    return {
+        "messagegroups": {
+            "JP.TEPCO.Denkiyoho": {
+                "envelope": "CloudEvents/1.0",
+                "protocol": "AMQP/1.0",
+                "messages": {
+                    "JP.TEPCO.Denkiyoho.amqp.Info": {
+                        "envelope": "CloudEvents/1.0",
+                        "protocol": "AMQP/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "JP.TEPCO.Denkiyoho.Info"},
+                            "source": {"value": "urn:test"},
+                            "datacontenttype": {"value": "application/json"},
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {
+                            "type": "object",
+                            "properties": {"value": {"type": "string"}},
+                        },
+                    }
+                }
+            }
+        }
+    }
+
+
+def test_amqpproducer_test_asserts_resolved_ce_type_not_map_key():
+    """Regression for #467: the generated producer integration test must assert
+    the CloudEvents ``type`` against the resolved ``envelopemetadata.type.value``,
+    not the (possibly transport-infixed) ``messages`` map key.
+    """
+    _, test_file = _generate_python_entrypoint_from_document(
+        _build_amqp_map_key_differs_from_type_document(), "amqpproducer", "test_producer.py"
+    )
+    test_src = open(test_file, encoding="utf-8").read()
+    type_assertion_lines = [
+        line
+        for line in test_src.splitlines()
+        if "assert" in line and "type" in line and "==" in line
+    ]
+    assert type_assertion_lines, "expected at least one CloudEvents type assertion"
+    assert all(
+        "JP.TEPCO.Denkiyoho.amqp.Info" not in line for line in type_assertion_lines
+    ), "generated test must not assert the transport-infixed map key as the CloudEvents type"
+    assert any(
+        "JP.TEPCO.Denkiyoho.Info" in line for line in type_assertion_lines
+    ), "generated test must assert the resolved envelopemetadata.type.value"
+
+
 def test_mqttclient_body_is_bytes_not_str():
     """The MQTT PUBLISH payload MUST be bytes. ``to_byte_array`` returns
     ``str`` for text content types; the client must coerce to bytes
@@ -1347,6 +1495,39 @@ def test_mqttclient_connect_propagates_sync_connect_errors():
             await generated_client.connect("mqtt.example", keepalive=1)
         assert fake_client.loop_start_calls == 0
         assert fake_client.loop_stop_calls == 0
+
+    asyncio.run(exercise())
+
+
+def test_mqttclient_connect_uses_mqtt_v5_enhanced_auth_for_token():
+    """Regression for #432: a bearer token passed to connect() must be presented
+    via MQTT v5 Enhanced Authentication (OAUTH2-JWT) CONNECT properties, not as a
+    username/password (which silently fails CONNACK against Azure Event Grid and
+    leaves publish() queueing locally)."""
+    async def exercise():
+        _, client_class = _load_generated_mqtt_client_module_from_document(_build_mqtt_time_document())
+        loop = asyncio.get_running_loop()
+        fake_client = _DelayedMqttConnectFakeClient(loop, outcome="success")
+        generated_client = client_class(fake_client, loop=loop)
+        await generated_client.connect("mqtt.example", token="header.payload.signature", keepalive=1)
+        props = fake_client.connect_properties
+        assert props is not None, "connect() must send MQTT v5 CONNECT properties when a token is supplied"
+        assert getattr(props, "AuthenticationMethod", None) == "OAUTH2-JWT"
+        assert getattr(props, "AuthenticationData", None) == b"header.payload.signature"
+
+    asyncio.run(exercise())
+
+
+def test_mqttclient_connect_without_token_sends_no_properties():
+    """The default (token-less) connect path must remain unchanged so it keeps
+    working with MQTT v3.1.1 clients that reject CONNECT properties."""
+    async def exercise():
+        _, client_class = _load_generated_mqtt_client_module_from_document(_build_mqtt_time_document())
+        loop = asyncio.get_running_loop()
+        fake_client = _DelayedMqttConnectFakeClient(loop, outcome="success")
+        generated_client = client_class(fake_client, loop=loop)
+        await generated_client.connect("mqtt.example", keepalive=1)
+        assert fake_client.connect_properties is None
 
     asyncio.run(exercise())
 

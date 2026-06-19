@@ -151,7 +151,7 @@ async def {{ test_function_name | dotunderscore }}(event_hub_emulator):
     async def on_event(partition_context, event):
         nonlocal received_count
         try:
-            assert event.properties["cloudEvents_type".encode('utf-8')] == "{{ messageid }}".encode('utf-8')
+            assert event.properties["cloudEvents_type".encode('utf-8')] == "{{ message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid }}".encode('utf-8')
             await partition_context.update_checkpoint(event)
             received_count += 1
             if received_count >= 5:
