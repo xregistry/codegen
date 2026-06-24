@@ -86,8 +86,9 @@ export class {{ class_name }} {
     {%- set message_annotations = protocoloptions['message_annotations'] if 'message_annotations' in protocoloptions else (protocoloptions['message-annotations'] if 'message-annotations' in protocoloptions else {}) %}
     {%- set ce_arg_names = namespace(items=[]) %}
     {%- if isCloudEvent %}
+    {%- set _emitted_uri_params = [] -%}
     {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-    {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+    {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
     {%- if placeholder not in ce_arg_names.items %}
     {%- set _ = ce_arg_names.items.append(placeholder) %}
     {%- endif %}
@@ -115,8 +116,9 @@ export class {{ class_name }} {
      {%- endif %}
      * @param data The message data object
      {%- if isCloudEvent %}
+     {%- set _emitted_uri_params = [] -%}
      {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
      * @param {{ placeholder }} Value for placeholder {{ placeholder }} in attribute {{ attrname }}
      {%- endfor %}
      {%- endfor %}
@@ -133,8 +135,9 @@ export class {{ class_name }} {
     async send{{ messagename }}(
         data: {{ type_name }},
         {%- if isCloudEvent %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         {{ placeholder }}: string,
         {%- endfor %}
         {%- endfor %}
@@ -247,8 +250,9 @@ export class {{ class_name }} {
      * Send multiple `{{ messagename }}` messages
      * @param dataArray Array of message data objects
      {%- if isCloudEvent %}
+     {%- set _emitted_uri_params = [] -%}
      {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
      * @param {{ placeholder }} Value for placeholder {{ placeholder }} in attribute {{ attrname }}
      {%- endfor %}
      {%- endfor %}
@@ -265,8 +269,9 @@ export class {{ class_name }} {
     async send{{ messagename }}Batch(
         dataArray: {{ type_name }}[],
         {%- if isCloudEvent %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         {{ placeholder }}: string,
         {%- endfor %}
         {%- endfor %}
@@ -281,8 +286,9 @@ export class {{ class_name }} {
     ): Promise<void> {
         for (const data of dataArray) {
             await this.send{{ messagename }}(data, {%- if isCloudEvent %}
+{%- set _emitted_uri_params = [] -%}
 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}{{ placeholder }}, {% endfor %}
+{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}{{ placeholder }}, {% endfor %}
 {%- endfor %}
 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] %}{{ attrname }}, {% endfor %}
 {%- endif %}

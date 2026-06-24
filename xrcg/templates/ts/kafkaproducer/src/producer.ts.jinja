@@ -84,8 +84,9 @@ export class {{ class_name }} {
      {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
      * @param {{ attrname }} CloudEvent required attribute '{{ attrname }}'
      {%- endfor %}
+     {%- set _emitted_uri_params = [] -%}
      {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
      * @param {{ placeholder }} Value for placeholder {{ placeholder }} in attribute {{ attrname }}
      {%- endfor %}
      {%- endfor %}
@@ -102,8 +103,9 @@ export class {{ class_name }} {
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         {{ attrname }}: string,
         {%- endfor %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         {{ placeholder }}: string,
         {%- endfor %}
         {%- endfor %}
@@ -119,8 +121,9 @@ export class {{ class_name }} {
             {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
             {{ attrname }},
             {%- endfor %}
+            {%- set _emitted_uri_params = [] -%}
             {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
             {{ placeholder }},
             {%- endfor %}
             {%- endfor %}
@@ -144,8 +147,9 @@ export class {{ class_name }} {
      {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
      * @param {{ attrname }} CloudEvent required attribute '{{ attrname }}'
      {%- endfor %}
+     {%- set _emitted_uri_params = [] -%}
      {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
      * @param {{ placeholder }} Value for placeholder {{ placeholder }} in attribute {{ attrname }}
      {%- endfor %}
      {%- endfor %}
@@ -162,8 +166,9 @@ export class {{ class_name }} {
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         {{ attrname }}: string,
         {%- endfor %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         {{ placeholder }}: string,
         {%- endfor %}
         {%- endfor %}
@@ -180,8 +185,9 @@ export class {{ class_name }} {
                 {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
                 {{ attrname }},
                 {%- endfor %}
+                {%- set _emitted_uri_params = [] -%}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
                 {{ placeholder }},
                 {%- endfor %}
                 {%- endfor %}
@@ -208,8 +214,9 @@ export class {{ class_name }} {
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         {{ attrname }}: string,
         {%- endfor %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         {{ placeholder }}: string,
         {%- endfor %}
         {%- endfor %}
