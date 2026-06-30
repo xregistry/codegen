@@ -166,4 +166,181 @@ async def test_{{groupName}}_{{messagename.split('.')[-1]}}_py(mosquitto_broker)
     await publisher_client.disconnect()
 
 {% endfor %}
+{% for messageid, message in messagegroup.messages.items() if not (message | exists("envelope","CloudEvents/1.0")) -%}
+{%- set messagename = messageid | dotunderscore | snake %}
+{%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
+
+@pytest.mark.asyncio
+async def test_{{groupName}}_{{messagename.split('.')[-1]}}_plain_py(mosquitto_broker):
+    """Test receiving a plain (non-CloudEvents) {{ messageid }} message via MQTT.
+
+    The publisher is a raw paho client that emits plain JSON on the wire
+    (simulating a third-party, non-CloudEvents broker feed). The generated
+    client must dispatch it to the registered handler with the deserialized
+    data object and the topic-template parameters extracted from the topic.
+    """
+    import re as _re
+    from {{main_project_name}}.client import get_default_topic_mappings_{{ groupName }}
+    broker_host, broker_port = mosquitto_broker
+
+    {%- if type_name != "object" %}
+    # Create valid test data using the test helper
+    test_data = Test_{{ type_name | pascal | strip_namespace }}.create_instance()
+    payload = test_data.to_byte_array("application/json")
+    if isinstance(payload, str):
+        payload = payload.encode("utf-8")
+    {%- else %}
+    payload = b"{}"
+    {%- endif %}
+
+    # Build a concrete topic from the message's URI-template topic
+    _topic_template = get_default_topic_mappings_{{ groupName }}()["{{ messageid }}"]
+    _placeholders = _re.findall(r'\{([A-Za-z0-9_]+)\}', _topic_template)
+    expected_params = {ph: f"val{idx}" for idx, ph in enumerate(_placeholders)}
+    concrete_topic = _topic_template
+    for _ph, _val in expected_params.items():
+        concrete_topic = concrete_topic.replace("{" + _ph + "}", _val)
+
+    # Subscriber uses the generated client
+    subscriber_mqtt = mqtt.Client(client_id="test_plain_subscriber")
+    loop = asyncio.get_running_loop()
+    subscriber_client = {{ class_name }}(subscriber_mqtt, content_mode='structured', loop=loop)
+
+    # Publisher is a raw paho client emitting plain JSON (no CloudEvents envelope)
+    publisher_mqtt = mqtt.Client(client_id="test_plain_publisher")
+
+    received_data = []
+    received_params = []
+    received_event = asyncio.Event()
+
+    async def on_{{messagename.split('.')[-1]}}(mqtt_msg, data{% if type_name != "object" %}: {{type_name}}{% endif %}, topic_params: dict):
+        """Handler for plain {{ messageid }} messages."""
+        received_data.append(data)
+        received_params.append(topic_params)
+        if len(received_data) >= 5:
+            received_event.set()
+
+    # Register handler
+    subscriber_client.{{messagename.split('.')[-1]}}_async = on_{{messagename.split('.')[-1]}}
+
+    # Connect both clients
+    await subscriber_client.connect(broker_host, broker_port)
+    publisher_mqtt.connect(broker_host, int(broker_port))
+    publisher_mqtt.loop_start()
+
+    # Subscribe to the concrete topic
+    await subscriber_client.subscribe([concrete_topic])
+
+    # Wait for subscription to be active
+    await asyncio.sleep(1)
+
+    # Publish 5 plain-JSON messages
+    for _ in range(5):
+        publisher_mqtt.publish(concrete_topic, payload, qos=1)
+
+    # Wait for all 5 messages to be received (with timeout)
+    try:
+        await asyncio.wait_for(received_event.wait(), timeout=10.0)
+    except asyncio.TimeoutError:
+        pytest.fail(f"Did not receive all 5 plain messages within timeout, got {len(received_data)}")
+
+    # Verify all 5 messages received
+    assert len(received_data) == 5, f"Expected 5 messages, got {len(received_data)}"
+
+    # Verify topic-template parameters were extracted and handed to the handler
+    if _placeholders:
+        assert received_params[0] == expected_params, f"Expected {expected_params}, got {received_params[0]}"
+
+    # Cleanup
+    publisher_mqtt.loop_stop()
+    publisher_mqtt.disconnect()
+    await subscriber_client.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_{{groupName}}_{{messagename.split('.')[-1]}}_plain_roundtrip_py(mosquitto_broker):
+    """Round-trip a plain (non-CloudEvents) {{ messageid }} message using the
+    generated client for BOTH publish and consume.
+
+    Unlike the _plain_py test (which publishes with a raw paho client to mimic a
+    third-party feed), this exercises the generated plain ``publish_<message>``
+    method, asserting the produced topic and serialized payload are dispatched
+    back to the registered handler with the topic-template parameters extracted.
+    """
+    import re as _re
+    from {{main_project_name}}.client import get_default_topic_mappings_{{ groupName }}
+    broker_host, broker_port = mosquitto_broker
+
+    {%- if type_name != "object" %}
+    # Create valid test data using the test helper
+    test_data = Test_{{ type_name | pascal | strip_namespace }}.create_instance()
+    {%- else %}
+    test_data = b"{}"
+    {%- endif %}
+
+    # Build the concrete topic the generated publisher will produce from the
+    # message's URI-template topic, and the params it must surface on receive.
+    _topic_template = get_default_topic_mappings_{{ groupName }}()["{{ messageid }}"]
+    _placeholders = _re.findall(r'\{([A-Za-z0-9_]+)\}', _topic_template)
+    expected_params = {ph: f"val{idx}" for idx, ph in enumerate(_placeholders)}
+    concrete_topic = _topic_template
+    for _ph, _val in expected_params.items():
+        concrete_topic = concrete_topic.replace("{" + _ph + "}", _val)
+
+    loop = asyncio.get_running_loop()
+    subscriber_mqtt = mqtt.Client(client_id="test_plain_rt_subscriber")
+    subscriber_client = {{ class_name }}(subscriber_mqtt, loop=loop)
+    publisher_mqtt = mqtt.Client(client_id="test_plain_rt_publisher")
+    publisher_client = {{ class_name }}(publisher_mqtt, loop=loop)
+
+    received_data = []
+    received_params = []
+    received_event = asyncio.Event()
+
+    async def on_{{messagename.split('.')[-1]}}(mqtt_msg, data{% if type_name != "object" %}: {{type_name}}{% endif %}, topic_params: dict):
+        """Handler for plain {{ messageid }} messages."""
+        received_data.append(data)
+        received_params.append(topic_params)
+        if len(received_data) >= 5:
+            received_event.set()
+
+    subscriber_client.{{messagename.split('.')[-1]}}_async = on_{{messagename.split('.')[-1]}}
+
+    await subscriber_client.connect(broker_host, broker_port)
+    await publisher_client.connect(broker_host, broker_port)
+    await subscriber_client.subscribe([concrete_topic])
+    await asyncio.sleep(1)
+
+    # Publish 5 plain messages via the generated publish_<message> method
+    for _ in range(5):
+        await publisher_client.publish_{{messagename.split('.')[-1]}}(
+            {%- set uri_template_vars = [] %}
+            {%- set _topic_value = none %}
+            {%- if message.protocoloptions and message.protocoloptions.topic_name %}{%- set _topic_value = message.protocoloptions.topic_name %}
+            {%- elif message.protocoloptions and message.protocoloptions['topic-name'] %}{%- set _topic_value = message.protocoloptions['topic-name'] %}
+            {%- elif message.protocoloptions and message.protocoloptions.topic %}{%- set _topic_value = message.protocoloptions.topic %}{%- endif %}
+            {%- if _topic_value %}
+            {%- for placeholder in (_topic_value | regex_search('\\{([A-Za-z0-9_]+)\\}')) %}
+            {%- if placeholder not in uri_template_vars %}{%- set _ = uri_template_vars.append(placeholder) %}{%- endif %}
+            {%- endfor %}
+            {%- endif %}
+            {%- for var in uri_template_vars %}
+            {{ var | snake }}=expected_params["{{ var }}"],
+            {%- endfor %}
+            data=test_data,
+        )
+
+    try:
+        await asyncio.wait_for(received_event.wait(), timeout=10.0)
+    except asyncio.TimeoutError:
+        pytest.fail(f"Did not receive all 5 round-trip plain messages within timeout, got {len(received_data)}")
+
+    assert len(received_data) == 5, f"Expected 5 messages, got {len(received_data)}"
+    if _placeholders:
+        assert received_params[0] == expected_params, f"Expected {expected_params}, got {received_params[0]}"
+
+    await subscriber_client.disconnect()
+    await publisher_client.disconnect()
+
+{% endfor %}
 {% endfor %}
