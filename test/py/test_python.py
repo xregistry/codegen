@@ -242,6 +242,13 @@ def test_mqttclient_protocoloptions_py():
             '/', os.sep)), tmpdirname, "test_mqttclient_protocoloptions_py", "mqttclient")
 
 
+def test_mqttclient_plain_py():
+    """ Test the MQTT client for an envelope-less (plain JSON) consumer message group (issue 487)."""
+    tmpdirname = tempfile.mkdtemp()
+    run_python_test(os.path.join(project_root, "test/xreg/mqtt-plain.xreg.json".replace(
+            '/', os.sep)), tmpdirname, "test_mqttclient_plain_py", "mqttclient")
+
+
 def test_sbproducer_lightbulb_py():
     """ Test the Service Bus producer for Lightbulb."""
     tmpdirname = tempfile.mkdtemp()
