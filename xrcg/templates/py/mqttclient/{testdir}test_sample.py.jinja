@@ -1,0 +1,48 @@
+{%- import "util.include.jinja" as util -%}
+# pylint: disable=line-too-long, trailing-whitespace, missing-module-docstring, missing-function-docstring, missing-class-docstring, wrong-import-position, import-error, no-name-in-module, protected-access
+
+import importlib.util
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../{{data_project_name}}/src')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../{{main_project_name}}/src')))
+
+{%- set messagegroups = root.messagegroups %}
+
+_SAMPLE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'samples', 'sample.py'))
+
+
+def _load_sample():
+    """Import the generated samples/sample.py module by file path.
+
+    Importing executes every top-level statement (the imports of the generated
+    client classes, data types and message handlers) without running main(),
+    so it fails loudly if the sample references anything the generator does not
+    actually emit.
+    """
+    spec = importlib.util.spec_from_file_location("generated_sample", _SAMPLE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_sample_imports_cleanly():
+    """The generated samples/sample.py must import without error and expose its
+    entry points. Guards against the sample referencing client classes, handler
+    attributes or data types that the generator does not emit."""
+    module = _load_sample()
+    assert callable(module.main)
+    assert callable(module.publish_samples)
+    assert callable(module._make_paho_client)
+
+
+def test_sample_defines_a_handler_for_every_message():
+    """The sample must define an async handler function for each message."""
+    module = _load_sample()
+    {%- for messagegroupid, messagegroup in messagegroups.items() %}
+    {%- for messageid, message in messagegroup.messages.items() %}
+    assert hasattr(module, "handle_{{ messageid | dotunderscore | snake }}"), \
+        "sample is missing handler 'handle_{{ messageid | dotunderscore | snake }}' for message '{{ messageid }}'"
+    {%- endfor %}
+    {%- endfor %}

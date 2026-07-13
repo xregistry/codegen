@@ -289,6 +289,11 @@ class {{ class_name }}(_ClientBase):
         {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
         self.{{messagename.split('.')[-1]}}_async: Optional[Callable[[mqtt.MQTTMessage, CloudEvent, {{type_name}}, Dict[str, str]], Awaitable[None]]] = None
         {% endfor %}
+        {% for messageid, message in messagegroup.messages.items() if not (message | exists("envelope","CloudEvents/1.0")) -%}
+        {%- set messagename = messageid | dotunderscore | snake %}
+        {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
+        self.{{messagename.split('.')[-1]}}_async: Optional[Callable[[mqtt.MQTTMessage, {{type_name}}, Dict[str, str]], Awaitable[None]]] = None
+        {% endfor %}
         
         # Attach message callback
         self.client.on_message = self._on_message
@@ -382,8 +387,7 @@ class {{ class_name }}(_ClientBase):
                 if cloud_event:
                     await self._dispatch_cloud_event(message, cloud_event)
             else:
-                # Handle plain MQTT messages (if needed)
-                pass
+                await self._dispatch_plain_message(message)
         except Exception as e:
             print(f"Error processing message: {e}")
     
@@ -416,6 +420,31 @@ class {{ class_name }}(_ClientBase):
                     {%- endif %}
                     topic_params = self._extract_topic_params(mqtt_message.topic, "{{ messageid }}")
                     await self.{{messagename.split('.')[-1]}}_async(mqtt_message, cloud_event, data, topic_params)
+                except Exception as e:
+                    print(f"Error in {{messagename.split('.')[-1]}} handler: {e}")
+            return
+        {% endfor %}
+    
+    async def _dispatch_plain_message(self, mqtt_message: mqtt.MQTTMessage):
+        """Dispatch a plain (non-CloudEvents) MQTT message by matching its topic to a known message id."""
+        {% for messageid, message in messagegroup.messages.items() if not (message | exists("envelope","CloudEvents/1.0")) -%}
+        {%- set messagename = messageid | dotunderscore | snake %}
+        {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
+        pattern = self._topic_patterns.get("{{ messageid }}")
+        if pattern is not None and pattern.match(mqtt_message.topic):
+            if self.{{messagename.split('.')[-1]}}_async:
+                try:
+                    content_type = "application/json"
+                    props = getattr(mqtt_message, "properties", None)
+                    if props is not None and getattr(props, "ContentType", None):
+                        content_type = props.ContentType
+                    {%- if type_name == "object" %}
+                    data = mqtt_message.payload
+                    {%- else %}
+                    data = {{type_name}}.from_data(mqtt_message.payload, content_type)
+                    {%- endif %}
+                    topic_params = self._extract_topic_params(mqtt_message.topic, "{{ messageid }}")
+                    await self.{{messagename.split('.')[-1]}}_async(mqtt_message, data, topic_params)
                 except Exception as e:
                     print(f"Error in {{messagename.split('.')[-1]}} handler: {e}")
             return
@@ -718,6 +747,107 @@ class {{ class_name }}(_ClientBase):
             payload = payload.encode('utf-8')
 
         self.client.publish(target_topic, payload, **publish_kwargs)
+
+    {% endfor %}
+    {% for messageid, message in messagegroup.messages.items() if not (message | exists("envelope","CloudEvents/1.0")) -%}
+    {%- set messagename = messageid | dotunderscore | snake %}
+    {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
+    {%- set uri_template_vars = [] %}
+    {#- Plain (non-CloudEvents) messages carry no envelopemetadata, so the only
+        URI template placeholders come from the message-level MQTT topic
+        (protocoloptions.topic_name per spec). -#}
+    {%- set _topic_value = none -%}
+    {%- if message.protocoloptions and message.protocoloptions.topic_name -%}
+        {%- set _topic_value = message.protocoloptions.topic_name -%}
+    {%- elif message.protocoloptions and message.protocoloptions['topic-name'] -%}
+        {%- set _topic_value = message.protocoloptions['topic-name'] -%}
+    {%- elif message.protocoloptions and message.protocoloptions.topic -%}
+        {%- set _topic_value = message.protocoloptions.topic -%}
+    {%- endif -%}
+    {%- if _topic_value -%}
+        {%- set topic_phs = _topic_value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+        {%- if topic_phs %}
+            {%- for placeholder in topic_phs %}
+                {%- if placeholder not in uri_template_vars %}
+                    {%- set _ = uri_template_vars.append(placeholder) %}
+                {%- endif %}
+            {%- endfor %}
+        {%- endif %}
+    {%- endif %}
+    {%- set default_qos = 1 %}
+    {%- if message.protocoloptions and message.protocoloptions.qos is defined and message.protocoloptions.qos is not none -%}
+        {%- set default_qos = message.protocoloptions.qos %}
+    {%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.qos is defined and message.protocoloptions.properties.qos and message.protocoloptions.properties.qos.value is defined and message.protocoloptions.properties.qos.value is not none -%}
+        {%- set default_qos = message.protocoloptions.properties.qos.value %}
+    {%- endif %}
+    {%- set default_retain = "False" %}
+    {%- if message.protocoloptions and message.protocoloptions.retain is defined and message.protocoloptions.retain is not none -%}
+        {%- if message.protocoloptions.retain -%}
+            {%- set default_retain = "True" %}
+        {%- else -%}
+            {%- set default_retain = "False" %}
+        {%- endif %}
+    {%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.retain is defined and message.protocoloptions.properties.retain and message.protocoloptions.properties.retain.value is defined and message.protocoloptions.properties.retain.value is not none -%}
+        {%- if message.protocoloptions.properties.retain.value -%}
+            {%- set default_retain = "True" %}
+        {%- else -%}
+            {%- set default_retain = "False" %}
+        {%- endif %}
+    {%- endif %}
+    async def publish_{{messagename.split('.')[-1]}}(self,
+        {%- for var in uri_template_vars %}
+        {{ var | snake }}: str,
+        {%- endfor %}
+        data: {{type_name}},
+        topic: Optional[str] = None,
+        qos: Optional[int] = None,
+        retain: Optional[bool] = None,
+        content_type: str = "application/json") -> None:
+        """
+        Publish the plain (non-CloudEvents) '{{ messageid }}' message to an MQTT topic.
+
+        The payload is the raw serialized message data with no CloudEvents envelope,
+        suitable for interoperating with brokers that carry plain JSON on the wire.
+
+        Args:
+        {%- for var in uri_template_vars %}
+            {{ var | snake }}: URI template variable for '{{var}}'
+        {%- endfor %}
+            data: The message data to be published.
+            topic: Optional topic override. If not provided, uses default topic '{{ get_default_topic(message, messageid) }}'
+                with URI template placeholders substituted from the keyword arguments.
+            qos: Optional MQTT QoS override. If not provided, uses the message default ({{ default_qos }}).
+            retain: Optional MQTT retain flag override. If not provided, uses the message default ({{ default_retain }}).
+            content_type: The content type used to serialize the message data.
+        """
+        target_topic = topic if topic is not None else "{{ get_default_topic(message, messageid) }}"
+        _topic_template_values: Dict[str, str] = {
+        {%- for var in uri_template_vars %}
+            "{{ var }}": str({{ var | snake }}),
+        {%- endfor %}
+        }
+        if _topic_template_values:
+            target_topic = _apply_topic_template(target_topic, _topic_template_values)
+
+        {%- if type_name == "object" %}
+        if isinstance(data, (bytes, bytearray)):
+            payload = bytes(data)
+        elif isinstance(data, str):
+            payload = data.encode('utf-8')
+        elif data is None:
+            payload = b''
+        else:
+            payload = json.dumps(data).encode('utf-8')
+        {%- else %}
+        payload = data.to_byte_array(content_type) if data is not None else b''
+        if isinstance(payload, str):
+            payload = payload.encode('utf-8')
+        {%- endif %}
+
+        _effective_qos = {{ default_qos }} if qos is None else qos
+        _effective_retain = {{ default_retain }} if retain is None else retain
+
+        self.client.publish(target_topic, payload, qos=_effective_qos, retain=_effective_retain)
 
     {% endfor %}
 {% endfor %}
