@@ -5,12 +5,12 @@
     <ItemGroup>
       <PackageReference Include="AMQPNetLite" Version="2.5.2" />
       <PackageReference Include="Apache.Avro" Version="1.12.1" />
-      <PackageReference Include="Azure.Core" Version="1.57.0" />
+      <PackageReference Include="Azure.Core" Version="1.60.0" />
       <PackageReference Include="Azure.Core.Amqp" Version="1.3.1" />
       <PackageReference Include="Azure.Messaging.EventGrid" Version="5.0.0" />
       <PackageReference Include="Azure.Messaging.EventHubs" Version="5.12.2" />
       <PackageReference Include="Azure.Messaging.EventHubs.Processor" Version="5.12.2" />
-      <PackageReference Include="Azure.Messaging.ServiceBus" Version="7.20.1" />
+      <PackageReference Include="Azure.Messaging.ServiceBus" Version="7.20.2" />
       <PackageReference Include="Azure.Storage.Blobs" Version="12.28.0" />
       <PackageReference Include="CloudNative.CloudEvents" Version="2.8.0" />
       <PackageReference Include="CloudNative.CloudEvents.Amqp" Version="2.8.0" />
@@ -32,7 +32,7 @@
       <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
       <PackageReference Include="Moq" Version="4.20.72" />
       <PackageReference Include="MQTTnet" Version="5.1.0.1559" />
-      <PackageReference Include="System.Memory.Data" Version="10.0.8" />
+      <PackageReference Include="System.Memory.Data" Version="10.0.9" />
       <PackageReference Include="System.Text.Json" Version="10.0.8" />
       <PackageReference Include="Testcontainers" Version="4.12.0" />
       <PackageReference Include="Testcontainers.ActiveMq" Version="4.12.0" />
