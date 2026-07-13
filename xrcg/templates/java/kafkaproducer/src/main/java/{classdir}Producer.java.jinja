@@ -195,10 +195,44 @@ public class {{ class_name }} implements AutoCloseable {
     {% endfor %}
     
     /**
-     * Flush all pending messages.
+     * Flush all pending messages with retry and exponential backoff.
+     * <p>
+     * Resilient against transient broker disconnections (e.g. Azure Event Hubs
+     * dropping idle connections after ~10 minutes). If flush throws due to a
+     * transient error, this method retries with exponential backoff.
+     * </p>
+     *
+     * @param retries Maximum number of flush attempts (default: 3)
+     * @param backoffFactor Exponential backoff multiplier (default: 2.0)
+     * @throws RuntimeException if flush fails after all retry attempts
+     */
+    public void flush(int retries, double backoffFactor) {
+        for (int attempt = 1; attempt <= retries; attempt++) {
+            try {
+                producer.flush();
+                return;
+            } catch (Exception e) {
+                if (attempt >= retries) {
+                    throw new RuntimeException(
+                        "Kafka flush failed after " + retries + " attempts (backoffFactor=" + backoffFactor + ")", e);
+                }
+                long backoffMs = (long) (Math.pow(backoffFactor, attempt) * 1000);
+                log.warn("Kafka flush attempt {} failed, retrying in {}ms: {}", attempt, backoffMs, e.getMessage());
+                try {
+                    Thread.sleep(backoffMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted during flush retry backoff", ie);
+                }
+            }
+        }
+    }
+
+    /**
+     * Flush all pending messages (default: 3 retries, 2.0 backoff factor).
      */
     public void flush() {
-        producer.flush();
+        flush(3, 2.0);
     }
     
     /**
