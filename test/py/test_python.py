@@ -1731,3 +1731,28 @@ def test_sbproducer_exposes_time_override_argument():
     assert "_time_tag: typing.Optional[str] = None" in src
     assert '"{time_tag}".format(time_tag=_time_tag)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
+
+
+def test_kafkaproducer_emits_resilient_flush_method():
+    """Generated Kafka producer must have a flush() method with retry/backoff."""
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    sys.argv = ['xrcg', 'generate',
+                '--definitions', os.path.join(project_root, "test/xreg/contoso-erp.xreg.json"),
+                '--output', tmpdirname,
+                '--projectname', 'FlushTest',
+                '--style', 'kafkaproducer',
+                '--language', 'py']
+    assert xrcg.cli() == 0
+    files = glob.glob(os.path.join(tmpdirname, "**", "producer.py"), recursive=True)
+    assert files, "no producer.py emitted"
+    src = open(files[0], encoding="utf-8").read()
+    assert "def flush(self" in src
+    assert "timeout: float = 30" in src
+    assert "retries: int = 3" in src
+    assert "backoff_factor: float = 2.0" in src
+    assert "RuntimeError" in src
+    assert "time.sleep(backoff_factor ** attempt)" in src
+    # The send method should call self.flush() not self.producer.flush()
+    assert "self.flush()" in src
+    assert "self.producer.flush()" not in src
