@@ -443,7 +443,7 @@ namespace {{ project_name | pascal }}.Test
                                                 // Verify CloudEvents properties
                                                 Assert.NotNull(receivedMessage.ApplicationProperties);
                                                 Assert.Equal("1.0", receivedMessage.ApplicationProperties["cloudEvents:specversion"]);
-                                                Assert.Equal("{{ messageid }}", receivedMessage.ApplicationProperties["cloudEvents:type"]);
+                                                Assert.Equal("{{ message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid }}", receivedMessage.ApplicationProperties["cloudEvents:type"]);
                                                 Assert.NotNull(receivedMessage.ApplicationProperties["cloudEvents:id"]);
                                                 Assert.NotNull(receivedMessage.ApplicationProperties["cloudEvents:source"]);
                                                 

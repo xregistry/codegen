@@ -130,7 +130,7 @@ switch (eventType) {
 {%- for messagegroupid, messagegroup in messagegroups.items() if (messagegroup | exists("envelope","CloudEvents/1.0")) -%}
 {%- for messageid, message in messagegroup.messages.items() -%}
 {%- set messagename = messageid | pascal | strip_namespace %}
-    case "{{ messageid }}":
+    case "{{ message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid }}":
         if ({{ messagegroupid | strip_namespace | camel }}Dispatcher != null) {
             {%- if message.dataschemauri or message.dataschema -%}
             {%- set type = (message.dataschemauri if message.dataschemauri else message.dataschema) | schema_type(project_name, root, message.dataschemaformat) %}

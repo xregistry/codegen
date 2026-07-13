@@ -118,7 +118,8 @@ async def {{ test_function_name | dotunderscore }}(kafka_emulator):
         # Send 5 messages to test proper message settlement and ordering
         for i in range(5):
             producer.produce(topic='test_topic', key=b'abc', value=event_data, headers=[
-                ("ce_type", b"{{ messageid }}"),
+                {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
+                ("ce_type", b"{{ ce_type_value }}"),
                 ("ce_specversion", b"1.0"),
                 ("ce_source", b"/test"),
                 ("ce_id", f"test-id-{i}".encode('utf-8')),

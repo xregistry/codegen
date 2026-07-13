@@ -204,7 +204,8 @@ async def {{ test_function_name | dotunderscore }}(service_bus_emulator):
                         body=msg_body,
                         content_type="application/json",
                         application_properties={
-                            "cloudEvents:type": "{{ messageid }}",
+                            {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
+                            "cloudEvents:type": "{{ ce_type_value }}",
                             "cloudEvents:source": "test",
                             "cloudEvents:id": f"test-id-{i}",
                             "cloudEvents:specversion": "1.0"

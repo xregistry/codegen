@@ -293,7 +293,8 @@ class {{ class_name }}(_DispatcherBase):
             {%- set message_id = messageid %}
             {%- set is_cloudevent = (message | exists("envelope","CloudEvents/1.0")) %}
             {%- set data_type = util.DeclareDataType(data_project_name, root, message) %}
-            "{{ messageid }}": lambda: self.{{ messageid | dotunderscore | snake }}_async(partition_context, event, cloud_event,
+            {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
+            "{{ ce_type_value }}": lambda: self.{{ messageid | dotunderscore | snake }}_async(partition_context, event, cloud_event,
             {%- if data_type != "object" %}
                 {{ data_type | strip_namespace }}.from_data(cloud_event.data, cloud_event["datacontenttype"])
             {%- else %}
