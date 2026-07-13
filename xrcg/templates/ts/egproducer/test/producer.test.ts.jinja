@@ -78,7 +78,7 @@ describe('{{ test_class_name }}', () => {
         {%- endfor %}
         
         // Send the message
-        {%- set _emitted_uri_params = [] -%}
+        {%- set _emitted_uri_params = [] %}
         await producer.send{{ messagename }}(testData{%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}, {{ placeholder }}{%- endfor %}{%- endfor %}{%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] and attribute.required %}, {{ attrname }}{%- endfor %});
         
         // Verify the HTTP call was made
@@ -124,7 +124,7 @@ describe('{{ test_class_name }}', () => {
         {%- endfor %}
         
         // Send the batch
-        {%- set _emitted_uri_params = [] -%}
+        {%- set _emitted_uri_params = [] %}
         await producer.send{{ messagename }}Batch(testDataArray{%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}, {{ placeholder }}{%- endfor %}{%- endfor %}{%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] and attribute.required %}, {{ attrname }}{%- endfor %});
         
         // Verify the HTTP call was made
