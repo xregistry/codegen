@@ -79,7 +79,7 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-messaging-servicebus</artifactId>
-            <version>7.17.16</version>
+            <version>7.17.18</version>
         </dependency>
 
         <!-- Azure Identity -->
@@ -93,7 +93,7 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-storage-blob</artifactId>
-            <version>12.34.0</version>
+            <version>12.35.0</version>
         </dependency>
 
         <!-- Azure Event Hubs Checkpoint Store -->
@@ -211,7 +211,7 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>6.0.2</version>
+            <version>6.1.0</version>
             <scope>test</scope>
         </dependency>
 
@@ -244,7 +244,7 @@
         <dependency>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-surefire-plugin</artifactId>
-            <version>3.5.5</version>
+            <version>3.5.6</version>
         </dependency>
     </dependencies>
 </project>
