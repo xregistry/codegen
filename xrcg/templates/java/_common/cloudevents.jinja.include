@@ -23,13 +23,18 @@ import io.cloudevents.jackson.JsonFormat;
 {#- Generates method arguments for URI templates and required attributes -#}
 {%- macro DeclareUriTemplateArguments(message) -%}
 {%- if message.envelopemetadata -%}
+{%- set emitted = namespace(args=[]) -%}
 {%- for attrname, attribute in message.envelopemetadata.items() -%}
 {%- if 'type' in attribute and attribute.type == "uritemplate" and 'value' in attribute -%}
 {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if placeholder not in emitted.args -%}
 , String {{ placeholder }}
+{%- set _ = emitted.args.append(placeholder) -%}
+{%- endif -%}
 {%- endfor -%}
-{%- elif 'value' not in attribute and attrname not in ["id", "time", "datacontenttype", "dataschema"] -%}
+{%- elif 'value' not in attribute and attrname not in ["id", "time", "datacontenttype", "dataschema"] and attrname not in emitted.args -%}
 , String {{ attrname }}
+{%- set _ = emitted.args.append(attrname) -%}
 {%- endif -%}
 {%- endfor -%}
 {%- endif -%}

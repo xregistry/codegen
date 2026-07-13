@@ -23,18 +23,27 @@ using CloudNative.CloudEvents.Avro;
 
 {#- Generates a list of arguments for "send" methods that correspond to placeholders in uritemplates -#}
 {%- macro DeclareUriTemplateArguments(message) -%}
+{%- set emitted = namespace(args=[]) -%}
 {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata -%}
+{%- if attrname not in emitted.args -%}
 , string {{ attrname }}
+{%- set _ = emitted.args.append(attrname) -%}
+{%- endif -%}
 {%- endfor -%}
 {%- for attrname in message.envelopemetadata if attrname not in ["datacontenttype", "dataschema"] -%}
 {%- set attribute = message.envelopemetadata[attrname] -%}
     {%- if attribute.type == "uritemplate" -%}
         {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+        {%- if placeholder not in emitted.args -%}
         , string {{ placeholder }}
+        {%- set _ = emitted.args.append(placeholder) -%}
+        {%- endif -%}
         {%- endfor -%}    
     {%- elif attribute.value is not defined -%}
-        {%- if not attrname == "time" and not attrname == "id" -%}
-        , string {{ attrname }}{%- if not attribute.required %} = default! {%- endif %}{% endif -%}
+        {%- if not attrname == "time" and not attrname == "id" and attrname not in emitted.args -%}
+        , string {{ attrname }}{%- if not attribute.required %} = default! {%- endif %}
+        {%- set _ = emitted.args.append(attrname) -%}
+        {% endif -%}
     {%- endif -%}
 {%- endfor -%} 
 {%- endmacro -%}

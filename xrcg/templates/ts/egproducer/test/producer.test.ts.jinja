@@ -61,9 +61,10 @@ describe('{{ test_class_name }}', () => {
         
         // Extract required parameters from message metadata
         {%- set has_uri_template_params = false %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
         {%- set has_uri_template_params = true %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         const {{ placeholder }} = 'test-{{ placeholder }}';
         {%- endfor %}
         {%- endfor %}
@@ -77,7 +78,8 @@ describe('{{ test_class_name }}', () => {
         {%- endfor %}
         
         // Send the message
-        await producer.send{{ messagename }}(testData{%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}, {{ placeholder }}{%- endfor %}{%- endfor %}{%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] and attribute.required %}, {{ attrname }}{%- endfor %});
+        {%- set _emitted_uri_params = [] %}
+        await producer.send{{ messagename }}(testData{%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}, {{ placeholder }}{%- endfor %}{%- endfor %}{%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] and attribute.required %}, {{ attrname }}{%- endfor %});
         
         // Verify the HTTP call was made
         expect(scope.isDone()).toBe(true);
@@ -108,8 +110,9 @@ describe('{{ test_class_name }}', () => {
         {%- endif %}
         
         // Extract required parameters from message metadata
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         const {{ placeholder }} = 'test-{{ placeholder }}';
         {%- endfor %}
         {%- endfor %}
@@ -121,7 +124,8 @@ describe('{{ test_class_name }}', () => {
         {%- endfor %}
         
         // Send the batch
-        await producer.send{{ messagename }}Batch(testDataArray{%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}, {{ placeholder }}{%- endfor %}{%- endfor %}{%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] and attribute.required %}, {{ attrname }}{%- endfor %});
+        {%- set _emitted_uri_params = [] %}
+        await producer.send{{ messagename }}Batch(testDataArray{%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}, {{ placeholder }}{%- endfor %}{%- endfor %}{%- for attrname, attribute in message.envelopemetadata.items() if attribute.value is not defined and attrname not in ["time", "id", "datacontenttype", "dataschema"] and attribute.required %}, {{ attrname }}{%- endfor %});
         
         // Verify the HTTP call was made
         expect(scope.isDone()).toBe(true);
