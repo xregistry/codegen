@@ -784,8 +784,9 @@ class {{ class_name }}:
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         _{{ attrname }}: str,
         {%- endfor %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' and (placeholder | snake) not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder | snake) %}
         _{{ placeholder | snake }}: str,
         {%- endfor %}
         {%- endfor %}
@@ -953,8 +954,9 @@ class {{ class_name }}:
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         _{{ attrname }}: str,
         {%- endfor %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' and (placeholder | snake) not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder | snake) %}
         _{{ placeholder | snake }}: str,
         {%- endfor %}
         {%- endfor %}
@@ -1004,8 +1006,9 @@ class {{ class_name }}:
                 {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
                 _{{ attrname }}=_{{ attrname }},
                 {%- endfor %}
+                {%- set _emitted_uri_params = [] -%}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
-                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}
+                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' and (placeholder | snake) not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder | snake) %}
                 _{{ placeholder | snake }}=_{{ placeholder | snake }},
                 {%- endfor %}
                 {%- endfor %}
