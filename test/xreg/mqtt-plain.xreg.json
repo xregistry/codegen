@@ -1,0 +1,65 @@
+{
+    "$schema": "https://xregistry.io/schema/xregistry_messaging_catalog.json",
+    "endpoints": {
+        "Contoso.Telemetry.Upstream": {
+            "usage": ["consumer"],
+            "protocol": "MQTT/5.0",
+            "messagegroups": ["#/messagegroups/Contoso.Telemetry.Upstream"]
+        }
+    },
+    "messagegroups": {
+        "Contoso.Telemetry.Upstream": {
+            "protocol": "MQTT/5.0",
+            "description": "Envelope-less (plain JSON) MQTT consumer fixture for codegen tests (issue 487)",
+            "messages": {
+                "Contoso.Telemetry.Upstream.VehicleEvent": {
+                    "name": "VehicleEvent",
+                    "protocol": "MQTT/5.0",
+                    "protocoloptions": {
+                        "topic_name": "contoso/telemetry/{region}/vehicles/{vehicle_id}/vp"
+                    },
+                    "dataschemaformat": "JsonStructure/draft-02",
+                    "dataschemauri": "#/schemagroups/Contoso.Telemetry.jstruct/schemas/Contoso.Telemetry.VehicleEvent"
+                }
+            }
+        }
+    },
+    "schemagroups": {
+        "Contoso.Telemetry.jstruct": {
+            "schemas": {
+                "Contoso.Telemetry.VehicleEvent": {
+                    "name": "VehicleEvent",
+                    "format": "JsonStructure/draft-02",
+                    "defaultversionid": "1",
+                    "versions": {
+                        "1": {
+                            "format": "JsonStructure/draft-02",
+                            "schema": {
+                                "$schema": "https://json-structure.org/meta/extended/v0/#",
+                                "$id": "https://example.com/VehicleEvent/v1",
+                                "name": "VehicleEvent",
+                                "$root": "#/definitions/Contoso/Telemetry/VehicleEvent",
+                                "definitions": {
+                                    "Contoso": {
+                                        "Telemetry": {
+                                            "VehicleEvent": {
+                                                "name": "VehicleEvent",
+                                                "type": "object",
+                                                "properties": {
+                                                    "oper": { "type": "int32", "description": "Operator." },
+                                                    "veh": { "type": "int32", "description": "Vehicle." },
+                                                    "tst": { "type": "string", "description": "UTC timestamp." }
+                                                },
+                                                "required": ["oper", "veh", "tst"]
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

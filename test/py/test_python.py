@@ -242,6 +242,13 @@ def test_mqttclient_protocoloptions_py():
             '/', os.sep)), tmpdirname, "test_mqttclient_protocoloptions_py", "mqttclient")
 
 
+def test_mqttclient_plain_py():
+    """ Test the MQTT client for an envelope-less (plain JSON) consumer message group (issue 487)."""
+    tmpdirname = tempfile.mkdtemp()
+    run_python_test(os.path.join(project_root, "test/xreg/mqtt-plain.xreg.json".replace(
+            '/', os.sep)), tmpdirname, "test_mqttclient_plain_py", "mqttclient")
+
+
 def test_sbproducer_lightbulb_py():
     """ Test the Service Bus producer for Lightbulb."""
     tmpdirname = tempfile.mkdtemp()
@@ -1390,6 +1397,53 @@ def test_generated_py_nontime_time_placeholder_does_not_collide_with_reserved_ti
     assert "time=_time" in re.sub(r"\s", "", src)
 
 
+def _build_repeated_placeholder_document(document_builder):
+    """Force the SAME uritemplate placeholder (``{dataset_id}``) into two
+    different envelope attributes (``source`` and ``subject``). Each producer's
+    send-method parameter loop iterates every uritemplate envelope attribute and
+    historically emitted one parameter per placeholder *occurrence*, so a
+    placeholder shared by two attributes produced a duplicate parameter -- making
+    the generated module unimportable with
+    ``SyntaxError: duplicate argument '_dataset_id' in function definition``
+    (issue #471).
+    """
+    document = copy.deepcopy(document_builder())
+    messagegroup = next(iter(document["messagegroups"].values()))
+    message = next(iter(messagegroup["messages"].values()))
+    message["envelopemetadata"]["source"] = {
+        "type": "uritemplate",
+        "value": "{base_url}/tabledap/{dataset_id}",
+    }
+    message["envelopemetadata"]["subject"] = {
+        "type": "uritemplate",
+        "value": "{erddap_id}/{dataset_id}",
+    }
+    return document
+
+
+@pytest.mark.parametrize("source_builder,document_builder", [
+    (_generate_kafka_producer_src_from_document, _build_kafka_time_document),
+    (_generate_amqp_producer_src_from_document, _build_amqp_time_document),
+    (_generate_eh_producer_src_from_document, _build_eh_time_document),
+    (_generate_sb_producer_src_from_document, _build_sb_time_document),
+])
+def test_generated_py_repeated_placeholder_emits_param_once(source_builder, document_builder):
+    """Regression for #471 across producer styles: a uritemplate placeholder that
+    appears in two envelope attributes (``source`` and ``subject``) must be
+    surfaced as a *single* method parameter. The duplicate parameter made the
+    generated module unimportable with
+    ``SyntaxError: duplicate argument '_dataset_id' in function definition`` (and,
+    for the AMQP batch fan-out, ``SyntaxError: keyword argument repeated``).
+    """
+    src = source_builder(_build_repeated_placeholder_document(document_builder))
+    # The whole module must be syntactically valid -- the exact #471 failure mode.
+    # compile() raises on both the duplicate def-argument and the repeated kwarg.
+    compile(src, "<generated producer.py>", "exec")
+    # The shared placeholder and its siblings are still surfaced as parameters.
+    assert "_dataset_id" in src
+    assert "_base_url" in src and "_erddap_id" in src
+
+
 def _build_amqp_map_key_differs_from_type_document():
     """Map key carries a transport infix ('.amqp.') but the CloudEvents type
     resolves to a transport-independent value -- reproducing #467.
@@ -1724,3 +1778,28 @@ def test_sbproducer_exposes_time_override_argument():
     assert "_time_tag: typing.Optional[str] = None" in src
     assert '"{time_tag}".format(time_tag=_time_tag)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
+
+
+def test_kafkaproducer_emits_resilient_flush_method():
+    """Generated Kafka producer must have a flush() method with retry/backoff."""
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    sys.argv = ['xrcg', 'generate',
+                '--definitions', os.path.join(project_root, "test/xreg/contoso-erp.xreg.json"),
+                '--output', tmpdirname,
+                '--projectname', 'FlushTest',
+                '--style', 'kafkaproducer',
+                '--language', 'py']
+    assert xrcg.cli() == 0
+    files = glob.glob(os.path.join(tmpdirname, "**", "producer.py"), recursive=True)
+    assert files, "no producer.py emitted"
+    src = open(files[0], encoding="utf-8").read()
+    assert "def flush(self" in src
+    assert "timeout: float = 30" in src
+    assert "retries: int = 3" in src
+    assert "backoff_factor: float = 2.0" in src
+    assert "RuntimeError" in src
+    assert "time.sleep(backoff_factor ** attempt)" in src
+    # The send method should call self.flush() not self.producer.flush()
+    assert "self.flush()" in src
+    assert "self.producer.flush()" not in src

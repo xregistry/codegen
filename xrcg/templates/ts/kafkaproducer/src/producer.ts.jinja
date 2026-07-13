@@ -84,8 +84,9 @@ export class {{ class_name }} {
      {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
      * @param {{ attrname }} CloudEvent required attribute '{{ attrname }}'
      {%- endfor %}
+     {%- set _emitted_uri_params = [] -%}
      {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
      * @param {{ placeholder }} Value for placeholder {{ placeholder }} in attribute {{ attrname }}
      {%- endfor %}
      {%- endfor %}
@@ -102,8 +103,9 @@ export class {{ class_name }} {
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         {{ attrname }}: string,
         {%- endfor %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         {{ placeholder }}: string,
         {%- endfor %}
         {%- endfor %}
@@ -119,8 +121,9 @@ export class {{ class_name }} {
             {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
             {{ attrname }},
             {%- endfor %}
+            {%- set _emitted_uri_params = [] -%}
             {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+            {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
             {{ placeholder }},
             {%- endfor %}
             {%- endfor %}
@@ -131,7 +134,7 @@ export class {{ class_name }} {
             contentType
         );
         
-        await this.producer.send({
+        await this.sendWithRetry({
             topic: this.topic,
             messages: [message]
         });
@@ -144,8 +147,9 @@ export class {{ class_name }} {
      {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
      * @param {{ attrname }} CloudEvent required attribute '{{ attrname }}'
      {%- endfor %}
+     {%- set _emitted_uri_params = [] -%}
      {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
      * @param {{ placeholder }} Value for placeholder {{ placeholder }} in attribute {{ attrname }}
      {%- endfor %}
      {%- endfor %}
@@ -162,8 +166,9 @@ export class {{ class_name }} {
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         {{ attrname }}: string,
         {%- endfor %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         {{ placeholder }}: string,
         {%- endfor %}
         {%- endfor %}
@@ -180,8 +185,9 @@ export class {{ class_name }} {
                 {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
                 {{ attrname }},
                 {%- endfor %}
+                {%- set _emitted_uri_params = [] -%}
                 {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
                 {{ placeholder }},
                 {%- endfor %}
                 {%- endfor %}
@@ -193,7 +199,7 @@ export class {{ class_name }} {
             )
         );
         
-        await this.producer.send({
+        await this.sendWithRetry({
             topic: this.topic,
             messages
         });
@@ -208,8 +214,9 @@ export class {{ class_name }} {
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         {{ attrname }}: string,
         {%- endfor %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         {{ placeholder }}: string,
         {%- endfor %}
         {%- endfor %}
@@ -293,6 +300,33 @@ export class {{ class_name }} {
     }
     {% endfor %}
     
+    /**
+     * Send messages with retry and exponential backoff.
+     * Resilient against transient broker disconnections (e.g. Azure Event Hubs
+     * dropping idle connections after ~10 minutes).
+     *
+     * @param record The producer record to send
+     * @param retries Maximum number of send attempts (default: 3)
+     * @param backoffFactor Exponential backoff multiplier in seconds (default: 2.0)
+     * @throws Error if the send fails after all retry attempts
+     */
+    async sendWithRetry(record: { topic: string; messages: Message[] }, retries: number = 3, backoffFactor: number = 2.0): Promise<void> {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                await this.producer.send(record);
+                return;
+            } catch (error) {
+                if (attempt >= retries) {
+                    throw new Error(
+                        `Kafka send failed after ${retries} attempts (backoffFactor=${backoffFactor}): ${error instanceof Error ? error.message : String(error)}`
+                    );
+                }
+                const backoffMs = Math.pow(backoffFactor, attempt) * 1000;
+                await new Promise(resolve => setTimeout(resolve, backoffMs));
+            }
+        }
+    }
+
     /**
      * Disconnect the producer
      */
