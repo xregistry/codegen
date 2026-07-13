@@ -50,7 +50,7 @@ jobs:
 
       - name: Cache vcpkg
         id: vcpkg-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             C:/vcpkg/installed
