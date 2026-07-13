@@ -115,7 +115,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         /// <param name="topic">The Kafka topic to send to. Required when not specified in endpoint or message metadata.</param>
         {%- endif %}
         /// <returns>A `Task` object representing the asynchronous publish operation.</returns>
-        public Task Send{{ messagename | strip_namespace }}Async(
+        public async Task Send{{ messagename | strip_namespace }}Async(
         {{ type_name }} data
         {%- if uriargs -%}
         {{- uriargs -}}
@@ -145,7 +145,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
             {%- else %}
             string resolvedTopic = topic ?? this.DefaultTopic ?? throw new ArgumentNullException(nameof(topic), "Topic must be specified either in metadata, endpoint configuration, or as a parameter");
             {%- endif %}
-            return this.Producer.ProduceAsync(resolvedTopic, message);
+            await this.Producer.ProduceAsync(resolvedTopic, message);
         }
 
         /// <summary>
@@ -208,6 +208,68 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
             }
         }
         {% endfor %}
+
+        /// <summary>
+        /// Flush pending messages with retry and exponential backoff.
+        /// Resilient against transient broker disconnections (e.g. Azure Event Hubs
+        /// dropping idle connections after ~10 minutes).
+        /// </summary>
+        /// <param name="timeout">Per-attempt flush timeout (default: 30 seconds).</param>
+        /// <param name="retries">Maximum number of flush attempts (default: 3).</param>
+        /// <param name="backoffFactor">Exponential backoff multiplier (default: 2.0).</param>
+        /// <exception cref="InvalidOperationException">Thrown when messages remain unsent after all retry attempts.</exception>
+        public void Flush(TimeSpan? timeout = null, int retries = 3, double backoffFactor = 2.0)
+        {
+            var flushTimeout = timeout ?? TimeSpan.FromSeconds(30);
+            for (int attempt = 1; attempt <= retries; attempt++)
+            {
+                int remaining = this.Producer.Flush(flushTimeout);
+                if (remaining == 0)
+                    return;
+                if (attempt < retries)
+                {
+                    var backoff = TimeSpan.FromSeconds(Math.Pow(backoffFactor, attempt));
+                    System.Threading.Thread.Sleep(backoff);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Kafka flush still has {remaining} message(s) pending after {retries} attempts " +
+                        $"(timeout={flushTimeout.TotalSeconds}s, backoffFactor={backoffFactor}).");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Flush pending messages with retry and exponential backoff (async).
+        /// </summary>
+        /// <param name="timeout">Per-attempt flush timeout (default: 30 seconds).</param>
+        /// <param name="retries">Maximum number of flush attempts (default: 3).</param>
+        /// <param name="backoffFactor">Exponential backoff multiplier (default: 2.0).</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <exception cref="InvalidOperationException">Thrown when messages remain unsent after all retry attempts.</exception>
+        public async Task FlushAsync(TimeSpan? timeout = null, int retries = 3, double backoffFactor = 2.0, CancellationToken cancellationToken = default)
+        {
+            var flushTimeout = timeout ?? TimeSpan.FromSeconds(30);
+            for (int attempt = 1; attempt <= retries; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int remaining = this.Producer.Flush(flushTimeout);
+                if (remaining == 0)
+                    return;
+                if (attempt < retries)
+                {
+                    var backoff = TimeSpan.FromSeconds(Math.Pow(backoffFactor, attempt));
+                    await Task.Delay(backoff, cancellationToken);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Kafka flush still has {remaining} message(s) pending after {retries} attempts " +
+                        $"(timeout={flushTimeout.TotalSeconds}s, backoffFactor={backoffFactor}).");
+                }
+            }
+        }
     }
 }
 {% endfor -%}

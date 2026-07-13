@@ -235,7 +235,7 @@ class {{ class_name }}:
             message = to_binary(event, data_marshaller=lambda x: {% if data_type != "object"%}self.__binary_data_marshaller(x){%else%}json.dumps(x){%endif%}, key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key))
         self.producer.produce(self.topic, key=message.key, value=message.value, headers=message.headers)
         if flush_producer:
-            self.producer.flush()
+            self.flush()
 {% endfor %}
 
     def flush(self, timeout: float = 30, retries: int = 3, backoff_factor: float = 2.0) -> None:
