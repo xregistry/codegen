@@ -77,6 +77,57 @@ async def mosquitto_broker():
 {%- set groupname = messagegroupid | pascal %}
 {%- set class_name = ( groupname | strip_dots )+"MqttClient" %}
 
+@pytest.mark.asyncio
+async def test_{{groupName}}_shared_paho_client_connect_multiplexes_py():
+    """Regression for issue #485.
+
+    Several generated clients are meant to share one paho client (one connection
+    per multi-messagegroup source). Paho stores only one callback per event, so a
+    later-instantiated client used to overwrite the shared ``on_connect`` and make
+    an earlier client's ``connect()`` hang forever. A callback multiplexer must fan
+    the CONNACK out to every instance so ``connect()`` resolves regardless of order.
+
+    Deterministic (fake paho client, no broker): the second instance is created
+    AFTER the first, then ``connect()`` on the FIRST instance must still complete.
+    """
+    class _FakeClient:
+        def __init__(self):
+            self.on_connect = None
+            self.on_disconnect = None
+            self.on_message = None
+
+        def connect(self, *args, **kwargs):
+            pass
+
+        def loop_start(self):
+            # Simulate the broker's CONNACK arriving on the network thread.
+            if self.on_connect is not None:
+                self.on_connect(self, None, {}, 0, None)
+
+        def loop_stop(self, *args, **kwargs):
+            pass
+
+        def disconnect(self, *args, **kwargs):
+            pass
+
+    loop = asyncio.get_running_loop()
+    shared = _FakeClient()
+    first = {{ class_name }}(shared, loop=loop)
+    second = {{ class_name }}(shared, loop=loop)  # would steal first's on_connect pre-fix
+
+    mux = getattr(shared, "_xrcg_callback_multiplexer", None)
+    assert mux is not None and len(mux._live()) == 2, \
+        "both clients sharing one paho client must register on the callback multiplexer (#485)"
+
+    try:
+        await first.connect("broker", 1883, keepalive=5)
+    except (asyncio.TimeoutError, TimeoutError):
+        pytest.fail(
+            "connect() on a shared-client instance timed out - a later client "
+            "overwrote the shared on_connect callback (issue #485)"
+        )
+    assert first._connected is True
+
 {% for messageid, message in messagegroup.messages.items() if (message | exists("envelope","CloudEvents/1.0")) -%}
 {%- set messagename = messageid | dotunderscore | snake %}
 {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
