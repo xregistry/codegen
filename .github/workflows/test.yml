@@ -35,7 +35,10 @@ jobs:
         python -m build --sdist --wheel --outdir dist
     - name: Install Test Prerequisites
       run: |
-        npm install -g @asyncapi/cli@latest
+        # @asyncapi/cli 6.x (ESM) fails to load on the CI runner with
+        # "ReferenceError: module is not defined in ES module scope"; pin the
+        # last CommonJS release (5.0.7), which is immune to that failure.
+        npm install -g @asyncapi/cli@5.0.7
         npm install -g @openapitools/openapi-generator-cli
     - name: Check disk space
       run: df -h
@@ -219,7 +222,10 @@ jobs:
     - name: Install Test Prerequisites
       run: |
         npm install -g azure-functions-core-tools@4 --unsafe-perm true 
-        npm install -g @asyncapi/cli@latest
+        # @asyncapi/cli 6.x (ESM) fails to load on the CI runner with
+        # "ReferenceError: module is not defined in ES module scope"; pin the
+        # last CommonJS release (5.0.7), which is immune to that failure.
+        npm install -g @asyncapi/cli@5.0.7
         npm install -g @openapitools/openapi-generator-cli
     - name: Check disk space before tests
       run: df -h
