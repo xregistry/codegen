@@ -1,0 +1,58 @@
+{%- import 'util.jinja.include' as util -%}
+{{ util.CommonFileHeader() }}
+
+{%- set package_name = project_name | lower | replace('-', '_') %}
+package {{ package_name }};
+
+import org.eclipse.paho.mqttv5.client.MqttConnectionOptions;
+import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Broker-free unit tests for MQTT v5 Enhanced Authentication (OAUTH2-JWT).
+ * These verify the token path sets the CONNECT Authentication Method /
+ * Authentication Data and that the default (token-less) path is unchanged.
+ */
+public class MqttEnhancedAuthenticationTest {
+
+    @Test
+    void applyEnhancedAuthentication_setsAuthMethodAndData() {
+        String token = "header.payload.signature";
+        MqttConnectionOptions options = new MqttConnectionOptions();
+        MqttEventClient.applyEnhancedAuthentication(options, token, MqttEventClient.DEFAULT_AUTHENTICATION_METHOD);
+
+        assertEquals("OAUTH2-JWT", options.getAuthMethod());
+        assertArrayEquals(token.getBytes(StandardCharsets.UTF_8), options.getAuthData());
+    }
+
+    @Test
+    void applyEnhancedAuthentication_customMethodIsAdvertised() {
+        String token = "another-token";
+        MqttConnectionOptions options = new MqttConnectionOptions();
+        MqttEventClient.applyEnhancedAuthentication(options, token, "CUSTOM-METHOD");
+
+        assertEquals("CUSTOM-METHOD", options.getAuthMethod());
+        assertArrayEquals(token.getBytes(StandardCharsets.UTF_8), options.getAuthData());
+    }
+
+    @Test
+    void applyEnhancedAuthentication_nullToken_leavesOptionsUnchanged() {
+        MqttConnectionOptions options = new MqttConnectionOptions();
+        MqttEventClient.applyEnhancedAuthentication(options, null, MqttEventClient.DEFAULT_AUTHENTICATION_METHOD);
+
+        assertNull(options.getAuthMethod());
+        assertNull(options.getAuthData());
+    }
+
+    @Test
+    void applyEnhancedAuthentication_emptyMethodDefaultsToOauth2Jwt() {
+        String token = "tok";
+        MqttConnectionOptions options = new MqttConnectionOptions();
+        MqttEventClient.applyEnhancedAuthentication(options, token, "");
+
+        assertEquals("OAUTH2-JWT", options.getAuthMethod());
+    }
+}

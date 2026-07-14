@@ -17,6 +17,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 {%- for messagegroupid in root.messagegroups.keys() %}
 {%- set group_package = (package_name ~ "." ~ messagegroupid) | lower | replace('-', '_') -%}
@@ -41,6 +42,35 @@ public class MqttEventClient implements AutoCloseable {
         this.mqttClient = mqttClient;
     }
 
+    /**
+     * The default MQTT v5 Authentication Method advertised for OAuth2/Entra JWT auth.
+     */
+    public static final String DEFAULT_AUTHENTICATION_METHOD = "OAUTH2-JWT";
+
+    /**
+     * Apply MQTT v5 Enhanced Authentication carrying an OAuth2/Entra bearer token
+     * (JWT) to the given connection options. Brokers such as Azure Event Grid
+     * Namespaces require the token via the CONNECT Authentication Method /
+     * Authentication Data properties rather than username/password. When
+     * {@code token} is null or empty the options are returned unchanged, preserving
+     * the default (token-less) connection behavior.
+     *
+     * @param options              The connection options to configure.
+     * @param token                The OAuth2/Entra bearer token (JWT), or null for no enhanced auth.
+     * @param authenticationMethod The MQTT v5 Authentication Method to advertise (defaults to "OAUTH2-JWT" when null/empty).
+     * @return The same options instance for chaining.
+     */
+    public static MqttConnectionOptions applyEnhancedAuthentication(
+            MqttConnectionOptions options, String token, String authenticationMethod) {
+        if (token != null && !token.isEmpty()) {
+            options.setAuthMethod(
+                (authenticationMethod == null || authenticationMethod.isEmpty())
+                    ? DEFAULT_AUTHENTICATION_METHOD : authenticationMethod);
+            options.setAuthData(token.getBytes(StandardCharsets.UTF_8));
+        }
+        return options;
+    }
+
     {%- for messagegroupid, messagegroup in root.messagegroups.items() %}
     {%- set messagegroupname = messagegroupid | pascal | strip_namespace %}
     {%- set group_package = (package_name ~ "." ~ messagegroupid) | lower | replace('-', '_') %}
@@ -57,6 +87,41 @@ public class MqttEventClient implements AutoCloseable {
     public static {{ group_package }}.{{ producer_class }} createProducerFor{{ messagegroupname }}(
             String brokerUrl,
             String clientId) throws MqttException {
+        return createProducerFor{{ messagegroupname }}(brokerUrl, clientId, null, DEFAULT_AUTHENTICATION_METHOD);
+    }
+
+    /**
+     * Create an MQTT 5.0 producer for {{ messagegroupid }} that presents an OAuth2/Entra
+     * bearer token via MQTT v5 Enhanced Authentication (OAUTH2-JWT), as required by
+     * brokers such as Azure Event Grid Namespaces.
+     *
+     * @param brokerUrl The MQTT broker URL (e.g., "tcp://localhost:1883")
+     * @param clientId Optional client ID (null for auto-generated)
+     * @param token OAuth2/Entra bearer token (JWT); null or empty for a token-less connection
+     * @return A configured MQTT producer instance
+     */
+    public static {{ group_package }}.{{ producer_class }} createProducerFor{{ messagegroupname }}(
+            String brokerUrl,
+            String clientId,
+            String token) throws MqttException {
+        return createProducerFor{{ messagegroupname }}(brokerUrl, clientId, token, DEFAULT_AUTHENTICATION_METHOD);
+    }
+
+    /**
+     * Create an MQTT 5.0 producer for {{ messagegroupid }} using MQTT v5 Enhanced
+     * Authentication with a custom Authentication Method.
+     *
+     * @param brokerUrl The MQTT broker URL (e.g., "tcp://localhost:1883")
+     * @param clientId Optional client ID (null for auto-generated)
+     * @param token OAuth2/Entra bearer token (JWT); null or empty for a token-less connection
+     * @param authenticationMethod MQTT v5 Authentication Method to advertise when a token is supplied
+     * @return A configured MQTT producer instance
+     */
+    public static {{ group_package }}.{{ producer_class }} createProducerFor{{ messagegroupname }}(
+            String brokerUrl,
+            String clientId,
+            String token,
+            String authenticationMethod) throws MqttException {
 
         if (clientId == null || clientId.isEmpty()) {
             clientId = "producer-" + UUID.randomUUID();
@@ -66,6 +131,7 @@ public class MqttEventClient implements AutoCloseable {
         MqttConnectionOptions options = new MqttConnectionOptions();
         options.setCleanStart(true);
         options.setAutomaticReconnect(true);
+        applyEnhancedAuthentication(options, token, authenticationMethod);
 
         client.connect(options);
         logger.info("Connected MQTT 5.0 producer to {} with client ID {}", brokerUrl, clientId);
@@ -87,6 +153,49 @@ public class MqttEventClient implements AutoCloseable {
             String brokerUrl,
             String clientId,
             String[] topics) throws MqttException {
+        return createConsumerFor{{ messagegroupname }}(messageConsumer, brokerUrl, clientId, topics, null, DEFAULT_AUTHENTICATION_METHOD);
+    }
+
+    /**
+     * Create an MQTT 5.0 consumer for {{ messagegroupid }} that presents an OAuth2/Entra
+     * bearer token via MQTT v5 Enhanced Authentication (OAUTH2-JWT), as required by
+     * brokers such as Azure Event Grid Namespaces.
+     *
+     * @param messageConsumer The message consumer that handles incoming messages
+     * @param brokerUrl The MQTT broker URL
+     * @param clientId Optional client ID (null for auto-generated)
+     * @param topics List of topics to subscribe to
+     * @param token OAuth2/Entra bearer token (JWT); null or empty for a token-less connection
+     * @return A configured MQTT event client instance
+     */
+    public static MqttEventClient createConsumerFor{{ messagegroupname }}(
+            {{ group_package }}.{{ consumer_class }} messageConsumer,
+            String brokerUrl,
+            String clientId,
+            String[] topics,
+            String token) throws MqttException {
+        return createConsumerFor{{ messagegroupname }}(messageConsumer, brokerUrl, clientId, topics, token, DEFAULT_AUTHENTICATION_METHOD);
+    }
+
+    /**
+     * Create an MQTT 5.0 consumer for {{ messagegroupid }} using MQTT v5 Enhanced
+     * Authentication with a custom Authentication Method.
+     *
+     * @param messageConsumer The message consumer that handles incoming messages
+     * @param brokerUrl The MQTT broker URL
+     * @param clientId Optional client ID (null for auto-generated)
+     * @param topics List of topics to subscribe to
+     * @param token OAuth2/Entra bearer token (JWT); null or empty for a token-less connection
+     * @param authenticationMethod MQTT v5 Authentication Method to advertise when a token is supplied
+     * @return A configured MQTT event client instance
+     */
+    public static MqttEventClient createConsumerFor{{ messagegroupname }}(
+            {{ group_package }}.{{ consumer_class }} messageConsumer,
+            String brokerUrl,
+            String clientId,
+            String[] topics,
+            String token,
+            String authenticationMethod) throws MqttException {
 
         if (clientId == null || clientId.isEmpty()) {
             clientId = "consumer-" + UUID.randomUUID();
@@ -96,6 +205,7 @@ public class MqttEventClient implements AutoCloseable {
         MqttConnectionOptions options = new MqttConnectionOptions();
         options.setCleanStart(true);
         options.setAutomaticReconnect(true);
+        applyEnhancedAuthentication(options, token, authenticationMethod);
 
         client.setCallback(new MqttCallback() {
             @Override

@@ -16,6 +16,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Linq;
+using System.Text;
 using System.Threading;
 using Xunit;
 using Microsoft.Extensions.Logging;
@@ -24,6 +26,7 @@ using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Builders;
 
 using {{ project_name | pascal }};
+using {{ project_name | pascal }}.Tools;
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set pascal_group_name = messagegroupid | pascal %}
 using {{ project_name | pascal }}.{{ pascal_group_name | pascal  }};
@@ -377,4 +380,48 @@ namespace {{ project_name | pascal }}.Test
         {%- endfor %}
     }
     {%- endfor %}
+
+    /// <summary>
+    /// Broker-free unit tests for MQTT v5 Enhanced Authentication (OAUTH2-JWT) option building.
+    /// </summary>
+    public class {{ project_name | strip_dots | pascal }}EnhancedAuthenticationTests
+    {
+        [Fact]
+        public void WithOAuth2JwtAuthentication_SetsEnhancedAuthMethodAndData()
+        {
+            var token = "header.payload.signature";
+            var options = new MqttClientOptionsBuilder()
+                .WithTcpServer("broker.example.com")
+                .WithOAuth2JwtAuthentication(token)
+                .Build();
+
+            Assert.Equal("OAUTH2-JWT", options.AuthenticationMethod);
+            Assert.NotNull(options.AuthenticationData);
+            Assert.True(Encoding.UTF8.GetBytes(token).SequenceEqual(options.AuthenticationData!));
+        }
+
+        [Fact]
+        public void WithOAuth2JwtAuthentication_CustomMethod_IsAdvertised()
+        {
+            var token = "another-token";
+            var options = new MqttClientOptionsBuilder()
+                .WithTcpServer("broker.example.com")
+                .WithOAuth2JwtAuthentication(token, "CUSTOM-METHOD")
+                .Build();
+
+            Assert.Equal("CUSTOM-METHOD", options.AuthenticationMethod);
+            Assert.True(Encoding.UTF8.GetBytes(token).SequenceEqual(options.AuthenticationData!));
+        }
+
+        [Fact]
+        public void DefaultOptions_HaveNoEnhancedAuthentication()
+        {
+            var options = new MqttClientOptionsBuilder()
+                .WithTcpServer("broker.example.com")
+                .Build();
+
+            Assert.Null(options.AuthenticationMethod);
+            Assert.Null(options.AuthenticationData);
+        }
+    }
 }

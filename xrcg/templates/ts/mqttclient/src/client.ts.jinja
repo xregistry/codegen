@@ -164,6 +164,36 @@ export class {{ class_name }} {
         });
     }
 
+    /**
+     * Build MQTT v5 connection options that present an OAuth2/Entra bearer token
+     * (JWT) via Enhanced Authentication. Brokers such as Azure Event Grid Namespaces
+     * require the token through the CONNECT Authentication Method / Authentication
+     * Data properties rather than username/password; presenting it as a password
+     * silently fails CONNACK and queues publishes locally. The returned options force
+     * `protocolVersion: 5`, which is required for these properties to be honored.
+     *
+     * @param token The OAuth2/Entra bearer token (JWT).
+     * @param authenticationMethod The MQTT v5 Authentication Method (default 'OAUTH2-JWT').
+     * @param base Optional base options to extend (its `properties` are preserved).
+     */
+    static buildEnhancedAuthenticationOptions(
+        token: string,
+        authenticationMethod: string = 'OAUTH2-JWT',
+        base?: mqtt.IClientOptions
+    ): mqtt.IClientOptions {
+        if (!token) {
+            throw new Error('token must be a non-empty string');
+        }
+        const options: mqtt.IClientOptions = { ...(base ?? {}) };
+        options.protocolVersion = 5;
+        options.properties = {
+            ...(options.properties ?? {}),
+            authenticationMethod,
+            authenticationData: Buffer.from(token, 'utf8'),
+        };
+        return options;
+    }
+
     /** Gets the current topic mappings. */
     getTopicMappings(): Record<string, string> {
         return { ...this.topicMappings };

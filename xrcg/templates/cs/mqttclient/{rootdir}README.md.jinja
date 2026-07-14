@@ -188,6 +188,28 @@ var options = new MqttClientOptionsBuilder()
 var client = new {{ class_name }}(options, loggerFactory);
 ```
 
+### OAuth2/Entra Token (MQTT v5 Enhanced Authentication)
+
+Brokers such as **Azure Event Grid Namespaces** require an OAuth2/Entra bearer token (JWT) to be
+presented through the MQTT v5 CONNECT *Authentication Method* (`OAUTH2-JWT`) / *Authentication Data*
+properties, **not** username/password (which silently fails CONNACK and queues publishes locally).
+Use the `WithOAuth2JwtAuthentication` extension from the `{{ project_name | pascal }}.Tools` namespace,
+which sets the authentication method/data and forces protocol version 5.0.0:
+
+```csharp
+using {{ project_name | pascal }}.Tools;
+
+var options = new MqttClientOptionsBuilder()
+    .WithTcpServer("myns.region-1.ts.eventgrid.azure.net", 8883)
+    .WithOAuth2JwtAuthentication(entraAccessToken)   // Authentication Method "OAUTH2-JWT" + token as data
+    .Build();
+
+var client = new MqttClientFactory().CreateMqttClient();
+await client.ConnectAsync(options);
+```
+
+Omit `WithOAuth2JwtAuthentication` for the default token-less (MQTT 3.1.1-compatible) path.
+
 ### TLS/SSL
 
 ```csharp

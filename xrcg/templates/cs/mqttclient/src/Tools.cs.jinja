@@ -93,6 +93,43 @@ namespace {{ project_name | pascal }}
                 return topicTemplate;
             }
         }
+
+        /// <summary>
+        /// Extension helpers for configuring MQTT v5 Enhanced Authentication
+        /// (OAUTH2-JWT) on an <see cref="MqttClientOptionsBuilder"/>.
+        /// </summary>
+        public static class MqttClientOptionsBuilderExtensions
+        {
+            /// <summary>
+            /// The default MQTT v5 Authentication Method advertised for OAuth2/Entra JWT auth.
+            /// </summary>
+            public const string OAuth2JwtAuthenticationMethod = "OAUTH2-JWT";
+
+            /// <summary>
+            /// Configures the builder with MQTT v5 Enhanced Authentication carrying the
+            /// supplied OAuth2/Entra bearer token (JWT). Brokers such as Azure Event Grid
+            /// Namespaces require the token via the CONNECT Authentication Method /
+            /// Authentication Data properties rather than username/password; presenting it
+            /// as a password silently fails CONNACK and queues publishes locally. This also
+            /// forces protocol version 5.0.0, which is required for the properties to be honored.
+            /// </summary>
+            /// <param name="builder">The options builder to configure.</param>
+            /// <param name="token">The OAuth2/Entra bearer token (JWT).</param>
+            /// <param name="authenticationMethod">The MQTT v5 Authentication Method to advertise (default "OAUTH2-JWT").</param>
+            /// <returns>The same builder for fluent chaining.</returns>
+            public static MqttClientOptionsBuilder WithOAuth2JwtAuthentication(
+                this MqttClientOptionsBuilder builder,
+                string token,
+                string authenticationMethod = OAuth2JwtAuthenticationMethod)
+            {
+                if (builder == null) { throw new ArgumentNullException(nameof(builder)); }
+                if (string.IsNullOrEmpty(token)) { throw new ArgumentException("Token must not be null or empty.", nameof(token)); }
+                if (string.IsNullOrEmpty(authenticationMethod)) { throw new ArgumentException("Authentication method must not be null or empty.", nameof(authenticationMethod)); }
+                return builder
+                    .WithProtocolVersion(MQTTnet.Formatter.MqttProtocolVersion.V500)
+                    .WithEnhancedAuthentication(authenticationMethod, Encoding.UTF8.GetBytes(token));
+            }
+        }
     }
 
     /// <summary>
