@@ -10,6 +10,10 @@ _JSON_TO_BYTES_PATTERN = re.compile(
     r"(?P<indent>[ \t]*)if base_content_type == 'application/json':\n"
     r"(?P<disable>(?P=indent)    #pylint: disable=no-member\n)?"
     r"(?P=indent)    result = self\.to_json\(\)\n"
+    r"(?!"
+    r"(?:(?P=indent)    #pylint: enable=no-member\n)?"
+    r"(?P=indent)    if isinstance\(result, str\):\n"
+    r")"
     r"(?P<enable>(?P=indent)    #pylint: enable=no-member\n)?",
     re.MULTILINE,
 )
