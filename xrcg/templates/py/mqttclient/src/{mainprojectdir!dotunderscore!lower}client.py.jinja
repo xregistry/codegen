@@ -7,6 +7,7 @@ import re
 import typing
 from typing import Callable, Awaitable, Optional, Dict, List
 import asyncio
+import weakref
 from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 try:
@@ -130,6 +131,69 @@ def _mqtt5_properties_to_ce_headers(properties) -> Dict[str, str]:
             continue
         headers["ce-" + str(k).lower()] = str(v)
     return headers
+
+
+class _MqttCallbackMultiplexer:
+    """Fan paho ``on_connect``/``on_disconnect``/``on_message`` callbacks out to
+    every generated client instance that shares a single paho client.
+
+    Multiple generated ``*MqttClient`` classes are designed to share one
+    ``paho.mqtt.client.Client`` (one connection per multi-messagegroup source).
+    Paho stores only ONE callback per event, so without multiplexing the
+    last-instantiated client would silently steal ``on_connect``/``on_message``
+    from every earlier client -- making their ``connect()`` hang forever because
+    the CONNACK resolves the wrong instance's waiter. See issue #485.
+
+    Instances are held weakly so the multiplexer never keeps a dropped client
+    alive; dead references are pruned on registration and on every dispatch.
+    """
+
+    _ATTR = "_xrcg_callback_multiplexer"
+
+    def __init__(self) -> None:
+        self._instances: List["weakref.ReferenceType"] = []
+
+    @classmethod
+    def attach(cls, client: "mqtt.Client", instance: object) -> None:
+        """Register ``instance`` for shared callbacks on ``client``.
+
+        The first instance to attach installs the multiplexer as the client's
+        callback and stores it on the client object; later instances that share
+        the same client reuse it instead of overwriting the callbacks.
+        """
+        mux = getattr(client, cls._ATTR, None)
+        if not isinstance(mux, _MqttCallbackMultiplexer):
+            mux = cls()
+            setattr(client, cls._ATTR, mux)
+            client.on_connect = mux._dispatch_connect
+            client.on_disconnect = mux._dispatch_disconnect
+            client.on_message = mux._dispatch_message
+        mux._register(instance)
+
+    def _register(self, instance: object) -> None:
+        self._instances = [ref for ref in self._instances if ref() is not None]
+        if all(ref() is not instance for ref in self._instances):
+            self._instances.append(weakref.ref(instance))
+
+    def _live(self) -> List[object]:
+        live: List[object] = []
+        for ref in list(self._instances):
+            inst = ref()
+            if inst is not None:
+                live.append(inst)
+        return live
+
+    def _dispatch_connect(self, client, userdata, flags, reason_code=0, properties=None) -> None:
+        for inst in self._live():
+            inst._on_connect(client, userdata, flags, reason_code, properties)
+
+    def _dispatch_disconnect(self, client, userdata, *args) -> None:
+        for inst in self._live():
+            inst._on_disconnect(client, userdata, *args)
+
+    def _dispatch_message(self, client, userdata, message) -> None:
+        for inst in self._live():
+            inst._on_message(client, userdata, message)
 
 
 class _ClientBase:
@@ -295,10 +359,10 @@ class {{ class_name }}(_ClientBase):
         self.{{messagename.split('.')[-1]}}_async: Optional[Callable[[mqtt.MQTTMessage, {{type_name}}, Dict[str, str]], Awaitable[None]]] = None
         {% endfor %}
         
-        # Attach message callback
-        self.client.on_message = self._on_message
-        self.client.on_connect = self._on_connect
-        self.client.on_disconnect = self._on_disconnect
+        # Multiplex paho callbacks so several generated clients can safely share
+        # one paho client (issue #485) instead of overwriting each other's
+        # on_connect/on_disconnect/on_message registrations.
+        _MqttCallbackMultiplexer.attach(self.client, self)
 
     @staticmethod
     def _mqtt_reason_code_value(reason_code) -> Optional[int]:
