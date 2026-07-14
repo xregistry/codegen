@@ -7,6 +7,7 @@ import re
 import typing
 from typing import Callable, Awaitable, Optional, Dict, List
 import asyncio
+import time
 from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 try:
@@ -282,6 +283,7 @@ class {{ class_name }}(_ClientBase):
         self._topic_patterns = {k: _build_topic_regex(v) for k, v in self._topic_mappings.items()}
         self._connect_waiter: Optional[asyncio.Future[None]] = None
         self._connected = False
+        self._inflight: List[mqtt.MQTTMessageInfo] = []
         
         # Message handler callbacks (Dispatcher pattern)
         {% for messageid, message in messagegroup.messages.items() if (message | exists("envelope","CloudEvents/1.0")) -%}
@@ -558,11 +560,59 @@ class {{ class_name }}(_ClientBase):
                 await asyncio.to_thread(self.client.loop_stop)
             raise
     
+    def _track_inflight(self, info: Optional[mqtt.MQTTMessageInfo]) -> None:
+        """Record an outstanding publish so ``disconnect()`` can flush it.
+
+        Already-delivered handles are pruned first so the list stays bounded to
+        genuinely in-flight messages in long-running producers.
+        """
+        if info is None:
+            return
+        self._inflight = [i for i in self._inflight if not self._is_published(i)]
+        self._inflight.append(info)
+
+    @staticmethod
+    def _is_published(info: mqtt.MQTTMessageInfo) -> bool:
+        """Best-effort check whether a publish handle has been delivered."""
+        try:
+            return bool(info.is_published())
+        except (ValueError, RuntimeError):
+            # Treat unknown/torn-down handles as done so they are pruned.
+            return True
+
+    async def _flush_inflight(self, timeout: float = 10.0) -> None:
+        """Bound-wait for outstanding QoS>0 publishes to be acknowledged.
+
+        The blocking paho wait runs off the event-loop thread so the asyncio
+        loop is never stalled.
+        """
+        if not self._inflight:
+            return
+        deadline = time.monotonic() + timeout
+        for info in self._inflight:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                await asyncio.to_thread(info.wait_for_publish, remaining)
+            except (ValueError, RuntimeError):
+                # ValueError: nothing to wait for (already delivered/removed).
+                # RuntimeError: network loop no longer running.
+                pass
+        self._inflight.clear()
+
     async def disconnect(self):
-        """Disconnect from MQTT broker."""
+        """Disconnect from the MQTT broker after flushing queued publishes.
+
+        QoS>0 PUBLISH packets may still sit in paho's out-queue when a
+        short-lived ('--once') producer disconnects. Stopping the network loop
+        first would silently drop them, so we bound-wait for in-flight delivery
+        (PUBACK) before sending DISCONNECT and stopping the loop off-thread.
+        """
         self._connected = False
-        self.client.loop_stop()
+        await self._flush_inflight()
         self.client.disconnect()
+        await asyncio.to_thread(self.client.loop_stop)
 
     # Producer methods
     {% for messageid, message in messagegroup.messages.items() if (message | exists("envelope","CloudEvents/1.0")) -%}
@@ -746,7 +796,7 @@ class {{ class_name }}(_ClientBase):
         elif isinstance(payload, str):
             payload = payload.encode('utf-8')
 
-        self.client.publish(target_topic, payload, **publish_kwargs)
+        self._track_inflight(self.client.publish(target_topic, payload, **publish_kwargs))
 
     {% endfor %}
     {% for messageid, message in messagegroup.messages.items() if not (message | exists("envelope","CloudEvents/1.0")) -%}
@@ -847,7 +897,7 @@ class {{ class_name }}(_ClientBase):
         _effective_qos = {{ default_qos }} if qos is None else qos
         _effective_retain = {{ default_retain }} if retain is None else retain
 
-        self.client.publish(target_topic, payload, qos=_effective_qos, retain=_effective_retain)
+        self._track_inflight(self.client.publish(target_topic, payload, qos=_effective_qos, retain=_effective_retain))
 
     {% endfor %}
 {% endfor %}
