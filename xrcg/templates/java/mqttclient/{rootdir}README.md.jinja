@@ -192,6 +192,25 @@ client.connect();
     .build();
 ```
 
+### OAuth2/Entra Token (MQTT v5 Enhanced Authentication)
+
+Brokers such as **Azure Event Grid Namespaces** require an OAuth2/Entra bearer token (JWT) via the
+MQTT v5 CONNECT *Authentication Method* (`OAUTH2-JWT`) / *Authentication Data* properties, **not**
+username/password. Pass the token to any producer or consumer factory (an extra argument enables
+MQTT v5 Enhanced Authentication; omit it or pass `null` for the default token-less path):
+
+```java
+var producer = MqttEventClient.createProducerForOrders(
+    "ssl://myns.region-1.ts.eventgrid.azure.net:8883", clientId, entraAccessToken);
+
+// custom Authentication Method:
+var consumer = MqttEventClient.createConsumerForOrders(
+    handler, brokerUrl, clientId, topics, entraAccessToken, "OAUTH2-JWT");
+```
+
+`MqttEventClient.applyEnhancedAuthentication(options, token, authMethod)` is also exposed for
+callers that build their own `MqttConnectionOptions`.
+
 ### TLS/SSL
 
 ```java

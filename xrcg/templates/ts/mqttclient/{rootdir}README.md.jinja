@@ -101,6 +101,21 @@ const client = new {{ class_name }}('mqtt://broker.example.com:1883', {
 });
 ```
 
+### 4. OAuth2/Entra Token (MQTT v5 Enhanced Authentication)
+
+Brokers such as **Azure Event Grid Namespaces** require an OAuth2/Entra bearer token (JWT) via the
+MQTT v5 CONNECT *Authentication Method* (`OAUTH2-JWT`) / *Authentication Data* properties, **not**
+username/password (which silently fails CONNACK). Build the options with the static
+`buildEnhancedAuthenticationOptions` helper, which sets the auth method/data and forces
+`protocolVersion: 5`:
+
+```typescript
+const options = {{ class_name }}.buildEnhancedAuthenticationOptions(entraAccessToken);
+const client = new {{ class_name }}('mqtts://myns.region-1.ts.eventgrid.azure.net:8883', options);
+```
+
+Omit the helper for the default token-less path.
+
 ## Available Event Handlers
 
 {% for messageid, message in messagegroup.messages.items() -%}

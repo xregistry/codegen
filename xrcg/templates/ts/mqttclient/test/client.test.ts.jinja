@@ -55,6 +55,24 @@ describe('{{ test_class_name }}', () => {
         await new Promise<void>((resolve) => tcpServer.close(() => resolve()));
     }, 10000);
 
+    it('buildEnhancedAuthenticationOptions sets MQTT v5 OAUTH2-JWT auth', () => {
+        const token = 'header.payload.signature';
+        const options = {{ class_name }}.buildEnhancedAuthenticationOptions(token);
+        expect(options.protocolVersion).toBe(5);
+        expect(options.properties?.authenticationMethod).toBe('OAUTH2-JWT');
+        expect(options.properties?.authenticationData).toEqual(Buffer.from(token, 'utf8'));
+    });
+
+    it('buildEnhancedAuthenticationOptions supports a custom method and preserves base options', () => {
+        const token = 'another-token';
+        const base: mqtt.IClientOptions = { clientId: 'my-client', properties: { sessionExpiryInterval: 30 } };
+        const options = {{ class_name }}.buildEnhancedAuthenticationOptions(token, 'CUSTOM-METHOD', base);
+        expect(options.clientId).toBe('my-client');
+        expect(options.properties?.sessionExpiryInterval).toBe(30);
+        expect(options.properties?.authenticationMethod).toBe('CUSTOM-METHOD');
+        expect(options.properties?.authenticationData).toEqual(Buffer.from(token, 'utf8'));
+    });
+
     {%- for messageid, message in messagegroup.messages.items() %}
     {%- set messagename = messageid | strip_namespace | pascal %}
     {%- set body_type = util.body_type(data_project_name, root, message) %}
