@@ -118,19 +118,18 @@ func Test{{ class_name }}_{{ messagename }}(t *testing.T) {
 	})
 	defer reader.Close()
 
-	// Create test data using generated test helper
+	// Create zero-value test data (the broker round-trip check does not depend on payload contents)
 	{%- if "[]" in message_body_type %}
 	testData := {{ message_body_type | replace(data_project_name | snake + ".", "") }}(nil)
 	{%- else %}
-	{%- set clean_type = message_body_type | replace("*", "") | replace(data_project_name | snake + ".", "") %}
-	testData := {{ data_project_name | snake }}.CreateInstance{{ clean_type }}()
+	var testData {{ message_body_type }}
 	{%- endif %}
 
 	// Send message
 	sendCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = producer.Send{{ messagename }}(sendCtx, testData{% if isCloudEvent %}{% if needs_source_param %}, "tenant123/device456"{% endif %}{% if "type" not in message.envelopemetadata %}, "{{ messageid }}"{% endif %}{% for attrname, attribute in message.envelopemetadata.items() if attribute.required and not attribute.value %}, "test"{% endfor %}{% endif %})
+	err = {% if isCloudEvent %}producer.Send{{ messagename }}(sendCtx, testData{% if needs_source_param %}, "tenant123/device456"{% endif %}{% if "type" not in message.envelopemetadata %}, "{{ messageid }}"{% endif %}){% else %}producer.Send{{ messagename }}(sendCtx, testData, "{{ topic }}"){% endif %}
 	require.NoError(t, err)
 
 	// Verify message received
@@ -160,3 +159,86 @@ func Test{{ class_name }}_{{ messagename }}(t *testing.T) {
 
 {%- endfor %}
 {%- endfor %}
+
+{#- Broker-free unit tests for the resilient delivery path and Flush. #}
+{%- set first_group_id = root.messagegroups.keys() | list | first %}
+{%- set first_group = root.messagegroups.values() | list | first %}
+{%- set fg_groupname = first_group_id | pascal | strip_namespace %}
+{%- set fg_class_name = fg_groupname + "Producer" %}
+{%- set first_message_id = first_group.messages.keys() | list | first %}
+{%- set first_message = first_group.messages.values() | list | first %}
+{%- set fg_messagename = first_message_id | pascal | strip_namespace %}
+{%- set fg_body_type = util.body_type(data_project_name, root, first_message) %}
+{%- set fg_topic = kafka.get_topic(first_message) or first_message_id %}
+{%- set fg_isCloudEvent = cloudEvents.isCloudEvent(first_message) %}
+{%- set fg_needs_source_param = "source" not in first_message.envelopemetadata %}
+{%- if "source" in first_message.envelopemetadata and first_message.envelopemetadata.source.value %}
+{%- if "{" in first_message.envelopemetadata.source.value and "}" in first_message.envelopemetadata.source.value %}
+{%- set fg_needs_source_param = true %}
+{%- endif %}
+{%- endif %}
+
+// flushTestWriter is a fake KafkaMessageWriter used to exercise the resilient
+// delivery path and Flush without a live broker. It fails the first
+// failuresBeforeSuccess WriteMessages calls (or every call when alwaysFail is
+// set), then succeeds, counting every attempt.
+type flushTestWriter struct {
+	calls                 int
+	failuresBeforeSuccess int
+	alwaysFail            bool
+}
+
+func (w *flushTestWriter) WriteMessages(ctx context.Context, msgs ...kafka.Message) error {
+	w.calls++
+	if w.alwaysFail || w.calls <= w.failuresBeforeSuccess {
+		return fmt.Errorf("transient broker error (call %d)", w.calls)
+	}
+	return nil
+}
+
+func (w *flushTestWriter) Close() error { return nil }
+
+// Test{{ fg_class_name }}_FlushIsNoOp verifies that Flush returns without error
+// when the context is live (the synchronous writer has nothing to drain) and
+// that it honors context cancellation.
+func Test{{ fg_class_name }}_FlushIsNoOp(t *testing.T) {
+	producer := New{{ fg_class_name }}WithWriter(&flushTestWriter{}, "{{ fg_topic }}")
+
+	require.NoError(t, producer.Flush(context.Background(), 3, 2.0))
+
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	assert.ErrorIs(t, producer.Flush(cancelledCtx, 3, 2.0), context.Canceled)
+}
+
+// Test{{ fg_class_name }}_SendRetriesThenSucceeds verifies that a transient
+// write failure is retried by the resilient send path and eventually succeeds.
+func Test{{ fg_class_name }}_SendRetriesThenSucceeds(t *testing.T) {
+	writer := &flushTestWriter{failuresBeforeSuccess: 2}
+	producer := New{{ fg_class_name }}WithWriter(writer, "{{ fg_topic }}")
+
+	var testData {{ fg_body_type }}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := {% if fg_isCloudEvent %}producer.Send{{ fg_messagename }}(ctx, testData{% if fg_needs_source_param %}, "tenant123/device456"{% endif %}{% if "type" not in first_message.envelopemetadata %}, "{{ first_message_id }}"{% endif %}){% else %}producer.Send{{ fg_messagename }}(ctx, testData, "{{ fg_topic }}"){% endif %}
+	require.NoError(t, err)
+	assert.Equal(t, 3, writer.calls, "expected two retries before the successful write")
+}
+
+// Test{{ fg_class_name }}_SendReturnsErrorAfterRetriesExhausted verifies that the
+// resilient send path gives up after exhausting its retries and returns the error.
+func Test{{ fg_class_name }}_SendReturnsErrorAfterRetriesExhausted(t *testing.T) {
+	writer := &flushTestWriter{alwaysFail: true}
+	producer := New{{ fg_class_name }}WithWriter(writer, "{{ fg_topic }}")
+
+	var testData {{ fg_body_type }}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := {% if fg_isCloudEvent %}producer.Send{{ fg_messagename }}(ctx, testData{% if fg_needs_source_param %}, "tenant123/device456"{% endif %}{% if "type" not in first_message.envelopemetadata %}, "{{ first_message_id }}"{% endif %}){% else %}producer.Send{{ fg_messagename }}(ctx, testData, "{{ fg_topic }}"){% endif %}
+	require.Error(t, err)
+	assert.Equal(t, 3, writer.calls, "expected exactly the configured number of attempts")
+}

@@ -30,6 +30,14 @@ const (
 	ContentModeBinary ContentMode = "binary"
 )
 
+// KafkaMessageWriter is the subset of *kafka.Writer used by the generated
+// producers. It is defined as an interface so that message delivery can be
+// unit-tested without a live broker; *kafka.Writer satisfies it.
+type KafkaMessageWriter interface {
+	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
+}
+
 {%- set messagegroups = root.messagegroups %}
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set groupname = messagegroupid | pascal | strip_namespace %}
@@ -37,7 +45,7 @@ const (
 
 // {{ class_name }} is a Kafka producer for the {{ messagegroupid }} message group
 type {{ class_name }} struct {
-	writer       *kafka.Writer
+	writer       KafkaMessageWriter
 	defaultTopic string
 	contentMode  ContentMode
 }
@@ -70,7 +78,7 @@ func New{{ class_name }}WithContentMode(bootstrapServers string, contentMode Con
 }
 
 // New{{ class_name }}WithWriter creates a new {{ class_name }} with an existing Kafka writer
-func New{{ class_name }}WithWriter(writer *kafka.Writer, defaultTopic string) *{{ class_name }} {
+func New{{ class_name }}WithWriter(writer KafkaMessageWriter, defaultTopic string) *{{ class_name }} {
 	return &{{ class_name }}{
 		writer:       writer,
 		defaultTopic: defaultTopic,
@@ -91,37 +99,26 @@ func (p *{{ class_name }}) Close() error {
 	return nil
 }
 
-// Flush sends any buffered messages with retry and exponential backoff.
-// Resilient against transient broker disconnections (e.g. Azure Event Hubs
-// dropping idle connections after ~10 minutes).
+// Flush ensures that all messages handed to the Send* methods have been
+// delivered to the broker.
+//
+// This producer uses segmentio/kafka-go in its default synchronous mode
+// (Writer.Async == false), so every Send* call only returns after the broker
+// has acknowledged the message and there is nothing buffered on the client to
+// drain. Flush is therefore a no-op provided for parity with the other
+// language SDKs; it only reports context cancellation. Resilient delivery is
+// handled per message by writeWithRetry, which retries with exponential
+// backoff. The retries and backoffFactor parameters are accepted for
+// signature parity and are unused for the synchronous writer.
 func (p *{{ class_name }}) Flush(ctx context.Context, retries int, backoffFactor float64) error {
-	if retries <= 0 {
-		retries = 3
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	if backoffFactor <= 0 {
-		backoffFactor = 2.0
-	}
-	for attempt := 1; attempt <= retries; attempt++ {
-		// kafka-go Writer auto-flushes on WriteMessages; this explicitly
-		// closes and re-creates to force a flush of any internal buffer.
-		stats := p.writer.Stats()
-		if stats.Messages == 0 {
-			return nil
-		}
-		if attempt < retries {
-			backoff := time.Duration(math.Pow(backoffFactor, float64(attempt))) * time.Second
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(backoff):
-			}
-		}
-	}
-	return fmt.Errorf("kafka flush: messages may still be pending after %d attempts", retries)
+	return nil
 }
 
 // GetWriter returns the underlying Kafka writer
-func (p *{{ class_name }}) GetWriter() *kafka.Writer {
+func (p *{{ class_name }}) GetWriter() KafkaMessageWriter {
 	return p.writer
 }
 
