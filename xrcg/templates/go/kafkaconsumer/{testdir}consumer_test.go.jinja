@@ -138,8 +138,7 @@ func Test{{ class_name }}_{{ messagename }}(t *testing.T) {
 	{%- if "[]" in message_body_type %}
 	testData := {{ message_body_type | replace(data_project_name | snake + ".", "") }}(nil)
 	{%- else %}
-	{%- set clean_type = message_body_type | replace("*", "") | replace(data_project_name | snake + ".", "") %}
-	testData := {{ data_project_name | snake }}.CreateInstance{{ clean_type }}()
+	var testData {{ message_body_type }}
 	{%- endif %}
 	dataBytes, _ := json.Marshal(testData)
 

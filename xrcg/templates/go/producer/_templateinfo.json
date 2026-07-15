@@ -1,0 +1,12 @@
+{
+  "template": "producer",
+  "description": "Go HTTP CloudEvents Producer",
+  "language": "go",
+  "protocol": "HTTP",
+  "usage": [
+    "producer"
+  ],
+  "requires": [
+    "messagegroups"
+  ]
+}

@@ -1,0 +1,23 @@
+{#- AMQP 1.0 utility macros for Go -#}
+
+{%- macro get_node(message) -%}
+{%- if message.protocolmetadata and message.protocolmetadata.node and message.protocolmetadata.node.value -%}
+{{ message.protocolmetadata.node.value }}
+{%- elif message.protocolmetadata and message.protocolmetadata.address and message.protocolmetadata.address.value -%}
+{{ message.protocolmetadata.address.value }}
+{%- elif message.protocolmetadata and message.protocolmetadata.queue and message.protocolmetadata.queue.value -%}
+{{ message.protocolmetadata.queue.value }}
+{%- elif message.protocoloptions and message.protocoloptions.node -%}
+{{ message.protocoloptions.node }}
+{%- elif message.protocoloptions and message.protocoloptions.address -%}
+{{ message.protocoloptions.address }}
+{%- elif message.protocoloptions and message.protocoloptions.queue -%}
+{{ message.protocoloptions.queue }}
+{%- elif message.protocoloptions and message.protocoloptions.topic -%}
+{{ message.protocoloptions.topic }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro get_address(message) -%}
+{{ get_node(message) }}
+{%- endmacro -%}

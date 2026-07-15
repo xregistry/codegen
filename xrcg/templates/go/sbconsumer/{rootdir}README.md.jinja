@@ -1,0 +1,21 @@
+{%- set messagegroups = root.messagegroups %}
+{% for messagegroupid, messagegroup in messagegroups.items() -%}
+{%- set groupname = messagegroupid | pascal | strip_namespace -%}
+# {{ project_name | pascal }} - Azure Service Bus Consumer
+
+Auto-generated Go consumer for Azure Service Bus using `github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus`.
+
+## Quick start
+
+```go
+handler := &My{{ groupname }}Handler{}
+consumer, err := {{ project_name | snake }}.New{{ groupname }}Consumer(connectionString, "queue", handler)
+if err != nil {
+    log.Fatal(err)
+}
+defer consumer.Close(context.Background())
+err = consumer.Start(context.Background())
+```
+
+Use `New{{ groupname }}ConsumerForSubscription` for topic subscriptions. Binary CloudEvents are decoded from `ApplicationProperties` with the `cloudEvents:` prefix; structured CloudEvents are decoded from `application/cloudevents+json` message bodies.
+{% endfor %}

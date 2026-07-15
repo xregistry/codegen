@@ -1,0 +1,1 @@
+{"template":"mqttclient","description":"Go MQTT v5 Client","language":"go","protocol":"MQTT/5.0","usage":["producer","consumer"],"requires":["messagegroups"]}

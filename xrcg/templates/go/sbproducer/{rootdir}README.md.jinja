@@ -1,0 +1,19 @@
+{%- set messagegroups = root.messagegroups %}
+{% for messagegroupid, messagegroup in messagegroups.items() -%}
+{%- set groupname = messagegroupid | pascal | strip_namespace -%}
+# {{ project_name | pascal }} - Azure Service Bus Producer
+
+Auto-generated Go producer for Azure Service Bus using `github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus`.
+
+## Quick start
+
+```go
+producer, err := {{ project_name | snake }}.New{{ groupname }}Producer(connectionString, "queue-or-topic")
+if err != nil {
+    log.Fatal(err)
+}
+defer producer.Close(context.Background())
+```
+
+CloudEvents are sent in structured mode by default. Use `SetContentMode({{ project_name | snake }}.ContentModeBinary)` to send data in the message body with CloudEvents attributes in `ApplicationProperties` using the `cloudEvents:` prefix.
+{% endfor %}

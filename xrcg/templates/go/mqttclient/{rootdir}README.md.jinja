@@ -1,0 +1,24 @@
+{%- import "util.jinja.include" as util -%}
+# {{ project_name | pascal }} MQTT Client
+
+Auto-generated Go MQTT v5 publish/subscribe client using `github.com/eclipse/paho.golang`.
+
+## Usage
+
+```go
+client, err := New{{ (root.messagegroups.keys() | list | first) | pascal | strip_namespace }}Client(ctx, "mqtt://localhost:1883", "client-id", ContentModeStructured)
+if err != nil {
+	panic(err)
+}
+```
+
+CloudEvents are published in structured mode by default. Binary mode uses MQTT v5 user properties for CloudEvents attributes and the MQTT content type property for the data content type.
+
+## Generated message methods
+
+{% for messagegroupid, messagegroup in root.messagegroups.items() -%}
+### {{ messagegroupid }}
+{% for messageid, message in messagegroup.messages.items() -%}
+- `Publish{{ messageid | pascal | strip_namespace }}`
+{% endfor %}
+{% endfor %}

@@ -1,0 +1,68 @@
+{%- import "util.jinja.include" as util -%}
+# {{ project_name }}
+
+Go HTTP producer for the `{{ project_name }}` message group(s). It posts
+[CloudEvents](https://cloudevents.io/) to an HTTP endpoint using the
+[CloudEvents SDK for Go](https://github.com/cloudevents/sdk-go).
+
+This project was generated with the [xRegistry CLI](https://github.com/xregistry/codegen).
+
+## Layout
+
+- `{{ project_name }}` — this module, the HTTP CloudEvents producer.
+- `{{ data_project_name }}` — sibling module with the generated data classes,
+  referenced via a `replace` directive in `go.mod`.
+
+## Usage
+
+Create a producer for a message group and send events to a target URL:
+
+```go
+package main
+
+import (
+	"context"
+
+	producer "{{ project_name | snake }}"
+)
+
+func main() {
+	p, err := producer.NewYourGroupProducer("https://example.com/events")
+	if err != nil {
+		panic(err)
+	}
+	defer p.Close()
+
+	// Optionally switch to CloudEvents HTTP binary content mode.
+	// p.SetContentMode(producer.ContentModeBinary)
+
+	ctx := context.Background()
+	if err := p.SendYourMessage(ctx, data); err != nil {
+		panic(err)
+	}
+}
+```
+
+### Content modes
+
+- `ContentModeStructured` (default) — the whole CloudEvent is serialized as
+  `application/cloudevents+json` in the request body.
+- `ContentModeBinary` — the event data is the request body and the CloudEvents
+  attributes are carried as `ce-*` HTTP headers.
+
+Use `SetContentMode` to select the mode before sending.
+
+### Testing
+
+Each `Send*` method accepts a `context.Context`, so tests can supply an
+`httptest.Server` URL as the target and assert against the received request
+without a live endpoint. The constructor `New<Group>ProducerWithClient` also
+accepts a custom `cloudevents.Client` for injection.
+
+## Build
+
+```sh
+go mod tidy
+go build ./...
+go test ./...
+```

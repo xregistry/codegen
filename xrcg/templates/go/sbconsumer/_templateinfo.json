@@ -1,0 +1,1 @@
+{"template":"sbconsumer","description":"Go Azure Service Bus Consumer","language":"go","protocol":"Azure Service Bus","usage":["consumer"],"requires":["messagegroups"]}
