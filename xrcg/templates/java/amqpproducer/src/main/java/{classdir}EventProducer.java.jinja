@@ -42,6 +42,9 @@ public class {{ class_name }} {
     private final Consumer<io.cloudevents.CloudEvent> beforeSend;
     {%- endif %}
     private final AmqpProducer endpoint;
+    {%- if uses_cloudevents_message %}
+    private AmqpContentMode contentMode = AmqpContentMode.STRUCTURED;
+    {%- endif %}
     
     private {{ class_name }}(AmqpProducer endpoint{%- if uses_cloudevents_message -%}, Consumer<io.cloudevents.CloudEvent> beforeSend{%- endif -%}) {
         this.endpoint = endpoint;
@@ -49,6 +52,20 @@ public class {{ class_name }} {
         this.beforeSend = beforeSend;
         {%- endif %}
     }
+    {%- if uses_cloudevents_message %}
+    
+    /**
+     * Sets the CloudEvents AMQP content mode used for subsequent sends
+     * (default: {@link AmqpContentMode#STRUCTURED}).
+     *
+     * @param contentMode the content mode to use
+     * @return this producer, for fluent chaining
+     */
+    public {{ class_name }} withContentMode(AmqpContentMode contentMode) {
+        this.contentMode = contentMode;
+        return this;
+    }
+    {%- endif %}
     
     {%- if root.endpoints %}
     {%- for endpointid, endpoint in root.endpoints.items() %}
@@ -162,10 +179,18 @@ public class {{ class_name }} {
             beforeSend.accept(cloudEvent);
         }
         
-        // Convert CloudEvent to ProtonJ2 message
-        byte[] cloudEventBytes = {{ cloudEvents.SerializeCloudEvent("cloudEvent") }};
-        Message<?> amqpMessage = Message.create(cloudEventBytes);
-        amqpMessage.contentType("application/cloudevents+json");
+        // Convert CloudEvent to ProtonJ2 message using the configured content mode
+        Message<?> amqpMessage;
+        if (this.contentMode == AmqpContentMode.BINARY) {
+            // Binary content mode: data in the body, CE attributes as cloudEvents:* properties
+            amqpMessage = AmqpProducer.buildBinaryCloudEventMessage(cloudEvent, dataBytes);
+        } else {
+            // Structured content mode: whole CloudEvent serialized as application/cloudevents+json
+            byte[] cloudEventBytes = {{ cloudEvents.SerializeCloudEvent("cloudEvent") }};
+            Message<byte[]> structuredMessage = Message.create(cloudEventBytes);
+            structuredMessage.contentType("application/cloudevents+json");
+            amqpMessage = structuredMessage;
+        }
         
         endpoint.send(amqpMessage);
         

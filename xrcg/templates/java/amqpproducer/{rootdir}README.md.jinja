@@ -1,5 +1,6 @@
 {%- import "util.jinja.include" as util -%}
 {%- set messagegroups = root.messagegroups %}
+{%- set uses_cloudevents_message = (root | exists("envelope","CloudEvents/1.0")) %}
 {% for messagegroupid, messagegroup in messagegroups.items() -%}
 {%- set groupname = messagegroupid | pascal -%}
 {%- set class_name = (groupname | strip_namespace) + "Producer" %}
@@ -302,7 +303,27 @@ builder.withExtension("priority", "high");
 
 CloudEvent cloudEvent = builder.build();
 ```
+{% if uses_cloudevents_message %}
+### CloudEvents Content Mode
 
+CloudEvents can be written to AMQP in two content modes (CloudEvents AMQP 1.0.2 binding):
+
+- **Structured** (default): the entire CloudEvent (attributes and data) is serialized into
+  the AMQP message body as `application/cloudevents+json`.
+- **Binary**: the event data is the AMQP message body and the CloudEvents attributes are
+  carried as `cloudEvents:*` AMQP application properties. Use this for brokers that route or
+  filter on those properties (for example, Azure Event Grid).
+
+Select the mode with `withContentMode(...)` (fluent, returns the producer):
+
+```java
+import {{ project_name | lower | replace('-', '_') }}.AmqpContentMode;
+
+{{ (groupname | strip_namespace) + "EventProducer" }} producer =
+    {{ (groupname | strip_namespace) + "EventProducer" }}.createProducer(credential, beforeSend, options, endpoints)
+        .withContentMode(AmqpContentMode.BINARY);
+```
+{% endif %}
 ## Error Handling
 
 ### Basic Error Handling

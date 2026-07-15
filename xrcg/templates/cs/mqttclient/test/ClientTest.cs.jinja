@@ -299,7 +299,7 @@ namespace {{ project_name | pascal }}.Test
         {%- endif %}
         {%- set _topic_phs = _dft.val | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
         {%- if _topic_phs %}
-            {%- for _ph in _topic_phs if _ph not in _uriarg_names %}
+            {%- for _ph in _topic_phs if _ph not in _uriarg_names and _ph not in _extra_topic_args %}
                 {%- set _ = _extra_topic_args.append(_ph) %}
             {%- endfor %}
         {%- endif %}
