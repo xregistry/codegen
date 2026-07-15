@@ -1,0 +1,23 @@
+{#- Azure Event Hubs utility macros for Go -#}
+
+{%- macro get_event_hub_name(message) -%}
+{%- if message.protocolmetadata and message.protocolmetadata.eventhub and message.protocolmetadata.eventhub.value -%}
+{{ message.protocolmetadata.eventhub.value }}
+{%- elif message.protocolmetadata and message.protocolmetadata.eventHub and message.protocolmetadata.eventHub.value -%}
+{{ message.protocolmetadata.eventHub.value }}
+{%- elif message.protocolmetadata and message.protocolmetadata.eventhubname and message.protocolmetadata.eventhubname.value -%}
+{{ message.protocolmetadata.eventhubname.value }}
+{%- elif message.protocolmetadata and message.protocolmetadata.eventHubName and message.protocolmetadata.eventHubName.value -%}
+{{ message.protocolmetadata.eventHubName.value }}
+{%- elif message.protocoloptions and message.protocoloptions.eventhub -%}
+{{ message.protocoloptions.eventhub }}
+{%- elif message.protocoloptions and message.protocoloptions.eventHub -%}
+{{ message.protocoloptions.eventHub }}
+{%- elif message.protocoloptions and message.protocoloptions.eventhubname -%}
+{{ message.protocoloptions.eventhubname }}
+{%- elif message.protocoloptions and message.protocoloptions.eventHubName -%}
+{{ message.protocoloptions.eventHubName }}
+{%- elif message.protocoloptions and message.protocoloptions.topic -%}
+{{ message.protocoloptions.topic }}
+{%- endif -%}
+{%- endmacro -%}

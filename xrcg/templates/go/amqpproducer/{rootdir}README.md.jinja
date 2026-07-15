@@ -1,0 +1,19 @@
+{%- import "util.jinja.include" as util -%}
+{%- set first_group_id = root.messagegroups.keys() | list | first -%}
+{%- set groupname = first_group_id | pascal | strip_namespace -%}
+{%- set class_name = groupname + "Producer" -%}
+# {{ project_name | pascal }} - AMQP 1.0 Producer
+
+Auto-generated Go AMQP 1.0 producer using `github.com/Azure/go-amqp` with CloudEvents structured and binary content modes.
+
+## Quick start
+
+```go
+producer, err := {{ project_name | snake }}.New{{ class_name }}("amqp://localhost:5672", "events")
+if err != nil {
+    log.Fatal(err)
+}
+defer producer.Close(context.Background())
+```
+
+Use `New{{ class_name }}WithSender` to inject a test sender without a broker.

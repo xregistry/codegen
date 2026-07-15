@@ -1,0 +1,30 @@
+{%- import "util.jinja.include" as util -%}
+{%- set messagegroups = root.messagegroups %}
+{% for messagegroupid, messagegroup in messagegroups.items() -%}
+{%- set groupname = messagegroupid | pascal | strip_namespace -%}
+{%- set class_name = groupname + "Producer" %}
+# {{ project_name | pascal }} - Azure Event Hubs Producer
+
+Auto-generated Go producer for Azure Event Hubs with CloudEvents structured and binary content modes.
+
+## Quick start
+
+```go
+producer, err := {{ project_name | snake }}.New{{ class_name }}(
+    "Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...",
+    "event-hub-name",
+)
+if err != nil {
+    panic(err)
+}
+defer producer.Close(context.Background())
+```
+
+Use `New{{ class_name }}WithSender` to unit-test with a fake sender. Binary CloudEvents use Event Hubs application properties with the `cloudEvents:` prefix; structured CloudEvents use `application/cloudevents+json` as `EventData.ContentType`.
+
+## Dependencies
+
+- `github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs`
+- `github.com/cloudevents/sdk-go/v2`
+- `github.com/google/uuid`
+{% endfor %}

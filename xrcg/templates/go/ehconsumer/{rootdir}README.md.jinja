@@ -1,0 +1,38 @@
+{%- import "util.jinja.include" as util -%}
+{%- import "cloudevents.jinja.include" as cloudEvents -%}
+{%- set messagegroups = root.messagegroups %}
+{% for messagegroupid, messagegroup in messagegroups.items() -%}
+{%- set groupname = messagegroupid | pascal | strip_namespace -%}
+{%- set class_name = groupname + "Consumer" %}
+# {{ project_name | pascal }} - Azure Event Hubs Consumer
+
+Auto-generated Go consumer for Azure Event Hubs with broker-free test seams and CloudEvents dispatch.
+
+## Quick start
+
+Implement `{{ class_name }}Handler`, then create the consumer:
+
+```go
+consumer, err := {{ project_name | snake }}.New{{ class_name }}(
+    "Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...",
+    "event-hub-name",
+    "0",
+    handler,
+)
+if err != nil {
+    panic(err)
+}
+defer consumer.Close(context.Background())
+
+if err := consumer.Start(context.Background()); err != nil {
+    panic(err)
+}
+```
+
+Use `New{{ class_name }}WithReceiver` to unit-test with a fake receiver. Binary CloudEvents are read from Event Hubs application properties using the `cloudEvents:` prefix; structured CloudEvents are decoded from `application/cloudevents+json` bodies.
+
+## Dependencies
+
+- `github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs`
+- `github.com/cloudevents/sdk-go/v2`
+{% endfor %}

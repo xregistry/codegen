@@ -1,0 +1,26 @@
+{%- import "mqtt.jinja.include" as mqtt -%}
+{%- set uses_data_package = [] -%}
+{%- for _messagegroupid, _messagegroup in root.messagegroups.items() -%}
+{%- for _messageid, _message in _messagegroup.messages.items() -%}
+{%- if (mqtt.body_type(data_project_name, root, _message) | trim) != "[]byte" -%}
+{%- set _ = uses_data_package.append(true) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
+module {{ project_name | snake }}
+
+go 1.21
+
+require (
+	github.com/cloudevents/sdk-go/v2 v2.15.2
+	github.com/eclipse/paho.golang v0.23.0
+	github.com/google/uuid v1.6.0
+	{%- if uses_data_package %}
+	github.com/username/{{ data_project_name | snake }} v0.0.0
+	{%- endif %}
+	github.com/stretchr/testify v1.8.4
+)
+
+{%- if uses_data_package %}
+replace github.com/username/{{ data_project_name | snake }} => ../{{ data_project_name }}
+{%- endif %}
