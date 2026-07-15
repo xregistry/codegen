@@ -152,8 +152,12 @@ func Test{{ class_name }}_{{ messagename }}(t *testing.T) {
 	// Binary payload - just verify it's not empty
 	assert.NotEmpty(t, msg.Value, "Expected message to contain data")
 	{%- else %}
-	var receivedData {{ data_project_name | snake }}.{{ message_body_type | replace("*", "") | replace(data_project_name | snake + ".", "") }}
-	if msg.Value[0] == '{' {
+	// msg.Value is a structured CloudEvent envelope. Verify it is well-formed
+	// JSON by decoding into a generic map rather than the typed payload struct:
+	// the envelope's own fields (e.g. "data") can collide with identically
+	// named fields on the payload type.
+	if len(msg.Value) > 0 && msg.Value[0] == '{' {
+		var receivedData map[string]interface{}
 		err = json.Unmarshal(msg.Value, &receivedData)
 		require.NoError(t, err)
 	}

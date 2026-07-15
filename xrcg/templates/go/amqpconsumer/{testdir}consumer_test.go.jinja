@@ -62,7 +62,10 @@ func startArtemisConsumerIntegrationTest(t *testing.T) (string, func()) {
 				"ARTEMIS_USER":     "artemis",
 				"ARTEMIS_PASSWORD": "artemis",
 			},
-			WaitingFor: wait.ForListeningPort("5672/tcp").WithStartupTimeout(2 * time.Minute),
+			WaitingFor: wait.ForAll(
+				wait.ForListeningPort("5672/tcp").WithStartupTimeout(3*time.Minute),
+				wait.ForLog("AMQ221007").WithStartupTimeout(3*time.Minute),
+			),
 		},
 		Started: true,
 	})
