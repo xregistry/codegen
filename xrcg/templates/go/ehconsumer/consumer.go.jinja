@@ -8,6 +8,7 @@ package {{ project_name | snake }}
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -32,8 +33,19 @@ type eventHubReceiver struct {
 	partitionClient *azeventhubs.PartitionClient
 }
 
+// ReceiveEvents reads from the partition using a bounded per-call timeout so
+// low-volume streams are dispatched promptly. azeventhubs.ReceiveEvents blocks
+// until either count events arrive or the context is done; without a bound it
+// would stall until a full batch of count events accumulated. On our timeout it
+// returns whatever events were received so far (possibly none) with no error.
 func (r *eventHubReceiver) ReceiveEvents(ctx context.Context, count int) ([]*azeventhubs.ReceivedEventData, error) {
-	return r.partitionClient.ReceiveEvents(ctx, count, nil)
+	receiveCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	events, err := r.partitionClient.ReceiveEvents(receiveCtx, count, nil)
+	if err != nil && errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+		return events, nil
+	}
+	return events, err
 }
 
 func (r *eventHubReceiver) Close(ctx context.Context) error {
