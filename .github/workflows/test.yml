@@ -245,6 +245,7 @@ jobs:
   # Go tests - compile-only verification of generated Go SDKs (no Docker)
   test-go:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
     - name: Checkout code
       uses: actions/checkout@v7
@@ -265,6 +266,12 @@ jobs:
     - name: Run Go tests
       run: |
         pytest -v test/go/
-    - name: Report disk space after tests
+    - name: Clean up Docker resources
+      if: always()
+      run: |
+        docker ps -aq | xargs -r docker rm -f || true
+        docker images -q | xargs -r docker rmi -f || true
+        docker system prune -af --volumes || true
+    - name: Report disk space after cleanup
       if: always()
       run: df -h

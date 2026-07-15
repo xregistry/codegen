@@ -11,11 +11,14 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	amqp "github.com/Azure/go-amqp"
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	testcontainers "github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | snake }}/pkg/{{ data_project_name }}"
 	. "{{ project_name | snake }}"
@@ -46,6 +49,38 @@ func (r *fakeAmqpReceiver) Close(ctx context.Context) error {
 	return nil
 }
 
+func startArtemisConsumerIntegrationTest(t *testing.T) (string, func()) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "apache/activemq-artemis:2.31.2",
+			ExposedPorts: []string{"5672/tcp"},
+			Env: map[string]string{
+				"ARTEMIS_USER":     "artemis",
+				"ARTEMIS_PASSWORD": "artemis",
+			},
+			WaitingFor: wait.ForListeningPort("5672/tcp").WithStartupTimeout(2 * time.Minute),
+		},
+		Started: true,
+	})
+	require.NoError(t, err)
+
+	host, err := container.Host(ctx)
+	require.NoError(t, err)
+	port, err := container.MappedPort(ctx, "5672/tcp")
+	require.NoError(t, err)
+
+	cleanup := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		require.NoError(t, container.Terminate(ctx))
+	}
+	return fmt.Sprintf("amqp://artemis:artemis@%s:%s", host, port.Port()), cleanup
+}
+
 {%- set messagegroups = root.messagegroups %}
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set groupname = messagegroupid | pascal | strip_namespace %}
@@ -55,10 +90,11 @@ type mock{{ class_name }}Handler struct {
 	mu     sync.Mutex
 	counts map[string]int
 	errors []error
+	events chan cloudevents.Event
 }
 
 func newMock{{ class_name }}Handler() *mock{{ class_name }}Handler {
-	return &mock{{ class_name }}Handler{counts: make(map[string]int)}
+	return &mock{{ class_name }}Handler{counts: make(map[string]int), events: make(chan cloudevents.Event, 10)}
 }
 
 {%- for messageid, message in messagegroup.messages.items() %}
@@ -69,6 +105,9 @@ func (h *mock{{ class_name }}Handler) Handle{{ messagename }}(ctx context.Contex
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.counts["{{ messageid }}"]++
+	{%- if isCloudEvent %}
+	h.events <- event
+	{%- endif %}
 	return nil
 }
 
@@ -91,6 +130,72 @@ func (h *mock{{ class_name }}Handler) HandleError(ctx context.Context, err error
 {%- set isCloudEvent = cloudEvents.isCloudEvent(first_message) %}
 {%- set content_type = util.get_content_type(first_message) %}
 {%- set event_type = first_message.envelopemetadata.type.value if "type" in first_message.envelopemetadata and first_message.envelopemetadata.type.value else first_message_id %}
+
+func Test{{ class_name }}_IntegrationArtemisRoundTrip(t *testing.T) {
+	testcontainers.SkipIfProviderIsNotHealthy(t)
+	{%- if isCloudEvent %}
+	addr, cleanup := startArtemisConsumerIntegrationTest(t)
+	defer cleanup()
+	node := "test.queue"
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	handler := newMock{{ class_name }}Handler()
+	consumer, err := New{{ class_name }}(addr, node, handler)
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- consumer.Start(ctx)
+	}()
+
+	var testData {{ message_body_type }}
+	payload, err := testData.ToByteArray({{ content_type }})
+	require.NoError(t, err)
+	body, err := json.Marshal(map[string]any{
+		"specversion":     "1.0",
+		"id":              "test-id",
+		"type":            "{{ event_type }}",
+		"source":          "test-source",
+		"datacontenttype": {{ content_type }},
+		"data":            json.RawMessage(payload),
+	})
+	require.NoError(t, err)
+	ct := "application/cloudevents+json"
+
+	conn, err := amqp.Dial(ctx, addr, nil)
+	require.NoError(t, err)
+	defer conn.Close()
+	session, err := conn.NewSession(ctx, nil)
+	require.NoError(t, err)
+	defer session.Close(context.Background())
+	sender, err := session.NewSender(ctx, node, nil)
+	require.NoError(t, err)
+	defer sender.Close(context.Background())
+	require.NoError(t, sender.Send(ctx, &amqp.Message{Data: [][]byte{body}, Properties: &amqp.MessageProperties{ContentType: &ct}}, nil))
+
+	select {
+	case event := <-handler.events:
+		assert.Equal(t, "{{ event_type }}", event.Type())
+		assert.Equal(t, "test-source", event.Source())
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for handler: %v", ctx.Err())
+	}
+
+	cancel()
+	_ = consumer.Close(context.Background())
+	select {
+	case err := <-done:
+		if err != nil && err != context.Canceled {
+			require.NoError(t, err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("consumer did not stop")
+	}
+	{%- else %}
+	t.Skip("first message is not a CloudEvent")
+	{%- endif %}
+}
 
 func Test{{ class_name }}_ConsumesStructuredCloudEvent(t *testing.T) {
 	{%- if isCloudEvent %}

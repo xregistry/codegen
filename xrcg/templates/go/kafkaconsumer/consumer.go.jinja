@@ -46,6 +46,7 @@ type {{ class_name }} struct {
 	reader   *kafka.Reader
 	handler  {{ class_name }}Handler
 	running  bool
+	stopped  bool
 	mu       sync.Mutex
 	stopChan chan struct{}
 }
@@ -123,12 +124,13 @@ func (c *{{ class_name }}) Start(ctx context.Context) error {
 	}
 }
 
-// Stop stops the consumer
+// Stop stops the consumer. It is safe to call multiple times (and after Close).
 func (c *{{ class_name }}) Stop() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	
-	if c.running {
+	if !c.stopped {
+		c.stopped = true
 		close(c.stopChan)
 	}
 }

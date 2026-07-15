@@ -16,69 +16,75 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/segmentio/kafka-go"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	testcontainers "github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
+	tckafka "github.com/testcontainers/testcontainers-go/modules/kafka"
 	
 	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | snake }}/pkg/{{ data_project_name }}"
 	. "{{ project_name | snake }}"
 )
 
-// setupKafka creates a Kafka container for testing
+// setupKafkaConsumerTest starts a single-node Kafka broker (KRaft mode, no
+// Zookeeper) using the Testcontainers Kafka module and returns its bootstrap
+// server address plus a cleanup function. Topics are auto-created on first use.
 func setupKafkaConsumerTest(t *testing.T) (string, func()) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+	testcontainers.SkipIfProviderIsNotHealthy(t)
 
-	req := testcontainers.ContainerRequest{
-		Image:        "confluentinc/cp-kafka:7.5.0",
-		ExposedPorts: []string{"9092/tcp", "29092/tcp"},
-		Env: map[string]string{
-			"KAFKA_BROKER_ID":                    "1",
-			"KAFKA_ZOOKEEPER_CONNECT":           "localhost:2181",
-			"KAFKA_ADVERTISED_LISTENERS":        "PLAINTEXT://localhost:29092,PLAINTEXT_INTERNAL://kafka:9092",
-			"KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT",
-			"KAFKA_INTER_BROKER_LISTENER_NAME":  "PLAINTEXT_INTERNAL",
-			"KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
-		},
-		WaitingFor: wait.ForListeningPort("9092/tcp"),
-	}
+	ctx := context.Background()
 
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
+	kafkaContainer, err := tckafka.RunContainer(ctx, tckafka.WithClusterID("xrcg-test-cluster"))
 	require.NoError(t, err)
 
-	// Get the bootstrap server address
-	host, err := container.Host(ctx)
+	brokers, err := kafkaContainer.Brokers(ctx)
 	require.NoError(t, err)
-	port, err := container.MappedPort(ctx, "29092")
-	require.NoError(t, err)
-
-	bootstrapServer := fmt.Sprintf("%s:%s", host, port.Port())
-
-	// Create test topic
-	conn, err := kafka.Dial("tcp", bootstrapServer)
-	require.NoError(t, err)
-	defer conn.Close()
-
-	err = conn.CreateTopics(kafka.TopicConfig{
-		Topic:             "test-topic",
-		NumPartitions:     1,
-		ReplicationFactor: 1,
-	})
-	if err != nil && err.Error() != "Topic already exists" {
-		require.NoError(t, err)
-	}
+	require.NotEmpty(t, brokers, "expected at least one Kafka broker address")
 
 	cleanup := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		container.Terminate(ctx)
+		_ = kafkaContainer.Terminate(ctx)
 	}
 
-	return bootstrapServer, cleanup
+	return brokers[0], cleanup
+}
+
+// createKafkaTopic creates a single-partition topic up front and waits for its
+// leader to be elected, so produce/consume round-trips are deterministic (the
+// generated client does not enable broker-side auto-creation).
+func createKafkaTopic(t *testing.T, bootstrapServer, topic string) {
+	client := &kafka.Client{Addr: kafka.TCP(bootstrapServer)}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	topicConfig := kafka.TopicConfig{
+		Topic:             topic,
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+	}
+	resp, err := client.CreateTopics(ctx, &kafka.CreateTopicsRequest{
+		Topics: []kafka.TopicConfig{topicConfig},
+	})
+	require.NoError(t, err)
+	require.NoError(t, resp.Errors[topic])
+
+	require.Eventually(t, func() bool {
+		conn, err := kafka.Dial("tcp", bootstrapServer)
+		if err != nil {
+			return false
+		}
+		defer conn.Close()
+		parts, err := conn.ReadPartitions(topic)
+		if err != nil || len(parts) == 0 {
+			return false
+		}
+		for _, p := range parts {
+			if p.Leader.Host == "" {
+				return false
+			}
+		}
+		return true
+	}, 20*time.Second, 250*time.Millisecond)
 }
 
 {%- set messagegroups = root.messagegroups %}
@@ -121,63 +127,85 @@ func (m *Mock{{ class_name }}Handler) HandleError(ctx context.Context, err error
 {%- set messagename = messageid | pascal | strip_namespace %}
 {%- set message_body_type = util.body_type(data_project_name, root, message) %}
 {%- set topic = kafka.get_topic(message) or messageid %}
+{%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
 
 func Test{{ class_name }}_{{ messagename }}(t *testing.T) {
 	bootstrapServer, cleanup := setupKafkaConsumerTest(t)
 	defer cleanup()
 
-	// Create producer to send test message
-	writer := &kafka.Writer{
-		Addr:     kafka.TCP(bootstrapServer),
-		Topic:    "{{ topic }}",
-		Balancer: &kafka.LeastBytes{},
-	}
-	defer writer.Close()
+	createKafkaTopic(t, bootstrapServer, "{{ topic }}")
 
-	// Create test data using generated test helper
-	{%- if "[]" in message_body_type %}
-	testData := {{ message_body_type | replace(data_project_name | snake + ".", "") }}(nil)
-	{%- else %}
-	var testData {{ message_body_type }}
-	{%- endif %}
-	dataBytes, _ := json.Marshal(testData)
-
-	// Send test message
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err := writer.WriteMessages(ctx, kafka.Message{
-		Topic: "{{ topic }}",
-		Value: dataBytes,
-	})
-	require.NoError(t, err)
-
-	// Create consumer with mock handler
+	// Start the consumer BEFORE producing. The generated consumer reads from the
+	// topic tail (StartOffset=Last), so it must join the group and position at
+	// the topic before the message it should observe is written.
 	handler := NewMock{{ class_name }}Handler()
 	consumer, err := New{{ class_name }}(bootstrapServer, "test-group", []string{"{{ topic }}"}, handler)
 	require.NoError(t, err)
 	defer consumer.Close()
 
-	// Start consumer in goroutine
-	consumerCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	consumerCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	go func() {
 		consumer.Start(consumerCtx)
 	}()
 
-	// Wait for message to be consumed
-	time.Sleep(2 * time.Second)
+	{%- if "[]" in message_body_type %}
+	testData := {{ message_body_type | replace(data_project_name | snake + ".", "") }}(nil)
+	{%- else %}
+	var testData {{ message_body_type }}
+	{%- endif %}
 
-	// Stop consumer
+	{%- if isCloudEvent %}
+	// Wrap the payload in a structured CloudEvent envelope, matching what the
+	// generated producer emits and what the consumer routes on (by CloudEvent type).
+	event := cloudevents.NewEvent()
+	event.SetID("test-id")
+	event.SetSource("test-source")
+	event.SetType("{{ message.envelopemetadata.type.value }}")
+	require.NoError(t, event.SetData(cloudevents.ApplicationJSON, testData))
+	dataBytes, err := json.Marshal(event)
+	require.NoError(t, err)
+	{%- else %}
+	dataBytes, err := json.Marshal(testData)
+	require.NoError(t, err)
+	{%- endif %}
+
+	// Produce the test message repeatedly in the background. Because the consumer
+	// reads from the tail, we keep publishing until it has joined the group and
+	// positioned at the topic, so at least one copy lands after its offset. This
+	// removes any dependence on consumer-group join timing.
+	produceCtx, stopProducing := context.WithCancel(context.Background())
+	defer stopProducing()
+	go func() {
+		writer := &kafka.Writer{
+			Addr:     kafka.TCP(bootstrapServer),
+			Topic:    "{{ topic }}",
+			Balancer: &kafka.LeastBytes{},
+		}
+		defer writer.Close()
+
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			_ = writer.WriteMessages(produceCtx, kafka.Message{Value: dataBytes})
+			select {
+			case <-produceCtx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
+	// Wait for the message to be consumed by the handler.
+	require.Eventually(t, func() bool {
+		handler.mu.Lock()
+		defer handler.mu.Unlock()
+		return handler.messages["{{ messageid }}"] > 0
+	}, 45*time.Second, 250*time.Millisecond, "Expected handler to receive message")
+
+	stopProducing()
 	consumer.Stop()
-
-	// Verify handler was called
-	handler.mu.Lock()
-	count := handler.messages["{{ messageid }}"]
-	handler.mu.Unlock()
-
-	assert.Greater(t, count, 0, "Expected handler to receive message")
 }
 
 {%- endfor %}
