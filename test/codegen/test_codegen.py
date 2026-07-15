@@ -342,6 +342,101 @@ def test_codegen_py_kafkaproducer_keeps_jstruct_exports_with_unused_avro_schemas
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+def test_codegen_cs_mqttclient_dedups_repeated_topic_placeholder():
+    """Regression test for duplicate URI-template placeholders in MQTT topic templates.
+
+    A transport-native MQTT ``topic_name`` that references the same placeholder more
+    than once (for example ``{region}`` twice) must not emit that method parameter
+    twice. Before the fix the generated ``Send*Async`` signature contained
+    ``string region, string region`` which is a C# CS0100 duplicate-parameter
+    compile error. This mirrors the CloudEvents-path de-duplication from issue #471,
+    applied to the transport-native topic-template argument collection.
+    """
+    work_dir = tempfile.mkdtemp()
+    try:
+        definitions_path = os.path.join(work_dir, 'mqtt-dup-topic.xreg.json')
+        output_dir = os.path.join(work_dir, 'out')
+
+        document = {
+            "$schema": "https://xregistry.io/schema/xregistry_messaging_catalog.json",
+            "messagegroups": {
+                "Contoso.Telemetry": {
+                    "protocol": "MQTT/5.0",
+                    "messages": {
+                        "Contoso.Telemetry.VehicleEvent": {
+                            "name": "VehicleEvent",
+                            "protocol": "MQTT/5.0",
+                            "protocoloptions": {
+                                "topic_name": "contoso/telemetry/{region}/vehicles/{region}/vp"
+                            },
+                            "dataschemaformat": "JsonStructure/draft-02",
+                            "dataschemauri": "#/schemagroups/Contoso.Telemetry.jstruct/schemas/Contoso.Telemetry.VehicleEvent"
+                        }
+                    }
+                }
+            },
+            "schemagroups": {
+                "Contoso.Telemetry.jstruct": {
+                    "schemas": {
+                        "Contoso.Telemetry.VehicleEvent": {
+                            "name": "VehicleEvent",
+                            "format": "JsonStructure/draft-02",
+                            "defaultversionid": "1",
+                            "versions": {
+                                "1": {
+                                    "format": "JsonStructure/draft-02",
+                                    "schema": {
+                                        "$schema": "https://json-structure.org/meta/core/v0/#",
+                                        "name": "VehicleEvent",
+                                        "type": "object",
+                                        "properties": {
+                                            "oper": {"type": "int32"},
+                                            "veh": {"type": "int32"}
+                                        },
+                                        "required": ["oper", "veh"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        with open(definitions_path, 'w', encoding='utf-8') as handle:
+            json.dump(document, handle, indent=2)
+
+        sys.argv = [
+            'xrcg', 'generate',
+            '--style', 'mqttclient',
+            '--language', 'cs',
+            '--definitions', definitions_path,
+            '--output', output_dir,
+            '--projectname', 'MqttDupTopic'
+        ]
+        assert xrcg.cli() == 0
+
+        producer_path = None
+        for dirpath, _dirnames, filenames in os.walk(output_dir):
+            if 'Producer.cs' in filenames:
+                producer_path = os.path.join(dirpath, 'Producer.cs')
+                break
+        assert producer_path is not None, f"Producer.cs not found under {output_dir}"
+
+        with open(producer_path, 'r', encoding='utf-8') as handle:
+            producer_contents = handle.read()
+
+        # The repeated {region} placeholder must yield a single parameter, not two.
+        assert 'string region, string region' not in producer_contents, (
+            "Duplicate 'string region' parameter (C# CS0100) emitted for a repeated "
+            "topic placeholder"
+        )
+        # ...but the parameter must still be present (no over-de-duplication).
+        assert 'string region' in producer_contents
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
 def test_extract_schema_info_keeps_names_for_top_level_schemagroup_refs():
     """Top-level schemagroup refs must retain class and namespace metadata.
 
