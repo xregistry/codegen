@@ -9,11 +9,15 @@ package {{ project_name | snake }}_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
 	amqp "github.com/Azure/go-amqp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	testcontainers "github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | snake }}/pkg/{{ data_project_name }}"
 	. "{{ project_name | snake }}"
@@ -34,6 +38,41 @@ func (s *fakeAmqpSender) Close(ctx context.Context) error {
 	return nil
 }
 
+func startArtemisProducerIntegrationTest(t *testing.T) (string, func()) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "apache/activemq-artemis:2.31.2",
+			ExposedPorts: []string{"5672/tcp"},
+			Env: map[string]string{
+				"ARTEMIS_USER":     "artemis",
+				"ARTEMIS_PASSWORD": "artemis",
+			},
+			WaitingFor: wait.ForAll(
+				wait.ForListeningPort("5672/tcp").WithStartupTimeout(3*time.Minute),
+				wait.ForLog("AMQ221007").WithStartupTimeout(3*time.Minute),
+			),
+		},
+		Started: true,
+	})
+	require.NoError(t, err)
+
+	host, err := container.Host(ctx)
+	require.NoError(t, err)
+	port, err := container.MappedPort(ctx, "5672/tcp")
+	require.NoError(t, err)
+
+	cleanup := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		require.NoError(t, container.Terminate(ctx))
+	}
+	return fmt.Sprintf("amqp://artemis:artemis@%s:%s", host, port.Port()), cleanup
+}
+
 {%- set first_group_id = root.messagegroups.keys() | list | first %}
 {%- set first_group = root.messagegroups.values() | list | first %}
 {%- set groupname = first_group_id | pascal | strip_namespace %}
@@ -50,6 +89,76 @@ func (s *fakeAmqpSender) Close(ctx context.Context) error {
 {%- set needs_source_param = true %}
 {%- endif %}
 {%- endif %}
+
+func Test{{ class_name }}_IntegrationArtemisRoundTrip(t *testing.T) {
+	testcontainers.SkipIfProviderIsNotHealthy(t)
+	{%- if isCloudEvent %}
+	addr, cleanup := startArtemisProducerIntegrationTest(t)
+	defer cleanup()
+
+	for _, tc := range []struct {
+		name string
+		mode ContentMode
+	}{
+		{name: "Structured", mode: ContentModeStructured},
+		{name: "Binary", mode: ContentModeBinary},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			node := fmt.Sprintf("test.queue.%s", tc.mode)
+
+			conn, err := amqp.Dial(ctx, addr, nil)
+			require.NoError(t, err)
+			defer conn.Close()
+			session, err := conn.NewSession(ctx, nil)
+			require.NoError(t, err)
+			defer session.Close(context.Background())
+			receiver, err := session.NewReceiver(ctx, node, nil)
+			require.NoError(t, err)
+			defer receiver.Close(context.Background())
+
+			producer, err := New{{ class_name }}(addr, node)
+			require.NoError(t, err)
+			defer producer.Close(context.Background())
+			producer.SetContentMode(tc.mode)
+			var testData {{ message_body_type }}
+
+			err = producer.Send{{ messagename }}(ctx, testData{% if needs_source_param %}, "test-source"{% endif %}{% if "type" not in first_message.envelopemetadata %}, "{{ first_message_id }}"{% endif %})
+			require.NoError(t, err)
+
+			msg, err := receiver.Receive(ctx, nil)
+			require.NoError(t, err)
+			require.NoError(t, receiver.AcceptMessage(ctx, msg))
+			require.NotNil(t, msg)
+			require.NotEmpty(t, msg.GetData())
+
+			if tc.mode == ContentModeStructured {
+				require.NotNil(t, msg.Properties)
+				require.NotNil(t, msg.Properties.ContentType)
+				assert.Equal(t, "application/cloudevents+json", *msg.Properties.ContentType)
+				var envelope map[string]any
+				require.NoError(t, json.Unmarshal(msg.GetData(), &envelope))
+				assert.Equal(t, "1.0", envelope["specversion"])
+				assert.Equal(t, "{{ first_message.envelopemetadata.type.value if "type" in first_message.envelopemetadata and first_message.envelopemetadata.type.value else first_message_id }}", envelope["type"])
+			} else {
+				require.NotNil(t, msg.ApplicationProperties)
+				foundCloudEventsProperty := false
+				for name := range msg.ApplicationProperties {
+					if len(name) > len("cloudEvents:") && name[:len("cloudEvents:")] == "cloudEvents:" {
+						foundCloudEventsProperty = true
+						break
+					}
+				}
+				assert.True(t, foundCloudEventsProperty)
+				assert.Equal(t, "{{ first_message.envelopemetadata.type.value if "type" in first_message.envelopemetadata and first_message.envelopemetadata.type.value else first_message_id }}", msg.ApplicationProperties["cloudEvents:type"])
+			}
+		})
+	}
+	{%- else %}
+	t.Skip("first message is not a CloudEvent")
+	{%- endif %}
+}
 
 func Test{{ class_name }}_StructuredCloudEventMessage(t *testing.T) {
 	{%- if isCloudEvent %}

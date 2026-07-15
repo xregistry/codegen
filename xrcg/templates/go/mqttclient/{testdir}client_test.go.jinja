@@ -16,12 +16,18 @@ package {{ project_name | snake }}_test
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/eclipse/paho.golang/paho"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	{%- if uses_data_package %}
 	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | snake }}/pkg/{{ data_project_name }}"
@@ -38,6 +44,36 @@ type fakePublisher struct {
 func (f *fakePublisher) Publish(ctx context.Context, p *paho.Publish) (*paho.PublishResponse, error) {
 	f.publishes = append(f.publishes, p)
 	return &paho.PublishResponse{}, nil
+}
+
+func startMosquittoBroker(t *testing.T, ctx context.Context) (testcontainers.Container, string) {
+	t.Helper()
+	configPath := filepath.Join(t.TempDir(), "mosquitto.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte("listener 1883\nallow_anonymous true\n"), 0o644))
+
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "eclipse-mosquitto:2",
+			ExposedPorts: []string{"1883/tcp"},
+			Files: []testcontainers.ContainerFile{
+				{
+					HostFilePath:      configPath,
+					ContainerFilePath: "/mosquitto/config/mosquitto.conf",
+					FileMode:          0o644,
+				},
+			},
+			WaitingFor: wait.ForListeningPort("1883/tcp"),
+		},
+		Started: true,
+	})
+	require.NoError(t, err)
+
+	host, err := container.Host(ctx)
+	require.NoError(t, err)
+	port, err := container.MappedPort(ctx, "1883/tcp")
+	require.NoError(t, err)
+
+	return container, fmt.Sprintf("mqtt://%s:%s", host, port.Port())
 }
 
 {%- for messagegroupid, messagegroup in root.messagegroups.items() %}
@@ -71,6 +107,117 @@ func Test{{ class_name }}SubscriptionTopicsCompile(t *testing.T) {
 		assert.NotContains(t, topic, "{")
 	}
 }
+
+{%- if loop.first %}
+{%- set first_messageids = [] %}
+{%- set first_messages = [] %}
+{%- for messageid, message in messagegroup.messages.items() %}
+{%- if not first_messageids %}
+{%- set _ = first_messageids.append(messageid) %}
+{%- set _ = first_messages.append(message) %}
+{%- endif %}
+{%- endfor %}
+{%- if first_messageids %}
+{%- set first_messageid = first_messageids[0] %}
+{%- set first_message = first_messages[0] %}
+{%- set first_messagename = first_messageid | pascal | strip_namespace %}
+{%- set first_message_body_type = mqtt.body_type(data_project_name, root, first_message) %}
+{%- set first_topic = mqtt.get_topic(first_message) or first_messageid %}
+{%- set first_isCloudEvent = cloudEvents.isCloudEvent(first_message) %}
+{%- set first_topic_vars = [] %}
+{%- for ph in first_topic | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+{%- if ph not in first_topic_vars %}
+{%- set _ = first_topic_vars.append(ph) %}
+{%- endif %}
+{%- endfor %}
+{%- set first_source_vars = [] %}
+{%- if first_isCloudEvent and first_message.envelopemetadata and "source" in first_message.envelopemetadata and first_message.envelopemetadata.source.value %}
+{%- for ph in first_message.envelopemetadata.source.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+{%- if ph not in first_topic_vars and ph not in first_source_vars %}
+{%- set _ = first_source_vars.append(ph) %}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+{%- set first_extension_params = [] %}
+{%- if first_isCloudEvent and first_message.envelopemetadata %}
+{%- for attrname, attribute in first_message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype"] and not attribute.value %}
+{%- set _ = first_extension_params.append(attrname) %}
+{%- endfor %}
+{%- endif %}
+{%- set first_needs_source_param = first_isCloudEvent and (not first_message.envelopemetadata or "source" not in first_message.envelopemetadata) %}
+{%- set first_needs_type_param = first_isCloudEvent and (not first_message.envelopemetadata or "type" not in first_message.envelopemetadata) %}
+type {{ class_name | lower }}IntegrationHandler struct {
+	received chan string
+	errors   chan error
+}
+
+{%- for messageid, message in messagegroup.messages.items() %}
+{%- set messagename = messageid | pascal | strip_namespace %}
+{%- set message_body_type = mqtt.body_type(data_project_name, root, message) %}
+{%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
+{%- if isCloudEvent %}
+func (h *{{ class_name | lower }}IntegrationHandler) Handle{{ messagename }}(ctx context.Context, event cloudevents.Event, data {{ message_body_type }}, topicParams map[string]string) error {
+{%- else %}
+func (h *{{ class_name | lower }}IntegrationHandler) Handle{{ messagename }}(ctx context.Context, data {{ message_body_type }}, topicParams map[string]string) error {
+{%- endif %}
+	{%- if loop.first %}
+	h.received <- "{{ messageid }}"
+	{%- endif %}
+	return nil
+}
+{%- endfor %}
+
+func (h *{{ class_name | lower }}IntegrationHandler) HandleError(ctx context.Context, err error) {
+	h.errors <- err
+}
+
+func Test{{ class_name }}IntegrationRoundTrip(t *testing.T) {
+	testcontainers.SkipIfProviderIsNotHealthy(t)
+
+	for _, tc := range []struct {
+		name        string
+		contentMode ContentMode
+	}{
+		{name: "Structured", contentMode: ContentModeStructured},
+		{name: "Binary", contentMode: ContentModeBinary},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+
+			container, brokerURL := startMosquittoBroker(t, ctx)
+			defer func() {
+				require.NoError(t, container.Terminate(context.Background()))
+			}()
+
+			client, err := New{{ class_name }}(ctx, brokerURL, "test-client-"+tc.name, tc.contentMode)
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, client.Close(context.Background()))
+			}()
+
+			handler := &{{ class_name | lower }}IntegrationHandler{
+				received: make(chan string, 1),
+				errors:   make(chan error, 1),
+			}
+			require.NoError(t, client.Subscribe(ctx, handler, []string{"#"}, 1))
+
+			var data {{ first_message_body_type }}
+			require.NoError(t, client.Publish{{ first_messagename }}(ctx, data{% for var in first_topic_vars %}, "test-{{ var }}"{% endfor %}{% for var in first_source_vars %}, "test-{{ var }}"{% endfor %}{% if first_needs_source_param %}, "test-source"{% endif %}{% if first_needs_type_param %}, "{{ first_messageid }}"{% endif %}{% for attr in first_extension_params %}, "test-{{ attr }}"{% endfor %}))
+
+			select {
+			case received := <-handler.received:
+				require.Equal(t, "{{ first_messageid }}", received)
+			case err := <-handler.errors:
+				require.NoError(t, err)
+			case <-time.After(15 * time.Second):
+				require.Fail(t, "timed out waiting for MQTT round-trip")
+			}
+		})
+	}
+}
+{%- endif %}
+{%- endif %}
 
 {%- for messageid, message in messagegroup.messages.items() %}
 {%- set messagename = messageid | pascal | strip_namespace %}
