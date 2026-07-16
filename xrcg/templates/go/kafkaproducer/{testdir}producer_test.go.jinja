@@ -19,7 +19,7 @@ import (
 	testcontainers "github.com/testcontainers/testcontainers-go"
 	tckafka "github.com/testcontainers/testcontainers-go/modules/kafka"
 	
-	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | snake }}/pkg/{{ data_project_name }}"
+	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | go_package }}/pkg/{{ data_project_name | go_package }}"
 	. "{{ project_name | snake }}"
 )
 

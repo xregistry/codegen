@@ -16,12 +16,12 @@ require (
 	github.com/eclipse/paho.golang v0.23.0
 	github.com/google/uuid v1.6.0
 	{%- if uses_data_package %}
-	github.com/username/{{ data_project_name | snake }} v0.0.0
+	github.com/username/{{ data_project_name | go_package }} v0.0.0
 	{%- endif %}
 	github.com/stretchr/testify v1.8.4
 	github.com/testcontainers/testcontainers-go v0.27.0
 )
 
 {%- if uses_data_package %}
-replace github.com/username/{{ data_project_name | snake }} => ../{{ data_project_name }}
+replace github.com/username/{{ data_project_name | go_package }} => ../{{ data_project_name }}
 {%- endif %}

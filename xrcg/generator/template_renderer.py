@@ -955,6 +955,7 @@ class TemplateRenderer:
         env.filters['toyaml'] = JinjaFilters.to_yaml
         env.filters['proto'] = JinjaFilters.proto
         env.filters['go_type'] = JinjaFilters.go_type
+        env.filters['go_package'] = JinjaFilters.go_package
         env.filters['exists'] = JinjaFilters.exists
         env.filters['existswithout'] = JinjaFilters.exists_without
         env.filters['push'] = self.ctx.stacks.push
