@@ -25,7 +25,6 @@ from xrcg.cli import logger
 from xrcg.generator.generator_context import GeneratorContext
 from xrcg.generator.jinja_extensions import JinjaExtensions, TemplateError
 from xrcg.generator.jinja_filters import JinjaFilters
-from xrcg.generator.python_codegen_postprocessor import apply_python_avrotize_fixes
 from xrcg.generator.schema_utils import SchemaUtils
 from xrcg.generator.url_utils import URLUtils
 
@@ -283,13 +282,12 @@ class TemplateRenderer:
                         merged_schema, project_data_dir, package_name=self.data_project_name,
                         dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled
                     )
-                    apply_python_avrotize_fixes(project_data_dir)
                 elif self.language == "cs":
                     avrotize.convert_avro_schema_to_csharp(
                         merged_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
-                        pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled
+                        pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled,
+                        target_framework=self._get_target_framework()
                     )
-                    self._update_csproj_target_framework(project_data_dir)
                 elif self.language == "java":
                     # Java: use lowercase package name to match Maven artifact conventions
                     java_package_name = self.data_project_name.lower().replace('-', '_')
@@ -353,11 +351,11 @@ class TemplateRenderer:
                 jstruct_schema, project_data_dir, package_name=self.data_project_name,
                 dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled
             )
-            apply_python_avrotize_fixes(project_data_dir)
         elif self.language == "cs":
             convert_structure_schema_to_csharp(
                 jstruct_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
-                pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled
+                pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled,
+                target_framework=self._get_target_framework()
             )
         elif self.language == "java":
             # Java: use lowercase package name to match Maven artifact conventions.
@@ -463,22 +461,6 @@ class TemplateRenderer:
             if m:
                 return m.group(1)
         return 'net10.0'
-
-    def _update_csproj_target_framework(self, project_data_dir: str) -> None:
-        """Update Avrotize-generated .csproj files to match our target framework."""
-        target_fw = self._get_target_framework()
-        for csproj_path in glob.glob(os.path.join(project_data_dir, '**', '*.csproj'), recursive=True):
-            with open(csproj_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            updated = re.sub(
-                r'<TargetFramework>net\d+\.\d+</TargetFramework>',
-                f'<TargetFramework>{target_fw}</TargetFramework>',
-                content
-            )
-            if updated != content:
-                with open(csproj_path, 'w', encoding='utf-8') as f:
-                    f.write(updated)
-                logger.debug("Updated TargetFramework to %s in %s", target_fw, csproj_path)
 
     def render_code_templates(
             self, code_project_name: str, main_project_name: str, data_project_name: str,
@@ -973,6 +955,7 @@ class TemplateRenderer:
         env.filters['toyaml'] = JinjaFilters.to_yaml
         env.filters['proto'] = JinjaFilters.proto
         env.filters['go_type'] = JinjaFilters.go_type
+        env.filters['go_package'] = JinjaFilters.go_package
         env.filters['exists'] = JinjaFilters.exists
         env.filters['existswithout'] = JinjaFilters.exists_without
         env.filters['push'] = self.ctx.stacks.push

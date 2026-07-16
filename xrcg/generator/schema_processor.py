@@ -1,6 +1,5 @@
 """Schema-specific resource processor with avrotize integration."""
 
-import glob
 import json
 import os
 import re
@@ -12,7 +11,6 @@ import avrotize
 
 from xrcg.cli import logger
 from xrcg.generator.jinja_filters import JinjaFilters
-from xrcg.generator.python_codegen_postprocessor import apply_python_avrotize_fixes
 
 JsonNode = Union[Dict[str, 'JsonNode'], List['JsonNode'], str, bool, int, float, None]
 
@@ -162,13 +160,12 @@ class SchemaProcessor(ResourceProcessor):
                 merged_schema, project_data_dir, package_name=data_project_name,
                 dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled
             )
-            apply_python_avrotize_fixes(project_data_dir)
         elif language == "cs":
             avrotize.convert_avro_schema_to_csharp(
                 merged_schema, project_data_dir, base_namespace=JinjaFilters.pascal(data_project_name),
-                pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled
+                pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled,
+                target_framework=self._get_target_framework()
             )
-            self._update_csproj_target_framework(project_data_dir)
         elif language == "java":
             avrotize.convert_avro_schema_to_java(
                 merged_schema, project_data_dir, package_name=data_project_name,
@@ -217,22 +214,6 @@ class SchemaProcessor(ResourceProcessor):
             if m:
                 return m.group(1)
         return 'net10.0'
-
-    def _update_csproj_target_framework(self, project_data_dir: str) -> None:
-        """Update Avrotize-generated .csproj files to match our target framework."""
-        target_fw = self._get_target_framework()
-        for csproj_path in glob.glob(os.path.join(project_data_dir, '**', '*.csproj'), recursive=True):
-            with open(csproj_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            updated = re.sub(
-                r'<TargetFramework>net\d+\.\d+</TargetFramework>',
-                f'<TargetFramework>{target_fw}</TargetFramework>',
-                content
-            )
-            if updated != content:
-                with open(csproj_path, 'w', encoding='utf-8') as f:
-                    f.write(updated)
-                logger.debug("Updated TargetFramework to %s in %s", target_fw, csproj_path)
 
     def _extract_schema_format_and_content(self, schema_data: JsonNode, schema_ref: str, 
                                           root_document: JsonNode) -> tuple[str, JsonNode]:

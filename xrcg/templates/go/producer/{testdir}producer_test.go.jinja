@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 	{%- if _t_uses_data %}
 
-	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | snake }}/pkg/{{ data_project_name }}"
+	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | go_package }}/pkg/{{ data_project_name | go_package }}"
 	{%- endif %}
 	. "{{ project_name | snake }}"
 )

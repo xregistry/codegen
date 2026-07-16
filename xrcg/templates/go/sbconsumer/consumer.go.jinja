@@ -15,7 +15,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 
-	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | snake }}/pkg/{{ data_project_name }}"
+	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | go_package }}/pkg/{{ data_project_name | go_package }}"
 )
 
 type MessageReceiver interface {

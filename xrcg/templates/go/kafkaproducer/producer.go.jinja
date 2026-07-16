@@ -17,7 +17,7 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/google/uuid"
 	
-	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | snake }}/pkg/{{ data_project_name }}"
+	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | go_package }}/pkg/{{ data_project_name | go_package }}"
 )
 
 // ContentMode specifies how CloudEvents are serialized to Kafka

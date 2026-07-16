@@ -126,6 +126,32 @@ class JinjaFilters:
         return re.sub(r'(?<!^)(?<![_[A-Z])(?=[A-Z])', '_', string).lower()
 
     @staticmethod
+    def go_package(string: str) -> str:
+        """Sanitize a name to the Go package/module identifier avrotize emits.
+
+        Mirrors ``avrotize.avrotogo.AvroToGo._safe_package_name`` so that the
+        import paths and the ``go.mod`` module path emitted by the main-project
+        templates match the module, directory and ``package`` names avrotize
+        writes for the Avrotize-generated data project. Keep in sync with
+        avrotize; a divergence makes ``go mod tidy`` unable to resolve the local
+        data module.
+        """
+        if not string:
+            return 'pkg'
+        safe = re.sub(r'[^a-zA-Z0-9_]+', '_', string).strip('_').lower()
+        if not safe or not re.match(r'^[a-z]', safe):
+            safe = f'pkg_{safe}' if safe else 'pkg'
+        go_reserved = {
+            'break', 'default', 'func', 'interface', 'select', 'case', 'defer',
+            'go', 'map', 'struct', 'chan', 'else', 'goto', 'package', 'switch',
+            'const', 'fallthrough', 'if', 'range', 'type', 'continue', 'for',
+            'import', 'return', 'var',
+        }
+        if safe in go_reserved:
+            return f'{safe}_'
+        return safe
+
+    @staticmethod
     def camel(string: str) -> str:
         """Convert a string to camelCase."""
         logger.debug("Converting string: %s to camelCase", string)

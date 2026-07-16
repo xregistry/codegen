@@ -437,6 +437,67 @@ def test_codegen_cs_mqttclient_dedups_repeated_topic_placeholder():
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+def test_codegen_cs_data_project_targetframework_matches_main():
+    """The Avrotize-generated C# *data* project must target the same framework
+    as the generated main project.
+
+    Historically a ``_update_csproj_target_framework`` post-processor rewrote the
+    ``<TargetFramework>`` of the Avrotize output to match the templates. That
+    post-processing was removed once Avrotize exposed a ``target_framework``
+    parameter (clemensv/avrotize#403); the renderer now passes
+    ``_get_target_framework()`` straight through to ``convert_*_schema_to_csharp``.
+    This regression test locks in that the data project ends up aligned with the
+    main project (and with the expected framework) so a future divergence between
+    Avrotize's default framework and the repository's target framework is caught
+    without re-introducing any post-processing step.
+    """
+    definitions_path = os.path.join(project_root, 'test/xreg/contoso-erp.xreg.json')
+    output_dir = tempfile.mkdtemp()
+    try:
+        sys.argv = [
+            'xrcg', 'generate',
+            '--style', 'kafkaproducer',
+            '--language', 'cs',
+            '--definitions', definitions_path,
+            '--output', output_dir,
+            '--projectname', 'TfmAlign'
+        ]
+        assert xrcg.cli() == 0
+
+        csproj_paths = []
+        for dirpath, _dirnames, filenames in os.walk(output_dir):
+            for name in filenames:
+                if name.endswith('.csproj'):
+                    csproj_paths.append(os.path.join(dirpath, name))
+        assert csproj_paths, f"no .csproj generated under {output_dir}"
+
+        # The Avrotize-generated data project must be present; its
+        # TargetFramework used to be rewritten by the removed post-processor.
+        data_csprojs = [p for p in csproj_paths
+                        if os.path.basename(p) == 'TfmAlignData.csproj']
+        assert data_csprojs, f"data project csproj not found among {csproj_paths}"
+
+        tfm_re = re.compile(r'<TargetFramework>(.*?)</TargetFramework>')
+
+        def _tfm_of(path):
+            with open(path, 'r', encoding='utf-8') as handle:
+                match = tfm_re.search(handle.read())
+            assert match, f"no <TargetFramework> in {path}"
+            return match.group(1)
+
+        expected = TemplateRenderer(
+            GeneratorContext(), 'TfmAlign', 'cs', 'kafkaproducer',
+            output_dir, '', {}, [], {}, False, False
+        )._get_target_framework()
+
+        for path in csproj_paths:
+            actual = _tfm_of(path)
+            assert actual == expected, (
+                f"{os.path.basename(path)} targets {actual}, expected {expected}")
+    finally:
+        shutil.rmtree(output_dir, ignore_errors=True)
+
+
 def test_extract_schema_info_keeps_names_for_top_level_schemagroup_refs():
     """Top-level schemagroup refs must retain class and namespace metadata.
 
