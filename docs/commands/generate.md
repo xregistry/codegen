@@ -32,6 +32,8 @@ xrcg generate --projectname <name> --language <lang> --style <style> \
 | `cs` | C# / .NET | .NET SDK 6.0+ |
 | `py` | Python | Python 3.9+ |
 | `ts` | TypeScript/JavaScript | Node.js 18+, npm/yarn |
+| `go` | Go | Go 1.21+ |
+| `rust` | Rust | Rust 1.75+ (cargo) |
 | `asyncapi` | AsyncAPI 3.0 specification | None (YAML output) |
 | `openapi` | OpenAPI 3.0 specification | None (YAML output) |
 | `asaql` | Azure Stream Analytics Query | None (SQL output) |
@@ -98,6 +100,16 @@ Styles determine the protocol binding and whether the generated code is a produc
 | `amqpproducer` | AMQP 1.0 producer using rhea |
 | `amqpconsumer` | AMQP 1.0 consumer |
 | `mqttclient` | MQTT 5.0 client |
+
+### Rust Styles
+
+| Style | Description |
+|-------|-------------|
+| `producer` | HTTP CloudEvents producer (structured and binary content modes) using reqwest |
+
+Rust data types are generated as a companion Serde-serializable crate. Additional
+protocol styles (AMQP, Kafka, MQTT, Event Hubs, Service Bus producers/consumers)
+are tracked as follow-up work.
 
 ### AsyncAPI/OpenAPI Styles
 

@@ -186,6 +186,15 @@ class SchemaProcessor(ResourceProcessor):
                 merged_schema, project_data_dir, package_name=data_project_name,
                 avro_annotation=avro_enabled, json_annotation=json_enabled
             )
+        elif language == "rust":
+            # avrotize's Rust Avro-annotation emitter currently produces
+            # non-compiling code, so Rust data crates are generated serde-only.
+            # Tracked upstream at clemensv/avrotize#406.
+            avrotize.convert_avro_schema_to_rust(
+                merged_schema, project_data_dir,
+                package_name=JinjaFilters.rust_package(data_project_name),
+                avro_annotation=False, serde_annotation=json_enabled
+            )
 
         # Clear the queue after processing
         self.avrotize_queue.clear()
@@ -290,7 +299,7 @@ class SchemaProcessor(ResourceProcessor):
 
     def _requires_avrotize(self, language: str, schema_format_short: str) -> bool:
         """Check if schema requires avrotize processing."""
-        return language in ["py", "cs", "java", "js", "ts", "go"]
+        return language in ["py", "cs", "java", "js", "ts", "go", "rust"]
 
     def convert_jsons_to_avro(self, schema_reference: str, schema_root: JsonNode,
                              namespace_name: str, class_name: str) -> JsonNode:
