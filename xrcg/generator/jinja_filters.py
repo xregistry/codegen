@@ -151,6 +151,89 @@ class JinjaFilters:
             return f'{safe}_'
         return safe
 
+    # Rust reserved words (mirrors avrotize.avrotorust.AvroToRust.reserved_words).
+    _rust_reserved = {
+        'as', 'break', 'const', 'continue', 'crate', 'else', 'enum', 'extern',
+        'false', 'fn', 'for', 'if', 'impl', 'in', 'let', 'loop', 'match', 'mod',
+        'move', 'mut', 'pub', 'ref', 'return', 'self', 'Self', 'static', 'struct',
+        'super', 'trait', 'true', 'type', 'unsafe', 'use', 'where', 'while',
+        'async', 'await', 'dyn',
+    }
+
+    @staticmethod
+    def _rust_escape_ident(name: str) -> str:
+        """Escape a Rust module/identifier segment with ``r#`` when reserved.
+
+        Mirrors ``avrotize.avrotorust.AvroToRust.escaped_identifier`` (``crate``
+        is never escaped because it is the crate root keyword).
+        """
+        if name != 'crate' and name in JinjaFilters._rust_reserved:
+            return f'r#{name}'
+        return name
+
+    @staticmethod
+    def rust_package(string: str) -> str:
+        """Sanitize a name to the Rust crate identifier avrotize emits.
+
+        Mirrors the crate name avrotize's ``AvroToRust`` derives from its
+        ``base_package`` (``package_name.replace('.', '/').lower()`` then, for the
+        Cargo package ``name``, ``.replace('/', '_')``). The main-project
+        templates use this so their ``Cargo.toml`` path dependency and ``use``
+        paths match the crate name/module layout avrotize writes for the data
+        project. Keep in sync with avrotize; a divergence breaks ``cargo build``.
+        """
+        if not string:
+            return 'pkg'
+        safe = re.sub(r'[^a-zA-Z0-9_]+', '_', string).strip('_').lower()
+        if not safe or not re.match(r'^[a-z_]', safe):
+            safe = f'pkg_{safe}' if safe else 'pkg'
+        if safe in JinjaFilters._rust_reserved:
+            return f'{safe}_'
+        return safe
+
+    @staticmethod
+    def rust_type(type_name: str) -> str:
+        """Convert a ``schema_type`` result to a fully qualified Rust type path.
+
+        ``schema_type`` yields ``"<DataProjectName>.<namespace...>.<TypeName>"``
+        (e.g. ``ContosoErpData.contoso.erp.events.OrderCreated``). Avrotize's
+        Rust emitter preserves the Avro namespace as nested lowercase modules and
+        places each type in a module named after the lowercased type name, so the
+        matching ``use`` path is
+        ``<crate>::<namespace...>::<typename_lower>::<TypeName>`` (see
+        ``avrotize.avrotorust.AvroToRust.generate_struct`` / ``to_file_name``).
+        """
+        if not type_name:
+            return "serde_json::Value"
+
+        type_lower = type_name.lower()
+        primitives = {
+            "string": "String", "str": "String",
+            "int": "i32", "integer": "i32", "int32": "i32",
+            "long": "i64", "int64": "i64",
+            "float": "f32", "float32": "f32",
+            "double": "f64", "float64": "f64", "number": "f64",
+            "boolean": "bool", "bool": "bool",
+            "bytes": "Vec<u8>", "binary": "Vec<u8>", "byte[]": "Vec<u8>", "[]byte": "Vec<u8>",
+            "object": "serde_json::Value",
+        }
+        if type_lower in primitives:
+            return primitives[type_lower]
+
+        if "." not in type_name:
+            return JinjaFilters.pascal(type_name)
+
+        parts = type_name.split(".")
+        crate = JinjaFilters.rust_package(parts[0])
+        type_part = JinjaFilters.pascal(parts[-1])
+        type_module = JinjaFilters._rust_escape_ident(type_part.lower())
+        namespace_segments = [
+            JinjaFilters._rust_escape_ident(seg.lower())
+            for seg in parts[1:-1] if seg
+        ]
+        segments = [crate] + namespace_segments + [type_module, type_part]
+        return "::".join(segments)
+
     @staticmethod
     def camel(string: str) -> str:
         """Convert a string to camelCase."""

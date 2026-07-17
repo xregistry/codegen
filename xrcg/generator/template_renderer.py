@@ -309,6 +309,16 @@ class TemplateRenderer:
                         merged_schema, project_data_dir, package_name=self.data_project_name,
                         avro_annotation=avro_enabled, json_annotation=json_enabled
                     )
+                elif self.language == "rust":
+                    # avrotize's Rust Avro-annotation emitter currently produces
+                    # non-compiling code (lazy_static SCHEMA in impl blocks), so
+                    # Rust data crates are generated serde-only. Tracked upstream
+                    # at clemensv/avrotize#406.
+                    avrotize.convert_avro_schema_to_rust(
+                        merged_schema, project_data_dir,
+                        package_name=JinjaFilters.rust_package(self.data_project_name),
+                        avro_annotation=False, serde_annotation=json_enabled
+                    )
         self.render_code_templates(
             self.project_name, self.main_project_name, self.data_project_name, self.style, project_dir, xregistry_document,
             code_template_dirs, code_env, True, self.template_args, self.suppress_code_output
@@ -340,6 +350,7 @@ class TemplateRenderer:
         from avrotize.structuretopython import convert_structure_schema_to_python
         from avrotize.structuretogo import convert_structure_schema_to_go
         from avrotize.structuretots import convert_structure_schema_to_typescript
+        from avrotize.structuretorust import convert_structure_schema_to_rust
         
         logger.debug("Processing JSON Structure schemas with Avrotize")
         
@@ -374,6 +385,14 @@ class TemplateRenderer:
             convert_structure_schema_to_go(
                 jstruct_schema, project_data_dir, package_name=self.data_project_name,
                 json_annotation=json_enabled, avro_annotation=avro_enabled
+            )
+        elif self.language == "rust":
+            # avrotize.structuretorust has no Avro emitter, so avro_enabled is
+            # intentionally not forwarded here.
+            convert_structure_schema_to_rust(
+                jstruct_schema, project_data_dir,
+                package_name=JinjaFilters.rust_package(self.data_project_name),
+                serde_annotation=json_enabled
             )
 
     def convert_proto_to_avro(self, schema_reference: str, schema_root: str) -> JsonNode:
@@ -956,6 +975,8 @@ class TemplateRenderer:
         env.filters['proto'] = JinjaFilters.proto
         env.filters['go_type'] = JinjaFilters.go_type
         env.filters['go_package'] = JinjaFilters.go_package
+        env.filters['rust_type'] = JinjaFilters.rust_type
+        env.filters['rust_package'] = JinjaFilters.rust_package
         env.filters['exists'] = JinjaFilters.exists
         env.filters['existswithout'] = JinjaFilters.exists_without
         env.filters['push'] = self.ctx.stacks.push
@@ -1242,7 +1263,7 @@ class TemplateRenderer:
 
     def should_use_avrotize(self, schema_info: Dict[str, Any]) -> bool:
         """Check if schema should be processed with avrotize."""
-        return self.language in ["py", "cs", "java", "js", "ts", "go"]
+        return self.language in ["py", "cs", "java", "js", "ts", "go", "rust"]
 
     def convert_json_to_avro_if_needed(self, schema_info: Dict[str, Any]) -> None:
         """Convert JSON schema to Avro if needed."""
