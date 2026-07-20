@@ -1,5 +1,6 @@
 """ Core functions for the xregistry commands with dependency resolution """
 
+import copy
 import json
 import os
 from typing import Any, Dict, List, Tuple, Union, Set, Optional
@@ -946,6 +947,170 @@ class MessageResolver:
                 self.logger.error(f"Failed to resolve basemessage for: {message_id} (circular reference)")
 
 
+class AliasResolver:
+    """Resolves xRegistry resource aliases so they are transparent to codegen.
+
+    A resource alias is defined by the xRegistry Core specification under
+    *Cross Referencing Resources*. An alias resource carries an ``xref``
+    attribute — either at the resource level or inside the resource's ``meta``
+    sub-object — whose value is an XID naming a *same-typed* resource in the
+    same registry document, e.g. ``/schemagroups/canonical/schemas/EventData``.
+    The alias projects the target's metadata, versions, default version, and
+    document through the alias identity.
+
+    This resolver runs during document loading, before validation, schema
+    processing, and template rendering. Each alias resource is replaced in
+    place by a deep copy of its target's content while retaining the alias
+    resource's own identity (its collection key and ``<singular>id``). As a
+    result, downstream consumers never observe ``xref`` and a document whose
+    only "invalid" content was an alias validates cleanly against the document
+    schema.
+
+    Per the Core specification, aliases are **not** resolved transitively: an
+    alias that targets another alias is reported as an error, as are malformed
+    targets, missing targets, type mismatches, and self-references.
+    """
+
+    def __init__(self, loader: 'XRegistryLoader'):
+        self.loader = loader
+        self.model = loader.model
+        self.logger = logging.getLogger(__name__ + ".AliasResolver")
+
+    @staticmethod
+    def _get_xref(resource: Any) -> Optional[str]:
+        """Return the ``xref`` value of a resource, honoring both the
+        resource-level ``xref`` attribute and the ``meta.xref`` form. Returns
+        the first non-empty value found, or None."""
+        if not isinstance(resource, dict):
+            return None
+        xref = resource.get("xref")
+        if xref:
+            return xref
+        meta = resource.get("meta")
+        if isinstance(meta, dict):
+            meta_xref = meta.get("xref")
+            if meta_xref:
+                return meta_xref
+        return None
+
+    def _resource_plurals_by_group(self) -> Dict[str, Dict[str, Optional[str]]]:
+        """Build a lookup of ``group_plural -> {resource_plural: resource_singular}``
+        from the model so alias resolution works for every resource type
+        (messages, schemas, and any custom resources) without hard-coding."""
+        result: Dict[str, Dict[str, Optional[str]]] = {}
+        for group_plural, gdef in self.model.groups.items():
+            if not isinstance(gdef, dict):
+                continue
+            resources = gdef.get("resources", [])
+            plurals: Dict[str, Optional[str]] = {}
+            if isinstance(resources, list):
+                for r in resources:
+                    if isinstance(r, dict) and r.get("plural"):
+                        plurals[r["plural"]] = r.get("singular")
+            elif isinstance(resources, dict):
+                for rid, r in resources.items():
+                    if isinstance(r, dict):
+                        plurals[r.get("plural", rid)] = r.get("singular")
+            result[group_plural] = plurals
+        return result
+
+    def resolve_all_aliases(self, xreg_doc: Dict[str, Any]) -> None:
+        """Resolve every resource alias in the document in place."""
+        if not isinstance(xreg_doc, dict):
+            return
+
+        group_resource_plurals = self._resource_plurals_by_group()
+
+        for group_plural, groups in xreg_doc.items():
+            resource_plurals = group_resource_plurals.get(group_plural)
+            if not resource_plurals or not isinstance(groups, dict):
+                continue
+            for group_id, group in groups.items():
+                if not isinstance(group, dict):
+                    continue
+                for res_plural, res_singular in resource_plurals.items():
+                    collection = group.get(res_plural)
+                    if not isinstance(collection, dict):
+                        continue
+                    for res_id, resource in list(collection.items()):
+                        xref = self._get_xref(resource)
+                        if not xref:
+                            continue
+                        alias_path = f"/{group_plural}/{group_id}/{res_plural}/{res_id}"
+                        resolved = self._resolve_alias(
+                            xref, alias_path, res_plural, res_singular,
+                            res_id, xreg_doc)
+                        if resolved is not None:
+                            collection[res_id] = resolved
+
+    def _resolve_alias(self, xref: str, alias_path: str, res_plural: str,
+                       res_singular: Optional[str], alias_id: str,
+                       xreg_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Resolve a single alias to a replacement resource, or return None
+        (leaving the alias untouched) and log an actionable error on failure."""
+        target = xref.strip()
+        segments = [s for s in target.split("/") if s != ""]
+        # Expect an XID of the form /<group>/<groupid>/<resource>/<resourceid>.
+        if len(segments) != 4:
+            self.logger.error(
+                f"Alias {alias_path}: malformed xref target '{xref}'. Expected an "
+                f"XID of the form '/<group>/<groupid>/<resource>/<resourceid>'.")
+            return None
+
+        t_group_plural, t_group_id, t_res_plural, t_res_id = segments
+        target_path = f"/{t_group_plural}/{t_group_id}/{t_res_plural}/{t_res_id}"
+
+        # Type check: the target must name a same-typed resource.
+        if t_res_plural != res_plural:
+            self.logger.error(
+                f"Alias {alias_path}: xref target '{target_path}' is a different "
+                f"resource type ('{t_res_plural}' vs '{res_plural}'). Aliases must "
+                f"target a same-typed resource.")
+            return None
+
+        # Self-reference.
+        if target_path == alias_path:
+            self.logger.error(
+                f"Alias {alias_path}: xref target refers to itself.")
+            return None
+
+        # Navigate to the target resource in the same document.
+        groups = xreg_doc.get(t_group_plural)
+        target_group = groups.get(t_group_id) if isinstance(groups, dict) else None
+        target_collection = (
+            target_group.get(t_res_plural) if isinstance(target_group, dict) else None)
+        target_resource = (
+            target_collection.get(t_res_id) if isinstance(target_collection, dict) else None)
+        if not isinstance(target_resource, dict):
+            self.logger.error(
+                f"Alias {alias_path}: xref target '{target_path}' was not found in "
+                f"the registry document.")
+            return None
+
+        # Core does not perform transitive alias resolution.
+        if self._get_xref(target_resource):
+            self.logger.error(
+                f"Alias {alias_path}: xref target '{target_path}' is itself an "
+                f"alias. Core does not perform transitive alias resolution; point "
+                f"the alias at a canonical resource.")
+            return None
+
+        # Project the target through the alias identity.
+        resolved = copy.deepcopy(target_resource)
+        if res_singular:
+            resolved[f"{res_singular}id"] = alias_id
+        for key in ("xref", "self", "xid"):
+            resolved.pop(key, None)
+        meta = resolved.get("meta")
+        if isinstance(meta, dict):
+            meta.pop("xref", None)
+            if not meta:
+                resolved.pop("meta", None)
+
+        self.logger.info(f"Resolved alias {alias_path} -> {target_path}")
+        return resolved
+
+
 class XRegistryLoader:
     """Main loader class for xRegistry documents with dependency resolution."""
     
@@ -954,6 +1119,7 @@ class XRegistryLoader:
         self.dependency_resolver = DependencyResolver(self.model, self)
         self.resource_resolver = ResourceResolver(self)
         self.message_resolver = MessageResolver(self)
+        self.alias_resolver = AliasResolver(self)
         self.logger = logging.getLogger(__name__ + ".XRegistryLoader")
         
         # Schema handling state for template rendering compatibility
@@ -1077,6 +1243,10 @@ class XRegistryLoader:
             # Apply basic resource resolution
             self.resource_resolver.resolve_all_resources(document, headers)
             
+            # Resolve resource aliases (xref) so they are transparent to codegen
+            if isinstance(document, dict):
+                self.alias_resolver.resolve_all_aliases(document)
+            
             # Resolve basemessage references
             if isinstance(document, dict):
                 self.message_resolver.resolve_all_basemessages(document)
@@ -1154,6 +1324,10 @@ class XRegistryLoader:
             
             if stacked_document is None:
                 return uris[0], None
+            
+            # Resolve resource aliases (xref) so they are transparent to codegen
+            if isinstance(stacked_document, dict):
+                self.alias_resolver.resolve_all_aliases(stacked_document)
             
             # Resolve basemessage references in the final stacked document
             if isinstance(stacked_document, dict):
@@ -1348,6 +1522,10 @@ class XRegistryLoader:
             
             # Resolve all individual resource references (like schemaurl, resourceurl)
             self.resource_resolver.resolve_all_resources(composed_document, headers)
+            
+            # Resolve resource aliases (xref) so they are transparent to codegen
+            if isinstance(composed_document, dict):
+                self.alias_resolver.resolve_all_aliases(composed_document)
             
             # Resolve basemessage references
             if isinstance(composed_document, dict):
