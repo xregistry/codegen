@@ -17,7 +17,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v7
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: 3.11
     - name: Set up Java
@@ -62,7 +62,7 @@ jobs:
     - name: Check dotnet version
       run: dotnet --version
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: 3.11
     - name: Install dependencies and build package
@@ -101,7 +101,7 @@ jobs:
         java-version: 21
         maven-version: '3.9.6'
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: 3.11
     - name: Install dependencies and build package
@@ -142,7 +142,7 @@ jobs:
         java-version: 21
         maven-version: '3.9.6'
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: 3.11
     - name: Get CloudNative.CloudEvents.Endpoint package code (java)
@@ -183,7 +183,7 @@ jobs:
       with:
         node-version: '20'
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: 3.11
     - name: Install dependencies and build package
@@ -212,7 +212,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v7
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: 3.11
     - name: Install dependencies and build package
@@ -257,7 +257,7 @@ jobs:
       with:
         go-version: '1.25'
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: 3.11
     - name: Install dependencies and build package
@@ -295,7 +295,7 @@ jobs:
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: 3.11
     - name: Install dependencies and build package
