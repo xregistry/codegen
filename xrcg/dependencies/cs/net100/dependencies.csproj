@@ -14,7 +14,7 @@
       <PackageReference Include="Azure.Storage.Blobs" Version="12.28.0" />
       <PackageReference Include="CloudNative.CloudEvents" Version="2.9.0" />
       <PackageReference Include="CloudNative.CloudEvents.Amqp" Version="2.8.0" />
-      <PackageReference Include="CloudNative.CloudEvents.AspNetCore" Version="2.8.0" />
+      <PackageReference Include="CloudNative.CloudEvents.AspNetCore" Version="2.9.0" />
       <PackageReference Include="CloudNative.CloudEvents.Avro" Version="2.8.0" />
       <PackageReference Include="CloudNative.CloudEvents.Protobuf" Version="2.9.0" />
       <PackageReference Include="CloudNative.CloudEvents.SystemTextJson" Version="2.8.0" />
