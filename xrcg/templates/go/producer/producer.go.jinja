@@ -144,7 +144,7 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	{%- if has_em and "datacontenttype" in message.envelopemetadata and message.envelopemetadata.datacontenttype.value %}
 	event.SetDataContentType("{{ message.envelopemetadata.datacontenttype.value }}")
 	{%- else %}
-	event.SetDataContentType({{ util.get_content_type(message) }})
+	event.SetDataContentType({{ cloudEvents.DefaultContentType(message) }})
 	{%- endif %}
 
 	{%- if message_body_type == "[]byte" %}

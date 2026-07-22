@@ -142,7 +142,7 @@ class {{ class_name }}:
                 {%- if (placeholder | snake) not in declared_params and (placeholder | snake) != 'time' %}_{{ placeholder | snake }}: str, {% endif -%}
             {%- endfor -%}
         {%- endif -%}
-        data: {{ data_type | strip_namespace -}}, content_type: str = "application/json"
+        data: {{ data_type | strip_namespace -}}, content_type: str = {{ cloudEvents.DefaultContentType(message) }}
         {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined and attrname != "time" -%}
             , _{{ attrname }}: typing.Optional[str] = None
         {%- endfor -%}

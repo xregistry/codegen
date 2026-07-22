@@ -11,6 +11,13 @@ true
 true
 {%- endif -%}
 {%- endmacro %}
+{%- macro DefaultContentType(message) -%}
+{%- if message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
+'{{ message.envelopemetadata.datacontenttype.value }}'
+{%- else -%}
+'application/json'
+{%- endif -%}
+{%- endmacro -%}
 
 {#- Generates a list of arguments for "send" methods that correspond to placeholders in uritemplates -#}
 {%- macro DeclareUriTemplateArguments(message) -%}

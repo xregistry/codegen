@@ -401,7 +401,7 @@ func (c *{{ class_name }}) Publish{{ messagename }}(ctx context.Context, data {{
 	{%- for var in topic_vars %}
 	topic = strings.ReplaceAll(topic, "{ {{- var -}} }", {{ var | snake }})
 	{%- endfor %}
-	contentType := {{ mqtt.get_content_type(message) }}
+	contentType := {{ cloudEvents.DefaultContentType(message) }}
 	qos := byte({{ mqtt.get_qos(message) }})
 	retain := {{ mqtt.get_retain(message) }}
 	{%- if isCloudEvent %}

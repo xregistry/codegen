@@ -130,7 +130,7 @@ public class {{ producer_class }} implements AutoCloseable {
         mqttMessage.setQos(effectiveQos);
         mqttMessage.setRetained(effectiveRetain);
         {%- if message.envelopemetadata %}
-        {{ cloudEvents.BuildCloudEvent(message, "dataBytes") | indent(8) }}
+        {{ cloudEvents.BuildCloudEvent(message, "dataBytes", cloudEvents.DefaultContentType(message)) | indent(8) }}
         mqttMessage.setProperties(buildBinaryModeProperties(cloudEvent));
         {%- endif %}
         mqttClient.publish(targetTopic, mqttMessage);

@@ -125,7 +125,7 @@ export class {{ class_name }} {
         {%- endfor %}
             id: uuidv4(),
             data: data,
-            datacontenttype: 'application/json'
+            datacontenttype: {{ cloudEvents.DefaultContentType(message) }}
         });
         
         await this.client.send([cloudEvent]);
@@ -176,7 +176,7 @@ export class {{ class_name }} {
         {%- endfor %}
             id: uuidv4(),
             data: data,
-            datacontenttype: 'application/json'
+            datacontenttype: {{ cloudEvents.DefaultContentType(message) }}
         }));
         
         await this.client.send(cloudEvents);

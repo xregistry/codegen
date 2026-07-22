@@ -100,11 +100,7 @@ public class {{ class_name }} {
             {%- else %}
             .withSource(URI.create("urn:{{ messagegroupid }}"))
             {%- endif %}
-            {%- if "datacontenttype" in message.metadata and "value" in message.metadata.datacontenttype %}
-            .withDataContentType("{{ message.metadata.datacontenttype.value }}")
-            {%- else %}
-            .withDataContentType("application/json")
-            {%- endif %}
+            .withDataContentType({{ cloudEvents.DefaultContentType(message) }})
             .withData(serializeData(data))
             .build();
         
@@ -127,7 +123,7 @@ public class {{ class_name }} {
             
             // Serialize the data as the body
             bodyBytes = serializeData(data);
-            headers.add("content-type", "application/json".getBytes(StandardCharsets.UTF_8));
+            headers.add("content-type", {{ cloudEvents.DefaultContentType(message) }}.getBytes(StandardCharsets.UTF_8));
         }
         
         return new ProducerRecord<>(topic, null, keyBytes, bodyBytes, headers);
@@ -149,12 +145,12 @@ public class {{ class_name }} {
         {%- else %}
         // Serialize as JSON
         bodyBytes = serializeData(data);
-        contentType = "application/json";
+        contentType = {{ cloudEvents.DefaultContentType(message) }};
         {%- endif %}
         {%- else %}
         // Serialize as JSON (default)
         bodyBytes = serializeData(data);
-        contentType = "application/json";
+        contentType = {{ cloudEvents.DefaultContentType(message) }};
         {%- endif %}
         
         headers.add("content-type", contentType.getBytes(StandardCharsets.UTF_8));

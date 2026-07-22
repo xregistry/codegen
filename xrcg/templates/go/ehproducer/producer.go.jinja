@@ -155,8 +155,7 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	{%- if "datacontenttype" in message.envelopemetadata and message.envelopemetadata.datacontenttype.value %}
 	event.SetDataContentType("{{ message.envelopemetadata.datacontenttype.value }}")
 	{%- else %}
-	{%- set content_type = util.get_content_type(message) %}
-	event.SetDataContentType({{ content_type }})
+	event.SetDataContentType({{ cloudEvents.DefaultContentType(message) }})
 	{%- endif %}
 	if err := event.SetData(cloudevents.ApplicationJSON, data); err != nil {
 		return fmt.Errorf("failed to set CloudEvent data: %w", err)
@@ -184,7 +183,7 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
 	{%- endif %}
-	contentType := {{ util.get_content_type(message) }}
+	contentType := {{ cloudEvents.DefaultContentType(message) }}
 	return p.sender.SendEvent(ctx, &azeventhubs.EventData{
 		Body:        body,
 		ContentType: &contentType,

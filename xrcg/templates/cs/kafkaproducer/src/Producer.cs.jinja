@@ -120,11 +120,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {%- if uriargs -%}
         {{- uriargs -}}
         {%- endif -%}
-        {%- if isCloudEvent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
-        , string contentType = "{{ message.envelopemetadata["datacontenttype"]["value"] }}"
-        {%- else -%}
-        , string contentType = System.Net.Mime.MediaTypeNames.Application.Json
-        {%- endif %}
+        , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
         {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %}
         {%- if not ("protocolmetadata" in message and "topic" in message.protocolmetadata and "value" in message.protocolmetadata.topic) %}
         , string? topic = null
@@ -174,11 +170,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {%- if uriargs -%}
         {{- uriargs -}}
         {%- endif -%}
-        {%- if isCloudEvent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
-        , string contentType = "{{ message.envelopemetadata["datacontenttype"]["value"] }}"
-        {%- else -%}
-        , string contentType = System.Net.Mime.MediaTypeNames.Application.Json
-        {%- endif %}
+        , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
         {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %}
         {%- if not ("protocolmetadata" in message and "topic" in message.protocolmetadata and "value" in message.protocolmetadata.topic) %}
         , string? topic = null

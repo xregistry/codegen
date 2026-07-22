@@ -186,9 +186,16 @@ impl {{ struct_name }} {
         {%- endif %}
         ];
         {%- if uses_data %}
-        let datacontenttype = "application/json".to_string();
+        {%- set _dct = message.envelopemetadata.datacontenttype.value if (has_em and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype) else "" %}
+        {%- set _is_xml = _dct.startswith("application/xml") or _dct.startswith("text/xml") %}
+        let datacontenttype = {{ util.get_content_type(message) }}.to_string();
+        {%- if _is_xml %}
+        let data_json: Option<serde_json::Value> = None;
+        let body = data.to_byte_array(&datacontenttype)?;
+        {%- else %}
         let data_json = Some(serde_json::to_value(&data)?);
         let body = serde_json::to_vec(&data)?;
+        {%- endif %}
         {%- else %}
         let datacontenttype = {{ util.get_content_type(message) }}.to_string();
         let data_json: Option<serde_json::Value> = None;

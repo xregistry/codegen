@@ -96,7 +96,7 @@ public class {{ class_name }} {
                 .withDataContentType("application/protobuf")
                 .withData(data.toByteArray())
                 {%- else %}
-                .withDataContentType("application/json")
+                .withDataContentType({{ cloudEvents.DefaultContentType(message) }})
                 .withData(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data))
                 {%- endif %};
 
@@ -164,7 +164,7 @@ public class {{ class_name }} {
             contentType = "application/protobuf";
             {%- else %}
             bodyData = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data);
-            contentType = "application/json";
+            contentType = {{ cloudEvents.DefaultContentType(message) }};
             {%- endif %}
 
             EventData eventData = new EventData(bodyData);

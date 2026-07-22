@@ -91,7 +91,7 @@ public class {{ pascal_group_name | strip_namespace }}MessageFactory {
                 .withDataContentType("application/protobuf")
                 .withData(data.toByteArray())
                 {%- else %}
-                .withDataContentType("application/json")
+                .withDataContentType({{ cloudEvents.DefaultContentType(message) }})
                 .withData(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data))
                 {%- endif %};
 
@@ -165,7 +165,7 @@ public class {{ pascal_group_name | strip_namespace }}MessageFactory {
             contentType = "application/protobuf";
             {%- else %}
             bodyData = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data);
-            contentType = "application/json";
+            contentType = {{ cloudEvents.DefaultContentType(message) }};
             {%- endif %}
 
             ServiceBusMessage serviceBusMessage = new ServiceBusMessage(bodyData);
