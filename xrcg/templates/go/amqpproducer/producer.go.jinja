@@ -87,7 +87,7 @@ func (p *{{ class_name }}) Close(ctx context.Context) error {
 {%- set message_body_type = util.body_type(data_project_name, root, message) %}
 {%- set node = amqp_util.get_node(message) or messageid %}
 {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
-{%- set content_type = util.get_content_type(message) %}
+{%- set content_type = cloudEvents.DefaultContentType(message) %}
 {%- if isCloudEvent %}
 {%- set needs_source_param = "source" not in message.envelopemetadata %}
 {%- if "source" in message.envelopemetadata and message.envelopemetadata.source.value %}

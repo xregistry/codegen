@@ -69,7 +69,7 @@ class {{ class_name }}:
             {%- endif -%}
         {%- endfor -%}
     {%- endif -%}
-    data: {{ util.DeclareDataType( project_name, root, message ) | strip_namespace -}}, content_type: str = "application/json"
+    data: {{ util.DeclareDataType( project_name, root, message ) | strip_namespace -}}, content_type: str = {{ cloudEvents.DefaultContentType(message) }}
     {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined and attrname != "time" -%}
         , _{{ attrname }}: typing.Optional[str] = None
     {%- endfor -%}

@@ -113,7 +113,7 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
         const message = this.create{{ messagename | strip_namespace }}Message(
             data,
@@ -176,7 +176,7 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
         const messages = dataArray.map(data => 
             this.create{{ messagename | strip_namespace }}Message(
@@ -224,7 +224,7 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Message {
         {%- if isCloudEvent %}
         const cloudEvent = new CloudEvent({

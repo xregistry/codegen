@@ -124,7 +124,7 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
         {%- if isCloudEvent %}
         const cloudEvent = new CloudEvent({
@@ -237,7 +237,7 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
         const eventDataArray: EventData[] = dataArray.map(data => {
             {%- if isCloudEvent %}

@@ -461,7 +461,7 @@ export class {{ class_name }} {
                 {%- endfor %}
                 id: uuidv4(),
                 data: data,
-                datacontenttype: 'application/json',
+                datacontenttype: {{ cloudEvents.DefaultContentType(message) }},
             });
 
             let payload: string;
@@ -488,7 +488,7 @@ export class {{ class_name }} {
                 }
                 {%- endfor %}
                 publishOpts.properties = {
-                    contentType: 'application/json',
+                    contentType: {{ cloudEvents.DefaultContentType(message) }},
                     userProperties,
                 };
             } else {

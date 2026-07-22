@@ -256,10 +256,22 @@ generated/
 The generator uses [Avrotize](https://github.com/clemensv/avrotize) to convert schemas between formats. Supported input schemas:
 
 - **JSON Schema** (draft-07, draft-2020-12)
+- **JSON Structure**
 - **Apache Avro**
 - **Protocol Buffers** (proto3)
+- **XML Schema (XSD)** — inline XSD definitions are converted to Avro and emitted with XML serialization support. When a message pairs an XSD schema with a `datacontenttype` of `application/xml`, the generated data classes serialize/deserialize XML (honoring element/attribute mapping and target namespace).
 
 Schemas are automatically converted to the target language's native data structures with proper serialization support.
+
+### Encoding options
+
+Serialization annotations on the generated data classes are controlled with optional template arguments:
+
+| Argument | Default | Effect |
+|----------|---------|--------|
+| `json-encoding` | `true` | Emit JSON serialization support |
+| `avro-encoding` | `false` | Emit Avro binary/JSON serialization support (auto-enabled for Avro input schemas) |
+| `xml-encoding` | `false` | Emit XML serialization support (auto-enabled for XSD input schemas) |
 
 ## Error Handling
 

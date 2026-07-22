@@ -173,7 +173,7 @@ public class {{ class_name }} {
         dataBytes = data;  // Already byte[]
         {%- endif %}
         
-        {{ cloudEvents.BuildCloudEvent(message, "dataBytes") | indent(8) }}
+        {{ cloudEvents.BuildCloudEvent(message, "dataBytes", cloudEvents.DefaultContentType(message)) | indent(8) }}
         
         if (beforeSend != null) {
             beforeSend.accept(cloudEvent);

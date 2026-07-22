@@ -112,8 +112,7 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	{%- if "datacontenttype" in message.envelopemetadata and message.envelopemetadata.datacontenttype.value %}
 	event.SetDataContentType("{{ message.envelopemetadata.datacontenttype.value }}")
 	{%- else %}
-	{%- set content_type = util.get_content_type(message) %}
-	event.SetDataContentType({{ content_type }})
+	event.SetDataContentType({{ cloudEvents.DefaultContentType(message) }})
 	{%- endif %}
 	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype"] and attribute.value %}
 	event.SetExtension("{{ attrname }}", "{{ attribute.value }}")
@@ -141,7 +140,7 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 		return fmt.Errorf("failed to marshal {{ messagename }} data: %w", err)
 	}
 	{%- endif %}
-	contentType := "application/json"
+	contentType := {{ cloudEvents.DefaultContentType(message) }}
 	subject := "{{ messageid }}"
 	return p.sender.SendMessage(ctx, &azservicebus.Message{
 		Body:        payload,

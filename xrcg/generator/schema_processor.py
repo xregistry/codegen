@@ -295,6 +295,8 @@ class SchemaProcessor(ResourceProcessor):
             return "jstruct"
         elif format_lower.startswith("avro"):
             return "avro"
+        elif format_lower.startswith("xsd") or format_lower.startswith("xmlschema"):
+            return "xsd"
         return "unknown"
 
     def _requires_avrotize(self, language: str, schema_format_short: str) -> bool:

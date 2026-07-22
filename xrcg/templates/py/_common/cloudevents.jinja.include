@@ -7,6 +7,18 @@
 {{- (attrname in ['source', 'type'] and attrname not in message.envelopemetadata) -}}
 {%- endmacro -%}
 
+# Emits a quoted Python string literal with the message's declared datacontenttype,
+# or 'application/json' when the message does not declare one. Used as the default
+# value for producer send() content_type parameters so a message whose declared
+# datacontenttype is e.g. application/xml serializes as XML by default.
+{%- macro DefaultContentType(message) -%}
+{%- if message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
+'{{ message.envelopemetadata.datacontenttype.value }}'
+{%- else -%}
+'application/json'
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro DeclareRfc3339TimeNormalizer() -%}
 _RFC3339_TIMESTAMP_PATTERN = re.compile(
     r'^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})?$'

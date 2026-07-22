@@ -6,6 +6,14 @@ true
 {%- endif -%}
 {%- endmacro -%}
 
+{%- macro DefaultContentType(message) -%}
+{%- if message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
+"{{ message.envelopemetadata.datacontenttype.value }}"
+{%- else -%}
+"application/json"
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro usesCloudEvents(root) -%}
 {%- if (root.messagegroups | exists("envelope","CloudEvents/1.0")) or (root.endpoints | exists("envelope","CloudEvents/1.0")) -%}
 true
