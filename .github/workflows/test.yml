@@ -221,7 +221,6 @@ jobs:
         python -m pip install -e .[dev]
     - name: Install Test Prerequisites
       run: |
-        npm install -g azure-functions-core-tools@4 --unsafe-perm true 
         # @asyncapi/cli 6.x (ESM) fails to load on the CI runner with
         # "ReferenceError: module is not defined in ES module scope"; pin the
         # last CommonJS release (5.0.7), which is immune to that failure.
