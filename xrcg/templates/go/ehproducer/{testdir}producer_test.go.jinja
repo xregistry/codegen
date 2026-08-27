@@ -10,6 +10,15 @@
 {%- set live_body_type = util.body_type(data_project_name, root, live_first_message) %}
 {%- set live_event_type = live_first_message.envelopemetadata.type.value if "type" in live_first_message.envelopemetadata and live_first_message.envelopemetadata.type.value else live_first_message_id %}
 {%- set live_needs_source = "source" not in live_first_message.envelopemetadata %}
+{%- set avro_messages = [] -%}
+{%- for _messagegroup in root.messagegroups.values() -%}
+{%- for _message in _messagegroup.messages.values() -%}
+{%- set _schema_format = _message.dataschemaformat | default("", true) | lower -%}
+{%- if _schema_format.startswith("avro") -%}
+{%- set _ = avro_messages.append(_message) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
 {%- if "source" in live_first_message.envelopemetadata and live_first_message.envelopemetadata.source.value %}
 {%- if "{" in live_first_message.envelopemetadata.source.value and "}" in live_first_message.envelopemetadata.source.value %}
 {%- set live_needs_source = true %}
@@ -35,6 +44,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	{%- if avro_messages %}
+	"github.com/hamba/avro/v2"
+	{%- endif %}
 	{%- if live_is_ce %}
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/azure/eventhubs"
@@ -43,6 +55,8 @@ import (
 	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | go_package }}/pkg/{{ data_project_name | go_package }}"
 	. "{{ project_name | snake }}"
 )
+
+{% if avro_messages %}{{ util.avro_test_helpers() }}{% endif %}
 
 type fakeEventSender struct {
 	events []*azeventhubs.EventData
@@ -75,6 +89,7 @@ func Test{{ class_name }}_BinaryModeUsesCloudEventsProperties(t *testing.T) {
 	producer.SetContentMode(ContentModeBinary)
 
 	var testData {{ message_body_type }}
+	{{ util.initialize_avro_test_data("testData", message_body_type, first_message) }}
 	_ = {{ data_project_name | snake }}.Opt(0)
 
 	err := {% if isCloudEvent %}producer.Send{{ messagename }}(context.Background(), testData{% if needs_source_param %}, "tenant123/device456"{% endif %}{% if "type" not in first_message.envelopemetadata %}, "{{ first_message_id }}"{% endif %}){% else %}producer.Send{{ messagename }}(context.Background(), testData){% endif %}
@@ -95,6 +110,7 @@ func Test{{ class_name }}_StructuredModeUsesCloudEventsContentType(t *testing.T)
 	producer.SetContentMode(ContentModeStructured)
 
 	var testData {{ message_body_type }}
+	{{ util.initialize_avro_test_data("testData", message_body_type, first_message) }}
 	_ = {{ data_project_name | snake }}.Opt(0)
 
 	err := {% if isCloudEvent %}producer.Send{{ messagename }}(context.Background(), testData{% if needs_source_param %}, "tenant123/device456"{% endif %}{% if "type" not in first_message.envelopemetadata %}, "{{ first_message_id }}"{% endif %}){% else %}producer.Send{{ messagename }}(context.Background(), testData){% endif %}
@@ -156,6 +172,7 @@ func Test{{ live_group_class }}_LiveRoundTrip(t *testing.T) {
 	defer producer.Close(ctx)
 
 	var testData {{ live_body_type }}
+	{{ util.initialize_avro_test_data("testData", live_body_type, live_first_message) }}
 	var sendErr error
 	for i := 0; i < 5; i++ {
 		if sendErr = producer.Send{{ live_messagename }}(ctx, testData{% if live_needs_source %}, "tenant123/device456"{% endif %}{% if "type" not in live_first_message.envelopemetadata %}, "{{ live_first_message_id }}"{% endif %}); sendErr == nil {

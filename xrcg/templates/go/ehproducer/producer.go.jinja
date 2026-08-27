@@ -152,17 +152,23 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	event.SetExtension("{{ attrname }}", {{ attrname | snake }}Val)
 	{%- endif %}
 	{%- endfor %}
-	{%- if "datacontenttype" in message.envelopemetadata and message.envelopemetadata.datacontenttype.value %}
-	event.SetDataContentType("{{ message.envelopemetadata.datacontenttype.value }}")
+	contentType := {{ cloudEvents.DefaultContentType(message) }}
+	event.SetDataContentType(contentType)
+	var dataBytes []byte
+	{%- if message_body_type == "[]byte" %}
+	dataBytes = data
 	{%- else %}
-	{%- set content_type = util.get_content_type(message) %}
-	event.SetDataContentType({{ content_type }})
+	var serializeErr error
+	dataBytes, serializeErr = data.ToByteArray(contentType)
+	if serializeErr != nil {
+		return fmt.Errorf("failed to serialize event data: %w", serializeErr)
+	}
 	{%- endif %}
-	if err := event.SetData(cloudevents.ApplicationJSON, data); err != nil {
+	if err := event.SetData(contentType, dataBytes); err != nil {
 		return fmt.Errorf("failed to set CloudEvent data: %w", err)
 	}
 
-	eventData, err := eventDataFromCloudEvent(event, data, p.contentMode)
+	eventData, err := eventDataFromCloudEvent(event, dataBytes, p.contentMode)
 	if err != nil {
 		return err
 	}
@@ -174,17 +180,17 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 // {{ message.description }}
 {%- endif %}
 func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ message_body_type }}) error {
+	contentType := {{ cloudEvents.DefaultContentType(message) }}
 	var body []byte
 	{%- if message_body_type == "[]byte" %}
 	body = data
 	{%- else %}
 	var err error
-	body, err = json.Marshal(data)
+	body, err = data.ToByteArray(contentType)
 	if err != nil {
-		return fmt.Errorf("failed to marshal data: %w", err)
+		return fmt.Errorf("failed to serialize data: %w", err)
 	}
 	{%- endif %}
-	contentType := {{ util.get_content_type(message) }}
 	return p.sender.SendEvent(ctx, &azeventhubs.EventData{
 		Body:        body,
 		ContentType: &contentType,

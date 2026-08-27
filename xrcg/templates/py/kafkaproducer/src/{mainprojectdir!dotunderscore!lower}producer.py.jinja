@@ -85,11 +85,14 @@ class {{ class_name }}:
 
     @staticmethod
     def __binary_data_marshaller(data: typing.Any) -> bytes:
-        """Serialize dataclass payloads to bytes for Kafka binary mode."""
+        """Return pre-serialized bytes or serialize legacy JSON payload objects."""
+        if isinstance(data, (bytes, bytearray, memoryview)):
+            return bytes(data)
         payload = data.to_byte_array("application/json")
         if isinstance(payload, str):
             payload = payload.encode('utf-8')
         return payload
+
     {%- for messageid, message in messagegroup.messages.items() -%}
     {%- set message_snake = messageid | dotunderscore | snake %}
     {%- set data_type = util.DeclareDataType( data_project_name, root, message ) %}
@@ -142,7 +145,7 @@ class {{ class_name }}:
                 {%- if (placeholder | snake) not in declared_params and (placeholder | snake) != 'time' %}_{{ placeholder | snake }}: str, {% endif -%}
             {%- endfor -%}
         {%- endif -%}
-        data: {{ data_type | strip_namespace -}}, content_type: str = "application/json"
+        data: {{ data_type | strip_namespace -}}, content_type: str = {{ cloudEvents.DefaultContentType(message) }}
         {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined and attrname != "time" -%}
             , _{{ attrname }}: typing.Optional[str] = None
         {%- endfor -%}
@@ -225,14 +228,21 @@ class {{ class_name }}:
         }
         attributes["datacontenttype"] = content_type
         attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))
-        event = CloudEvent.create(attributes, data)
+        {% if data_type != "object" -%}
+        byte_data = data.to_byte_array(content_type) if data is not None else b''
+        {%- else -%}
+        byte_data = json.dumps(data).encode('utf-8') if data is not None else b''
+        {%- endif %}
+        if isinstance(byte_data, str):
+            byte_data = byte_data.encode('utf-8')
+        event = CloudEvent.create(attributes, byte_data)
         if self.content_mode == "structured":
-            message = to_structured(event, data_marshaller=lambda x: {% if data_type != "object"%}json.loads(x.to_json()){%else%}json.dumps(x){%endif%}, key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key))
+            message = to_structured(event, data_marshaller=lambda x: self.__binary_data_marshaller(x), key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key))
             message.headers["content-type"] = b"application/cloudevents+json"
         else:
             # For binary mode, datacontenttype is already set in attributes above
             # The to_binary() function will create the ce_datacontenttype header
-            message = to_binary(event, data_marshaller=lambda x: {% if data_type != "object"%}self.__binary_data_marshaller(x){%else%}json.dumps(x){%endif%}, key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key))
+            message = to_binary(event, data_marshaller=lambda x: self.__binary_data_marshaller(x), key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key))
         self.producer.produce(self.topic, key=message.key, value=message.value, headers=message.headers)
         if flush_producer:
             self.flush()

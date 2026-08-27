@@ -134,7 +134,7 @@ public class {{ class_name }} {
     {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
     {%- set is_amqp = amqp.is_amqp(message) %}
     {%- set data_type = util.get_data_type(data_project_name, root, message) %}
-    {%- set content_type = util.get_content_type(message) %}
+    {%- set content_type = cloudEvents.DefaultContentType(message) %}
     
     /**
      * Send {{ messagename }} message
@@ -149,6 +149,7 @@ public class {{ class_name }} {
     ) throws Exception {
         {%- if isCloudEvent %}
         // Serialize data to bytes
+        String contentType = {{ content_type }};
         byte[] dataBytes;
         {%- set schemaObj = schema_object(root, message.get('dataschemauri') or message.get('dataschema')) %}
         {%- if schemaObj %}
@@ -160,12 +161,10 @@ public class {{ class_name }} {
             {%- else %}
                 {%- set format = message.dataschemaformat if message.dataschemaformat else "" %}
             {%- endif %}
-            {%- if format and format.lower().startswith("avro") %}
-        dataBytes = data.toByteArray("avro/binary");
-            {%- elif format and format.lower().startswith("protobuf") %}
+            {%- if format and format.lower().startswith("protobuf") %}
         dataBytes = data.toByteArray();
             {%- elif format %}
-        dataBytes = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data);
+        dataBytes = data.toByteArray(contentType);
             {%- else %}
         dataBytes = data;  // Already byte[]
             {%- endif %}
@@ -173,7 +172,7 @@ public class {{ class_name }} {
         dataBytes = data;  // Already byte[]
         {%- endif %}
         
-        {{ cloudEvents.BuildCloudEvent(message, "dataBytes") | indent(8) }}
+        {{ cloudEvents.BuildCloudEvent(message, "dataBytes", "contentType") | indent(8) }}
         
         if (beforeSend != null) {
             beforeSend.accept(cloudEvent);
@@ -196,6 +195,7 @@ public class {{ class_name }} {
         
         {%- elif is_amqp %}
         // Serialize data to bytes
+        String contentType = {{ content_type }};
         byte[] dataBytes;
         {%- set schemaObj = schema_object(root, message.get('dataschemauri') or message.get('dataschema')) %}
         {%- if schemaObj %}
@@ -207,13 +207,10 @@ public class {{ class_name }} {
             {%- else %}
                 {%- set format = message.dataschemaformat if message.dataschemaformat else "" %}
             {%- endif %}
-            {%- if format and format.lower().startswith("avro") %}
-        // Avro serialization
-        dataBytes = data.toByteArray("avro/binary");
-            {%- elif format and format.lower().startswith("protobuf") %}
+            {%- if format and format.lower().startswith("protobuf") %}
         dataBytes = data.toByteArray();  // Protobuf serialization
             {%- elif format %}
-        dataBytes = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data);
+        dataBytes = data.toByteArray(contentType);
             {%- else %}
         dataBytes = data;  // Already byte[]
             {%- endif %}

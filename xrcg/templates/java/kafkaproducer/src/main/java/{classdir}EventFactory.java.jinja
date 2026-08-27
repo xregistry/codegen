@@ -81,6 +81,14 @@ public class {{ class_name }} {
         
         byte[] keyBytes = key != null ? key.getBytes(StandardCharsets.UTF_8) : null;
         Headers headers = new RecordHeaders();
+        String dataContentType = {{ cloudEvents.DefaultContentType(message) }};
+        {%- if message_body_type == "byte[]" %}
+        byte[] serializedData = data;
+        {%- elif (message.dataschemaformat | default("", true) | lower).startswith("proto") %}
+        byte[] serializedData = data.toByteArray();
+        {%- else %}
+        byte[] serializedData = data.toByteArray(dataContentType);
+        {%- endif %}
         
         {%- if isCloudEvent %}
         // Create CloudEvent
@@ -100,12 +108,8 @@ public class {{ class_name }} {
             {%- else %}
             .withSource(URI.create("urn:{{ messagegroupid }}"))
             {%- endif %}
-            {%- if "datacontenttype" in message.metadata and "value" in message.metadata.datacontenttype %}
-            .withDataContentType("{{ message.metadata.datacontenttype.value }}")
-            {%- else %}
-            .withDataContentType("application/json")
-            {%- endif %}
-            .withData(serializeData(data))
+            .withDataContentType(dataContentType)
+            .withData(serializedData)
             .build();
         
         byte[] bodyBytes;
@@ -126,38 +130,16 @@ public class {{ class_name }} {
             });
             
             // Serialize the data as the body
-            bodyBytes = serializeData(data);
-            headers.add("content-type", "application/json".getBytes(StandardCharsets.UTF_8));
+            bodyBytes = serializedData;
+            headers.add("content-type", dataContentType.getBytes(StandardCharsets.UTF_8));
         }
         
         return new ProducerRecord<>(topic, null, keyBytes, bodyBytes, headers);
         
         {%- else %}
         // Create native Kafka message
-        byte[] bodyBytes;
-        String contentType;
-        
-        {%- if schemaObj and "format" in schemaObj %}
-        {%- if schemaObj.format.lower().startswith("avro") %}
-        // Serialize as Avro
-        bodyBytes = data.toByteArray("avro/binary");
-        contentType = "application/avro";
-        {%- elif schemaObj.format.lower().startswith("protobuf") %}
-        // Serialize as Protobuf
-        bodyBytes = data.toByteArray();
-        contentType = "application/protobuf";
-        {%- else %}
-        // Serialize as JSON
-        bodyBytes = serializeData(data);
-        contentType = "application/json";
-        {%- endif %}
-        {%- else %}
-        // Serialize as JSON (default)
-        bodyBytes = serializeData(data);
-        contentType = "application/json";
-        {%- endif %}
-        
-        headers.add("content-type", contentType.getBytes(StandardCharsets.UTF_8));
+        byte[] bodyBytes = serializedData;
+        headers.add("content-type", dataContentType.getBytes(StandardCharsets.UTF_8));
         
         {%- set protocolopts = message.get('protocoloptions', {}) %}
         {%- if protocolopts.get('headers') %}
@@ -175,17 +157,5 @@ public class {{ class_name }} {
     
     {% endfor %}
     
-    /**
-     * Serialize data object to JSON bytes.
-     * 
-     * @param data The data object
-     * @return JSON byte array
-     * @throws Exception if serialization fails
-     */
-    private static byte[] serializeData(Object data) throws Exception {
-        return new com.fasterxml.jackson.databind.ObjectMapper()
-            .findAndRegisterModules()
-            .writeValueAsBytes(data);
-    }
 }
 {% endfor -%}

@@ -41,10 +41,11 @@ import io.cloudevents.jackson.JsonFormat;
 {%- endmacro -%}
 
 {#- Builds CloudEvent with data -#}
-{%- macro BuildCloudEvent(message, dataBytes) -%}
+{%- macro BuildCloudEvent(message, dataBytes, defaultContentType=None) -%}
 {%- if message.envelopemetadata %}
 CloudEvent cloudEvent = CloudEventBuilder.v1()
     .withId(java.util.UUID.randomUUID().toString())
+{%- set emitted = namespace(datacontenttype=false) %}
 {%- for attrname, attribute in message.envelopemetadata.items() %}
 {%- if attrname == "type" %}
     .withType({% if 'value' in attribute %}"{{ attribute.value }}"{% else %}type{% endif %})
@@ -55,11 +56,15 @@ CloudEvent cloudEvent = CloudEventBuilder.v1()
 {%- elif attrname == "time" %}
     .withTime(java.time.OffsetDateTime.now())
 {%- elif attrname == "datacontenttype" %}
-    .withDataContentType({% if 'value' in attribute %}"{{ attribute.value }}"{% else %}contentType{% endif %})
+{%- set emitted.datacontenttype = true %}
+    .withDataContentType({% if defaultContentType %}{{ defaultContentType }}{% elif 'value' in attribute %}"{{ attribute.value }}"{% else %}contentType{% endif %})
 {%- elif attrname == "dataschema" and message.dataschemauri %}
     .withDataSchema(java.net.URI.create("xreg:{{ message.dataschemauri.lstrip('#/') }}"))
 {%- endif %}
 {%- endfor %}
+{%- if not emitted.datacontenttype and defaultContentType %}
+    .withDataContentType({{ defaultContentType }})
+{%- endif %}
     .withData(BytesCloudEventData.wrap({{ dataBytes }}))
     .build();
 {%- else %}
@@ -68,9 +73,34 @@ CloudEvent cloudEvent = CloudEventBuilder.v1()
     .withType("{{ message.messageid }}")
     .withSource(java.net.URI.create(source))
     .withTime(java.time.OffsetDateTime.now())
+{%- if defaultContentType %}
+    .withDataContentType({{ defaultContentType }})
+{%- endif %}
     .withData(BytesCloudEventData.wrap({{ dataBytes }}))
     .build();
 {%- endif %}
+{%- endmacro -%}
+
+{#- Get default CloudEvent datacontenttype for producer send methods -#}
+{%- macro DefaultContentType(message) -%}
+{%- set schema_format = message.dataschemaformat | default("", true) | lower -%}
+{%- if schema_format.startswith("avro") -%}
+"avro/binary"
+{%- elif schema_format.startswith("proto") -%}
+"application/protobuf"
+{%- elif schema_format.startswith("xsd") or schema_format.startswith("xmlschema") -%}
+{%- if message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
+"{{ message.envelopemetadata.datacontenttype.value }}"
+{%- else -%}
+"application/xml"
+{%- endif -%}
+{%- elif schema_format.startswith("jsonschema") or schema_format.startswith("jsonstructure") -%}
+"application/json"
+{%- elif message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
+"{{ message.envelopemetadata.datacontenttype.value }}"
+{%- else -%}
+"application/json"
+{%- endif -%}
 {%- endmacro -%}
 
 {#- Get CloudEvent data as byte array -#}
@@ -90,21 +120,7 @@ EventFormatProvider.getInstance().resolveFormat(JsonFormat.CONTENT_TYPE).deseria
 
 {#- Get content type for message -#}
 {%- macro GetContentType(message) -%}
-{%- if message.envelopemetadata and "datacontenttype" in message.envelopemetadata and 'value' in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
-"{{ message.envelopemetadata.datacontenttype.value }}"
-{%- elif message.dataschemaformat -%}
-{%- if (message.dataschemaformat | lower).startswith("avro/") -%}
-"avro/binary"
-{%- elif (message.dataschemaformat | lower).startswith("protobuf/") -%}
-"application/protobuf"
-{%- elif (message.dataschemaformat | lower).startswith("jsonschema/") -%}
-"application/json"
-{%- else -%}
-"application/octet-stream"
-{%- endif -%}
-{%- else -%}
-"application/octet-stream"
-{%- endif -%}
+{{- DefaultContentType(message) -}}
 {%- endmacro -%}
 
 {#- Dispatcher interface generation -#}

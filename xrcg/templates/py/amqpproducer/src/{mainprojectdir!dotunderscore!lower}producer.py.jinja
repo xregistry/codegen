@@ -801,7 +801,7 @@ class {{ class_name }}:
         _{{ argname }}: typing.Optional[str] = None,
         {%- endfor %}
         _time: typing.Optional[typing.Union[str, datetime]] = None,
-        content_type: str = 'application/json') -> None:
+        content_type: str = {{ cloudEvents.DefaultContentType(message) }}) -> None:
         """
         Send the `{{ messageid }}` message
         {%- if message.description %}
@@ -971,7 +971,7 @@ class {{ class_name }}:
         _{{ argname }}: typing.Optional[str] = None,
         {%- endfor %}
         _time: typing.Optional[typing.Union[str, datetime]] = None,
-        content_type: str = 'application/json') -> None:
+        content_type: str = {{ cloudEvents.DefaultContentType(message) }}) -> None:
         """
         Send multiple `{{ messageid }}` messages
         

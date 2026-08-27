@@ -6,10 +6,15 @@
 package {{ project_name | snake }}_test
 
 {%- set _t_uses_data = [] %}
+{%- set avro_messages = [] %}
 {%- for _mgid, _mg in root.messagegroups.items() %}
 {%- set _fm = _mg.messages.values() | list | first %}
 {%- if _fm and util.body_type(data_project_name, root, _fm) != "[]byte" %}
 {%- set _ = _t_uses_data.append(1) %}
+{%- endif %}
+{%- set _schema_format = _fm.dataschemaformat | default("", true) | lower %}
+{%- if _schema_format.startswith("avro") %}
+{%- set _ = avro_messages.append(_fm) %}
 {%- endif %}
 {%- endfor %}
 
@@ -23,12 +28,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	{%- if avro_messages %}
+	"github.com/hamba/avro/v2"
+	{%- endif %}
 	{%- if _t_uses_data %}
 
 	{{ data_project_name | snake }} "github.com/username/{{ data_project_name | go_package }}/pkg/{{ data_project_name | go_package }}"
 	{%- endif %}
 	. "{{ project_name | snake }}"
 )
+
+{% if avro_messages %}{{ util.avro_test_helpers() }}{% endif %}
 
 // captureServer returns an httptest server that records the last request it
 // received, so the HTTP CloudEvents producer can be exercised without a broker.
@@ -78,6 +88,7 @@ func Test{{ class_name }}_{{ messagename }}_Structured(t *testing.T) {
 	defer producer.Close()
 
 	var testData {{ message_body_type }}
+	{{ util.initialize_avro_test_data("testData", message_body_type, message) }}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -108,6 +119,7 @@ func Test{{ class_name }}_{{ messagename }}_Binary(t *testing.T) {
 	producer.SetContentMode(ContentModeBinary)
 
 	var testData {{ message_body_type }}
+	{{ util.initialize_avro_test_data("testData", message_body_type, message) }}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

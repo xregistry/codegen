@@ -69,6 +69,14 @@ public class {{ class_name }} {
      */
     public static EventData create{{ messagename }}Message({{ message_body_type }} data{% if isCloudEvent %}, ContentMode contentMode, String format{% endif %}) {
         try {
+            String dataContentType = {{ cloudEvents.DefaultContentType(message) }};
+            {%- if message_body_type == "byte[]" %}
+            byte[] serializedData = data;
+            {%- elif dataschema and ("Protobuf" in dataschema or "protobuf" in dataschema or "proto" in dataschema) %}
+            byte[] serializedData = data.toByteArray();
+            {%- else %}
+            byte[] serializedData = data.toByteArray(dataContentType);
+            {%- endif %}
             {%- if isCloudEvent %}
             // Create CloudEvent
             CloudEventBuilder builder = CloudEventBuilder.v1()
@@ -89,16 +97,8 @@ public class {{ class_name }} {
                 .withSource(URI.create("urn:{{ messagegroupid }}"))
                 {%- endif %}
                 {%- endif %}
-                {%- if dataschema and ("Avro" in dataschema or "avro" in dataschema) %}
-                .withDataContentType("application/avro")
-                .withData(data.toByteArray("avro/binary"))
-                {%- elif dataschema and ("Protobuf" in dataschema or "protobuf" in dataschema or "proto" in dataschema) %}
-                .withDataContentType("application/protobuf")
-                .withData(data.toByteArray())
-                {%- else %}
-                .withDataContentType("application/json")
-                .withData(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data))
-                {%- endif %};
+                .withDataContentType(dataContentType)
+                .withData(serializedData);
 
             CloudEvent cloudEvent = builder.build();
 
@@ -111,16 +111,7 @@ public class {{ class_name }} {
                 eventData.setContentType(format);
             } else {
                 // Binary content mode - CloudEvent attributes in properties, data in body
-                byte[] bodyData;
-                {%- if dataschema and ("Avro" in dataschema or "avro" in dataschema) %}
-                bodyData = data.toByteArray("avro/binary");
-                {%- elif dataschema and ("Protobuf" in dataschema or "protobuf" in dataschema or "proto" in dataschema) %}
-                bodyData = data.toByteArray();
-                {%- else %}
-                bodyData = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data);
-                {%- endif %}
-
-                eventData = new EventData(bodyData);
+                eventData = new EventData(serializedData);
             
                 // Set CloudEvent attributes as properties
                 eventData.getProperties().put(CE_PREFIX + "specversion", cloudEvent.getSpecVersion().toString());
@@ -154,21 +145,8 @@ public class {{ class_name }} {
 
             {%- else %}
             // Create plain Event Hubs message
-            byte[] bodyData;
-            String contentType;
-            {%- if dataschema and ("Avro" in dataschema or "avro" in dataschema) %}
-            bodyData = data.toByteArray("avro/binary");
-            contentType = "application/avro";
-            {%- elif dataschema and ("Protobuf" in dataschema or "protobuf" in dataschema or "proto" in dataschema) %}
-            bodyData = data.toByteArray();
-            contentType = "application/protobuf";
-            {%- else %}
-            bodyData = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data);
-            contentType = "application/json";
-            {%- endif %}
-
-            EventData eventData = new EventData(bodyData);
-            eventData.setContentType(contentType);
+            EventData eventData = new EventData(serializedData);
+            eventData.setContentType(dataContentType);
             
             {%- if message.metadata %}
             {%- for key, value in message.metadata.items() %}

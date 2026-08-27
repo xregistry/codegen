@@ -764,7 +764,7 @@ class {{ class_name }}(_ClientBase):
         {{ var | snake }}: Optional[str] = None,
         {%- endfor %}
         _time: typing.Optional[typing.Union[str, datetime]] = None,
-        content_type: str = "application/json") -> None:
+        content_type: str = {{ cloudEvents.DefaultContentType(message) }}) -> None:
         """
         Publish the '{{ messageid }}' event to an MQTT topic.
 
@@ -916,7 +916,7 @@ class {{ class_name }}(_ClientBase):
         topic: Optional[str] = None,
         qos: Optional[int] = None,
         retain: Optional[bool] = None,
-        content_type: str = "application/json") -> None:
+        content_type: str = {{ cloudEvents.DefaultContentType(message) }}) -> None:
         """
         Publish the plain (non-CloudEvents) '{{ messageid }}' message to an MQTT topic.
 

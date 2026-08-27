@@ -168,7 +168,15 @@ public class MqttClientTest {
                 {%- endfor %}
 
                 assertTrue(rawLatch.await(20, TimeUnit.SECONDS), "Raw MQTT message should be captured");
-                assertCloudEventBinaryProperties(rawMessage.get(), {{ 'true' if message.envelopemetadata and 'datacontenttype' in message.envelopemetadata else 'false' }});
+                assertCloudEventBinaryProperties(rawMessage.get(), {{ cloudEvents.GetContentType(message) }});
+                {%- if message_body_type == 'byte[]' %}
+                assertArrayEquals(testData, rawMessage.get().getPayload(), "MQTT payload bytes should be preserved");
+                {%- elif (message.dataschemaformat | default("", true) | lower).startswith("proto") %}
+                assertArrayEquals(testData.toByteArray(), rawMessage.get().getPayload(), "MQTT payload should use Protobuf serialization");
+                {%- else %}
+                assertArrayEquals(testData.toByteArray({{ cloudEvents.GetContentType(message) }}), rawMessage.get().getPayload(),
+                    "MQTT payload bytes should match the advertised content type");
+                {%- endif %}
             } finally {
                 producer.close();
             }
@@ -226,13 +234,11 @@ public class MqttClientTest {
         return mqttClient;
     }
 
-    private static void assertCloudEventBinaryProperties(MqttMessage message, boolean expectContentType) {
+    private static void assertCloudEventBinaryProperties(MqttMessage message, String expectedContentType) {
         assertNotNull(message, "MQTT message should not be null");
         MqttProperties props = message.getProperties();
         assertNotNull(props, "MQTT 5 properties should be present");
-        if (expectContentType) {
-            assertNotNull(props.getContentType(), "CloudEvents datacontenttype should map to MQTT contentType");
-        }
+        assertEquals(expectedContentType, props.getContentType(), "CloudEvents datacontenttype should match MQTT contentType");
         Set<String> keys = new HashSet<>();
         List<UserProperty> userProperties = props.getUserProperties();
         assertNotNull(userProperties, "CloudEvents attributes should be MQTT user properties");

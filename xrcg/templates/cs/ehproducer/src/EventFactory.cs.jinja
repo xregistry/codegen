@@ -212,15 +212,11 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {%- if uriargs -%}
         {{- uriargs -}}
         {%- endif -%}
-        {%- if isCloudEvent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
-        , string contentType = "{{ message.envelopemetadata["datacontenttype"]["value"] }}"
-        {%- else -%}
-        , string contentType = System.Net.Mime.MediaTypeNames.Application.Json
-        {%- endif %}
+        , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
         {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %})
         {
             {% if type_name != "byte[]" %}
-            Serialize<{{ type_name }}>? bodySerializer = {%- if isCloudEvent %}(formatter != null)?null:{%-endif-%}({{ type_name }} data, string contentType) => {
+            Serialize<{{ type_name }}>? bodySerializer = ({{ type_name }} data, string contentType) => {
                 return data.ToByteArray(contentType);
             };
             {%- if isCloudEvent %}

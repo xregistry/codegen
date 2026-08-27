@@ -87,6 +87,7 @@ namespace {{ project_name | pascal }}
         {% for messageid, message in messagegroup.messages.items() -%}
         {%- set messagename = messageid | pascal %}
         {%- set isCloudEvent = not message.envelope or message.envelope.lower().startswith("cloudevents") -%}
+        {%- set schemaformat = message.dataschemaformat | default("", true) | lower -%}
         {%- if isCloudEvent %}
         {%- if message.description %}
         /// <summary>
@@ -96,10 +97,10 @@ namespace {{ project_name | pascal }}
         public async Task Send{{ messagename | strip_namespace }}Async(
         {{ util.body_type(data_project_name, root, message) }} data
         {{- cloudEvents.DeclareUriTemplateArguments(message) -}},
-        string contentType = System.Net.Mime.MediaTypeNames.Application.Json)
+        string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }})
         {
             {{ cloudEvents.DeclareCloudNativeCloudEvent("cloudEvent", message) | indent(12) }}
-            cloudEvent.Data = data;
+            cloudEvent.Data = {% if schemaformat.startswith("proto") %}data.ToByteArray(){% elif schemaformat %}data.ToByteArray(contentType){% else %}data{% endif %};
             await eventGridPublisherClient.SendCloudNativeCloudEventAsync(cloudEvent);
         }
         {%- endif -%}

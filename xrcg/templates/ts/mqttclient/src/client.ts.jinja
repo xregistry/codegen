@@ -422,6 +422,8 @@ export class {{ class_name }} {
         retain?: boolean,
     ): Promise<void> {
         return new Promise((resolve, reject) => {
+            const contentType = {{ cloudEvents.DefaultContentType(message) }};
+            const serializedData = {{ cloudEvents.SerializeData("data", "contentType") | indent(12) }};
             // Build target topic with URI template substitution.
             const _templateValues: Record<string, string> = {
                 {%- for placeholder in uri_template_vars %}
@@ -460,11 +462,11 @@ export class {{ class_name }} {
                 {%- endif %}
                 {%- endfor %}
                 id: uuidv4(),
-                data: data,
-                datacontenttype: 'application/json',
+                data: serializedData,
+                datacontenttype: contentType,
             });
 
-            let payload: string;
+            let payload: string | Buffer;
             const publishOpts: mqtt.IClientPublishOptions = {
                 qos: _effectiveQos,
                 retain: _effectiveRetain,
@@ -473,7 +475,7 @@ export class {{ class_name }} {
             if (this.mode === 'binary') {
                 // Binary mode: bare CE attribute names as MQTT5 User Properties (no 'ce-' prefix).
                 // datacontenttype → MQTT5 Content Type property.
-                payload = JSON.stringify(data);
+                payload = serializedData;
                 const userProperties: Record<string, string> = {
                     specversion: '1.0',
                     id: cloudEvent.id,
@@ -488,7 +490,7 @@ export class {{ class_name }} {
                 }
                 {%- endfor %}
                 publishOpts.properties = {
-                    contentType: 'application/json',
+                    contentType,
                     userProperties,
                 };
             } else {
@@ -499,10 +501,13 @@ export class {{ class_name }} {
                 };
             }
             {%- else %}
-            const payload = JSON.stringify(data);
+            const payload = serializedData;
             const publishOpts: mqtt.IClientPublishOptions = {
                 qos: _effectiveQos,
                 retain: _effectiveRetain,
+                properties: {
+                    contentType,
+                },
             };
             {%- endif %}
 

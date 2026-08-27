@@ -54,7 +54,12 @@ describe('{{ test_class_name }}', () => {
         
         // Create test data using generated test helper
         {%- if has_schema %}
+        {%- set schema_format = message.dataschemaformat | default("", true) | lower %}
+        {%- if schema_format.startswith("avro") %}
+        const testData = Object.assign({{ body_type }}.createInstance(), {{ body_type }}.AvroType.random());
+        {%- else %}
         const testData = {{ body_type }}.createInstance();
+        {%- endif %}
         {%- else %}
         const testData = {} as {{ body_type }};
         {%- endif %}
@@ -96,11 +101,20 @@ describe('{{ test_class_name }}', () => {
         
         // Create test data array using generated test helper
         {%- if has_schema %}
+        {%- set schema_format = message.dataschemaformat | default("", true) | lower %}
+        {%- if schema_format.startswith("avro") %}
+        const testDataArray = [
+            Object.assign({{ body_type }}.createInstance(), {{ body_type }}.AvroType.random()),
+            Object.assign({{ body_type }}.createInstance(), {{ body_type }}.AvroType.random()),
+            Object.assign({{ body_type }}.createInstance(), {{ body_type }}.AvroType.random())
+        ];
+        {%- else %}
         const testDataArray = [
             {{ body_type }}.createInstance(),
             {{ body_type }}.createInstance(),
             {{ body_type }}.createInstance()
         ];
+        {%- endif %}
         {%- else %}
         const testDataArray = [
             {} as {{ body_type }},

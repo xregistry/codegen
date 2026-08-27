@@ -180,14 +180,19 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	{%- endif %}
 	{%- endfor %}
 	
-	{%- if "datacontenttype" in message.envelopemetadata and message.envelopemetadata.datacontenttype.value %}
-	event.SetDataContentType("{{ message.envelopemetadata.datacontenttype.value }}")
+	contentType := {{ cloudEvents.DefaultContentType(message) }}
+	event.SetDataContentType(contentType)
+	var dataBytes []byte
+	{%- if message_body_type == "[]byte" %}
+	dataBytes = data
 	{%- else %}
-	{%- set content_type = util.get_content_type(message) %}
-	event.SetDataContentType({{ content_type }})
+	var serializeErr error
+	dataBytes, serializeErr = data.ToByteArray(contentType)
+	if serializeErr != nil {
+		return fmt.Errorf("failed to serialize event data: %w", serializeErr)
+	}
 	{%- endif %}
-	
-	if err := event.SetData(cloudevents.ApplicationJSON, data); err != nil {
+	if err := event.SetData(contentType, dataBytes); err != nil {
 		return fmt.Errorf("failed to set event data: %w", err)
 	}
 	
@@ -196,23 +201,6 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	
 	if p.contentMode == ContentModeBinary {
 		// Binary mode - CloudEvent properties in headers, data in body
-		var dataBytes []byte
-		{%- if message_body_type == "[]byte" %}
-		dataBytes = data
-		{%- else %}
-		// Use avrotize-generated ToByteArray for proper serialization
-		{%- set content_type = util.get_content_type(message) %}
-		contentType := event.DataContentType()
-		if contentType == "" {
-			contentType = {{ content_type }}
-		}
-		var err error
-		dataBytes, err = data.ToByteArray(contentType)
-		if err != nil {
-			return fmt.Errorf("failed to serialize data: %w", err)
-		}
-		{%- endif %}
-		
 		headers := []kafka.Header{
 			{Key: "ce_specversion", Value: []byte(event.SpecVersion())},
 			{Key: "ce_type", Value: []byte(event.Type())},
@@ -276,20 +264,22 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 		{%- endif %}
 	}
 	
+	contentType := {{ cloudEvents.DefaultContentType(message) }}
 	var value []byte
 	{%- if message_body_type == "[]byte" %}
 	value = data
 	{%- else %}
 	var err error
-	value, err = json.Marshal(data)
+	value, err = data.ToByteArray(contentType)
 	if err != nil {
-		return fmt.Errorf("failed to marshal data: %w", err)
+		return fmt.Errorf("failed to serialize data: %w", err)
 	}
 	{%- endif %}
 	
 	msg := kafka.Message{
 		Topic: topic,
 		Value: value,
+		Headers: []kafka.Header{ {Key: "content-type", Value: []byte(contentType)} },
 	}
 	
 	if err := p.writeWithRetry(ctx, msg, 3, 2.0); err != nil {

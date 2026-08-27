@@ -401,7 +401,7 @@ func (c *{{ class_name }}) Publish{{ messagename }}(ctx context.Context, data {{
 	{%- for var in topic_vars %}
 	topic = strings.ReplaceAll(topic, "{ {{- var -}} }", {{ var | snake }})
 	{%- endfor %}
-	contentType := {{ mqtt.get_content_type(message) }}
+	contentType := {{ cloudEvents.DefaultContentType(message) }}
 	qos := byte({{ mqtt.get_qos(message) }})
 	retain := {{ mqtt.get_retain(message) }}
 	{%- if isCloudEvent %}
@@ -427,9 +427,6 @@ func (c *{{ class_name }}) Publish{{ messagename }}(ctx context.Context, data {{
 	{%- if message.envelopemetadata and "subject" in message.envelopemetadata and message.envelopemetadata.subject.value %}
 	event.SetSubject("{{ message.envelopemetadata.subject.value }}")
 	{%- endif %}
-	{%- if message.envelopemetadata and "datacontenttype" in message.envelopemetadata and message.envelopemetadata.datacontenttype.value %}
-	contentType = "{{ message.envelopemetadata.datacontenttype.value }}"
-	{%- endif %}
 	event.SetDataContentType(contentType)
 	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "subject"] %}
 		{%- if attribute.value %}
@@ -439,18 +436,20 @@ func (c *{{ class_name }}) Publish{{ messagename }}(ctx context.Context, data {{
 		{%- endif %}
 	{%- endfor %}
 
+	var serializedData []byte
+	{%- if message_body_type == "[]byte" %}
+	serializedData = data
+	{%- else %}
+	var serializeErr error
+	serializedData, serializeErr = data.ToByteArray(contentType)
+	if serializeErr != nil {
+		return fmt.Errorf("failed to serialize {{ messagename }} data: %w", serializeErr)
+	}
+	{%- endif %}
 	var payload []byte
 	props := &paho.PublishProperties{}
 	if c.contentMode == ContentModeBinary {
-		{%- if message_body_type == "[]byte" %}
-		payload = data
-		{%- else %}
-		var err error
-		payload, err = data.ToByteArray(contentType)
-		if err != nil {
-			return fmt.Errorf("failed to serialize {{ messagename }} data: %w", err)
-		}
-		{%- endif %}
+		payload = serializedData
 		props.ContentType = contentType
 		addUserProperty(props, "specversion", event.SpecVersion())
 		addUserProperty(props, "type", event.Type())
@@ -462,7 +461,7 @@ func (c *{{ class_name }}) Publish{{ messagename }}(ctx context.Context, data {{
 			addUserProperty(props, name, fmt.Sprint(value))
 		}
 	} else {
-		if err := event.SetData(contentType, data); err != nil {
+		if err := event.SetData(contentType, serializedData); err != nil {
 			return fmt.Errorf("failed to set CloudEvent data: %w", err)
 		}
 		var err error
