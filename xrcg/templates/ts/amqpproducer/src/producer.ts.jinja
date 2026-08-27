@@ -148,9 +148,10 @@ export class {{ class_name }} {
         {%- for argname in protocol_option_arg_names.items %}
         {{ argname }}: string,
         {%- endfor %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
         return new Promise((resolve, reject) => {
+            const serializedData = {{ cloudEvents.SerializeData("data", "contentType") | indent(12) }};
             {%- if isCloudEvent %}
             const cloudEvent = new CloudEvent({
             {%- for attrname, attribute in message.envelopemetadata.items() %}
@@ -171,7 +172,7 @@ export class {{ class_name }} {
             {%- endif %}
             {%- endfor %}
                 id: uuidv4(),
-                data: data,
+                data: serializedData,
                 datacontenttype: contentType
             });
             
@@ -203,25 +204,15 @@ export class {{ class_name }} {
                 // Coerce body to Buffer so rhea emits an AMQP binary data
                 // section; string bodies become AMQP string sections and cause
                 // double-encoding of JSON payloads on the wire.
-                const binaryBody = typeof data === 'string'
-                    ? Buffer.from(data, 'utf-8')
-                    : (data instanceof Uint8Array || Buffer.isBuffer(data))
-                        ? Buffer.from(data as Uint8Array)
-                        : Buffer.from(JSON.stringify(data), 'utf-8');
                 message = {
-                    body: binaryBody,
+                    body: serializedData,
                     content_type: contentType,
                     application_properties
                 };
             }
             {%- else %}
-            const plainBody = typeof data === 'string'
-                ? Buffer.from(data, 'utf-8')
-                : (data instanceof Uint8Array || Buffer.isBuffer(data))
-                    ? Buffer.from(data as Uint8Array)
-                    : Buffer.from(JSON.stringify(data), 'utf-8');
             const message: rhea.Message = {
-                body: plainBody,
+                body: serializedData,
                 application_properties: {
                     subject: '{{ messageid }}'
                 },
@@ -282,7 +273,7 @@ export class {{ class_name }} {
         {%- for argname in protocol_option_arg_names.items %}
         {{ argname }}: string,
         {%- endfor %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
         for (const data of dataArray) {
             await this.send{{ messagename }}(data, {%- if isCloudEvent %}

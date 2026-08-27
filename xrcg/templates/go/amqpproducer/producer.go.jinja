@@ -87,7 +87,7 @@ func (p *{{ class_name }}) Close(ctx context.Context) error {
 {%- set message_body_type = util.body_type(data_project_name, root, message) %}
 {%- set node = amqp_util.get_node(message) or messageid %}
 {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
-{%- set content_type = util.get_content_type(message) %}
+{%- set content_type = cloudEvents.DefaultContentType(message) %}
 {%- if isCloudEvent %}
 {%- set needs_source_param = "source" not in message.envelopemetadata %}
 {%- if "source" in message.envelopemetadata and message.envelopemetadata.source.value %}
@@ -122,21 +122,27 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	{%- if "subject" in message.envelopemetadata and message.envelopemetadata.subject.value %}
 	event.SetSubject("{{ message.envelopemetadata.subject.value }}")
 	{%- endif %}
-	{%- if "datacontenttype" in message.envelopemetadata and message.envelopemetadata.datacontenttype.value %}
-	event.SetDataContentType("{{ message.envelopemetadata.datacontenttype.value }}")
-	{%- else %}
 	event.SetDataContentType({{ content_type }})
-	{%- endif %}
 	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "subject"] %}
 	{%- if attribute.value %}
 	event.SetExtension("{{ attrname }}", "{{ attribute.value }}")
 	{%- endif %}
 	{%- endfor %}
-	if err := event.SetData(event.DataContentType(), data); err != nil {
+	var dataBytes []byte
+	{%- if message_body_type == "[]byte" %}
+	dataBytes = data
+	{%- else %}
+	var serializeErr error
+	dataBytes, serializeErr = data.ToByteArray(event.DataContentType())
+	if serializeErr != nil {
+		return fmt.Errorf("failed to serialize CloudEvent data: %w", serializeErr)
+	}
+	{%- endif %}
+	if err := event.SetData(event.DataContentType(), dataBytes); err != nil {
 		return fmt.Errorf("failed to set CloudEvent data: %w", err)
 	}
 
-	msg, err := p.new{{ messagename }}Message(event, data)
+	msg, err := p.new{{ messagename }}Message(event, dataBytes)
 	if err != nil {
 		return err
 	}
@@ -146,22 +152,12 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	return nil
 }
 
-func (p *{{ class_name }}) new{{ messagename }}Message(event cloudevents.Event, data {{ message_body_type }}) (*amqp.Message, error) {
+func (p *{{ class_name }}) new{{ messagename }}Message(event cloudevents.Event, data []byte) (*amqp.Message, error) {
 	if p.contentMode == ContentModeBinary {
 		contentType := event.DataContentType()
 		if contentType == "" {
 			contentType = {{ content_type }}
 		}
-		var payload []byte
-		{%- if message_body_type == "[]byte" %}
-		payload = data
-		{%- else %}
-		var err error
-		payload, err = data.ToByteArray(contentType)
-		if err != nil {
-			return nil, fmt.Errorf("failed to serialize data: %w", err)
-		}
-		{%- endif %}
 		props := map[string]any{
 			"cloudEvents:specversion": event.SpecVersion(),
 			"cloudEvents:id":          event.ID(),
@@ -179,7 +175,7 @@ func (p *{{ class_name }}) new{{ messagename }}Message(event cloudevents.Event, 
 			props["cloudEvents:"+name] = val
 		}
 		return &amqp.Message{
-			Data: [][]byte{payload},
+			Data: [][]byte{data},
 			Properties: &amqp.MessageProperties{ContentType: &contentType},
 			ApplicationProperties: props,
 		}, nil

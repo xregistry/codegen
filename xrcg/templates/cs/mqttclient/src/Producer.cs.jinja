@@ -142,11 +142,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         , string {{ ph }}
         {%- endfor -%}
         , string? topic = null
-        {%- if isCloudEvent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
-        , string contentType = "{{ message.envelopemetadata["datacontenttype"]["value"] }}"
-        {%- else -%}
-        , string contentType = System.Net.Mime.MediaTypeNames.Application.Json
-        {%- endif %}
+        , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
         {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %}
         , int? qos = null
         , bool? retain = null)

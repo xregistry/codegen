@@ -124,8 +124,9 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
+        const serializedData = {{ cloudEvents.SerializeData("data", "contentType") | indent(8) }};
         {%- if isCloudEvent %}
         const cloudEvent = new CloudEvent({
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
@@ -153,7 +154,7 @@ export class {{ class_name }} {
         {%- endif %}
         {%- endfor %}
             id: uuidv4(),
-            data: data,
+            data: serializedData,
             datacontenttype: contentType
         });
         
@@ -167,7 +168,7 @@ export class {{ class_name }} {
         } else {
             // Binary content mode - CloudEvent attributes as properties, data as body
             eventData = {
-                body: data,
+                body: serializedData,
                 contentType: contentType,
                 properties: {
                     'cloudEvents:specversion': '1.0',
@@ -187,7 +188,7 @@ export class {{ class_name }} {
         }
         {%- else %}
         const eventData: EventData = {
-            body: data,
+            body: serializedData,
             properties: {
                 subject: '{{ messageid }}'
             }
@@ -237,7 +238,7 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
         const eventDataArray: EventData[] = dataArray.map(data => {
             {%- if isCloudEvent %}

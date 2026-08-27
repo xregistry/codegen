@@ -101,7 +101,20 @@ cloudEvent.SetAttributeFromString("{{ attrname }}",{%- if attribute.value -%}"{{
 
 {#- get the the datacontenttype attribute value from the message declaration if it exists #}
 {%- macro GetDataContentType(message, default) -%}
-{%- if message.envelope == "CloudEvents/1.0" and "envelopemetadata" in message and "datacontentype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
+{%- set schema_format = message.dataschemaformat | default("", true) | lower -%}
+{%- if schema_format.startswith("avro") -%}
+"avro/binary"
+{%- elif schema_format.startswith("proto") -%}
+"application/protobuf"
+{%- elif schema_format.startswith("xsd") or schema_format.startswith("xmlschema") -%}
+{%- if "envelopemetadata" in message and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] and message.envelopemetadata["datacontenttype"].value -%}
+"{{ message.envelopemetadata["datacontenttype"].value }}"
+{%- else -%}
+"application/xml"
+{%- endif -%}
+{%- elif schema_format.startswith("jsonschema") or schema_format.startswith("jsonstructure") -%}
+"application/json"
+{%- elif message.envelope == "CloudEvents/1.0" and "envelopemetadata" in message and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
 "{{ message.envelopemetadata["datacontenttype"].value }}"
 {%- else -%}
 {{ default }}

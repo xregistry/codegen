@@ -120,17 +120,20 @@ public class {{ producer_class }} implements AutoCloseable {
         String targetTopic = applyTopicTemplate(topicPattern{% for ph in uri_template_vars %}, "{{ ph }}", {{ ph }}{% endfor %});
         int effectiveQos = qos != null ? qos : {{ default_qos }};
         boolean effectiveRetain = retain != null ? retain : {{ default_retain_val }};
+        String contentType = {{ cloudEvents.GetContentType(message) }};
         {%- if message_body_type == "byte[]" %}
         byte[] dataBytes = data;
+        {%- elif (message.dataschemaformat | default("", true) | lower).startswith("proto") %}
+        byte[] dataBytes = data.toByteArray();
         {%- else %}
-        byte[] dataBytes = data.toByteArray({{ cloudEvents.GetContentType(message) }});
+        byte[] dataBytes = data.toByteArray(contentType);
         {%- endif %}
 
         MqttMessage mqttMessage = new MqttMessage(dataBytes);
         mqttMessage.setQos(effectiveQos);
         mqttMessage.setRetained(effectiveRetain);
         {%- if message.envelopemetadata %}
-        {{ cloudEvents.BuildCloudEvent(message, "dataBytes") | indent(8) }}
+        {{ cloudEvents.BuildCloudEvent(message, "dataBytes", "contentType") | indent(8) }}
         mqttMessage.setProperties(buildBinaryModeProperties(cloudEvent));
         {%- endif %}
         mqttClient.publish(targetTopic, mqttMessage);

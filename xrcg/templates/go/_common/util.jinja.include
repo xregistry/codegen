@@ -60,3 +60,70 @@ nil
 {{ type_name }}{}
 {%- endif -%}
 {%- endmacro -%}
+
+{%- macro avro_test_helpers() %}
+func avroTestValue(schema avro.Schema) interface{} {
+	switch typed := schema.(type) {
+	case *avro.RefSchema:
+		return avroTestValue(typed.Schema())
+	case *avro.RecordSchema:
+		value := make(map[string]interface{}, len(typed.Fields()))
+		for _, field := range typed.Fields() {
+			value[field.Name()] = avroTestValue(field.Type())
+		}
+		return value
+	case *avro.EnumSchema:
+		symbol, _ := typed.Symbol(0)
+		return symbol
+	case *avro.UnionSchema:
+		for _, member := range typed.Types() {
+			if member.Type() == avro.Null {
+				return nil
+			}
+		}
+		if members := typed.Types(); len(members) > 0 {
+			return avroTestValue(members[0])
+		}
+		return nil
+	case *avro.ArraySchema:
+		return []interface{}{}
+	case *avro.MapSchema:
+		return map[string]interface{}{}
+	}
+
+	switch schema.Type() {
+	case avro.Null:
+		return nil
+	case avro.Boolean:
+		return false
+	case avro.Int:
+		return int32(0)
+	case avro.Long:
+		return int64(0)
+	case avro.Float:
+		return float32(0)
+	case avro.Double:
+		return float64(0)
+	case avro.Bytes:
+		return []byte{}
+	case avro.String:
+		return ""
+	default:
+		panic("unsupported Avro test schema type " + string(schema.Type()))
+	}
+}
+
+func initializeAvroTestData(t *testing.T, schema avro.Schema, target interface{}) {
+	t.Helper()
+	payload, err := avro.Marshal(schema, avroTestValue(schema))
+	require.NoError(t, err)
+	require.NoError(t, avro.Unmarshal(schema, payload, target))
+}
+{%- endmacro %}
+
+{%- macro initialize_avro_test_data(variable_name, type_name, message) -%}
+{%- set schema_format = message.dataschemaformat | default("", true) | lower -%}
+{%- if schema_format.startswith("avro") %}
+	initializeAvroTestData(t, {{ type_name }}Schema, &{{ variable_name }})
+{%- endif -%}
+{%- endmacro -%}

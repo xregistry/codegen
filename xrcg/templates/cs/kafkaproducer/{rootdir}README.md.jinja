@@ -79,11 +79,7 @@ public static EventData Create{{ messagename | strip_namespace }}Event(
 {%- elif is_amqp -%}
 {{- amqp.DeclareUriTemplateArguments(message) -}}
 {%- endif -%}
-{%- if is_cloudevent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
-, string contentType = "{{ message.envelopemetadata["datacontenttype"]["value"] }}"
-{%- else -%}
-, string contentType = System.Net.Mime.MediaTypeNames.Application.Json
-{%- endif %}
+, string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
 {%- if is_cloudevent %}, CloudEventFormatter? formatter = null{% endif %});
 ```
 
@@ -103,11 +99,7 @@ public static EventData Create{{ messagename | strip_namespace }}Event(
 | `{{ splitarg[1] }}` | `{{ splitarg[0] }}` | URI template argument |
 {%- endfor %}
 {%- endif %}
-{%- if is_cloudevent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] %}
-| `contentType` | `string` | The content type of the event data. Defaults to `{{ message.envelopemetadata["datacontenttype"]["value"] }}` |
-{%- else %}
-| `contentType` | `string` | The content type of the event data. Defaults to `application/json` |
-{%- endif %}
+| `contentType` | `string` | The content type of the event data. Defaults to `{{ cloudEvents.GetDataContentType(message, '"application/json"') }}` |
 {%- if is_cloudevent %}
 | `formatter` | `CloudEventFormatter` | The formatter to use for structured CloudEvents mode. Defaults to `null` (binary mode) |
 {%- endif %}
@@ -544,4 +536,3 @@ public class TransactionalKafkaProducer
 ```
 
 ## Testing
-

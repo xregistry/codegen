@@ -113,7 +113,7 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
         const message = this.create{{ messagename | strip_namespace }}Message(
             data,
@@ -176,7 +176,7 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
         const messages = dataArray.map(data => 
             this.create{{ messagename | strip_namespace }}Message(
@@ -224,8 +224,9 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Message {
+        const serializedData = {{ cloudEvents.SerializeData("data", "contentType") | indent(8) }};
         {%- if isCloudEvent %}
         const cloudEvent = new CloudEvent({
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
@@ -254,7 +255,7 @@ export class {{ class_name }} {
         {%- endfor %}
             id: uuidv4(),
             datacontenttype: contentType,
-            data: data
+            data: serializedData
         });
         
         if (this.mode === 'structured') {
@@ -285,7 +286,7 @@ export class {{ class_name }} {
             
             return {
                 headers,
-                value: Buffer.from(JSON.stringify(data))
+                value: serializedData
             };
         }
         {%- else %}
@@ -294,7 +295,7 @@ export class {{ class_name }} {
                 'subject': '{{ messageid }}',
                 'content-type': contentType
             } as Record<string, string>,
-            value: Buffer.from(JSON.stringify(data))
+            value: serializedData
         };
         {%- endif %}
     }

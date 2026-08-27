@@ -105,7 +105,9 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
     ): Promise<void> {
-        const cloudEvent: CloudEvent<{{ type_name }}> = new CloudEvent({
+        const contentType = {{ cloudEvents.DefaultContentType(message) }};
+        const serializedData = {{ cloudEvents.SerializeData("data", "contentType") | indent(8) }};
+        const cloudEvent: CloudEvent<Buffer> = new CloudEvent({
         {%- for attrname, attribute in message.envelopemetadata.items() %}
         {%- if attrname == "type" %}
             type: {% if attribute.value %}'{{ attribute.value }}'{% else %}{{ attrname }}{% endif %},
@@ -124,8 +126,8 @@ export class {{ class_name }} {
         {%- endif %}
         {%- endfor %}
             id: uuidv4(),
-            data: data,
-            datacontenttype: 'application/json'
+            data: serializedData,
+            datacontenttype: contentType
         });
         
         await this.client.send([cloudEvent]);
@@ -156,7 +158,10 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
     ): Promise<void> {
-        const cloudEvents: CloudEvent<{{ type_name }}>[] = dataArray.map(data => new CloudEvent({
+        const contentType = {{ cloudEvents.DefaultContentType(message) }};
+        const events: CloudEvent<Buffer>[] = dataArray.map(data => {
+            const serializedData = {{ cloudEvents.SerializeData("data", "contentType") | indent(12) }};
+            return new CloudEvent({
         {%- for attrname, attribute in message.envelopemetadata.items() %}
         {%- if attrname == "type" %}
             type: {% if attribute.value %}'{{ attribute.value }}'{% else %}{{ attrname }}{% endif %},
@@ -175,11 +180,12 @@ export class {{ class_name }} {
         {%- endif %}
         {%- endfor %}
             id: uuidv4(),
-            data: data,
-            datacontenttype: 'application/json'
-        }));
+                data: serializedData,
+                datacontenttype: contentType
+            });
+        });
         
-        await this.client.send(cloudEvents);
+        await this.client.send(events);
     }
     {% endfor %}
 }

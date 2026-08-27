@@ -2,10 +2,15 @@
 {%- import "mqtt.jinja.include" as mqtt -%}
 {%- import "util.jinja.include" as util -%}
 {%- set uses_data_package = [] -%}
+{%- set avro_messages = [] -%}
 {%- for _messagegroupid, _messagegroup in root.messagegroups.items() -%}
 {%- for _messageid, _message in _messagegroup.messages.items() -%}
 {%- if (mqtt.body_type(data_project_name, root, _message) | trim) != "[]byte" -%}
 {%- set _ = uses_data_package.append(true) -%}
+{%- endif -%}
+{%- set _schema_format = _message.dataschemaformat | default("", true) | lower -%}
+{%- if _schema_format.startswith("avro") -%}
+{%- set _ = avro_messages.append(_message) -%}
 {%- endif -%}
 {%- endfor -%}
 {%- endfor -%}
@@ -26,6 +31,9 @@ import (
 	"github.com/eclipse/paho.golang/paho"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	{%- if avro_messages %}
+	"github.com/hamba/avro/v2"
+	{%- endif %}
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -34,6 +42,8 @@ import (
 	{%- endif %}
 	. "{{ project_name | snake }}"
 )
+
+{% if avro_messages %}{{ util.avro_test_helpers() }}{% endif %}
 
 var _ = cloudevents.Event{}
 
@@ -203,6 +213,7 @@ func Test{{ class_name }}IntegrationRoundTrip(t *testing.T) {
 			require.NoError(t, client.Subscribe(ctx, handler, []string{"#"}, 1))
 
 			var data {{ first_message_body_type }}
+			{{ util.initialize_avro_test_data("data", first_message_body_type, first_message) }}
 			require.NoError(t, client.Publish{{ first_messagename }}(ctx, data{% for var in first_topic_vars %}, "test-{{ var }}"{% endfor %}{% for var in first_source_vars %}, "test-{{ var }}"{% endfor %}{% if first_needs_source_param %}, "test-source"{% endif %}{% if first_needs_type_param %}, "{{ first_messageid }}"{% endif %}{% for attr in first_extension_params %}, "test-{{ attr }}"{% endfor %}))
 
 			select {
@@ -251,6 +262,7 @@ func Test{{ class_name }}Publish{{ messagename }}(t *testing.T) {
 	pub := &fakePublisher{}
 	client := New{{ class_name }}WithPublisher(pub)
 	var data {{ message_body_type }}
+	{{ util.initialize_avro_test_data("data", message_body_type, message) }}
 
 	err := client.Publish{{ messagename }}(context.Background(), data{% for var in topic_vars %}, "test-{{ var }}"{% endfor %}{% for var in source_vars %}, "test-{{ var }}"{% endfor %}{% if needs_source_param %}, "test-source"{% endif %}{% if needs_type_param %}, "{{ messageid }}"{% endif %}{% for attr in extension_params %}, "test-{{ attr }}"{% endfor %})
 	require.NoError(t, err)

@@ -186,9 +186,16 @@ impl {{ struct_name }} {
         {%- endif %}
         ];
         {%- if uses_data %}
-        let datacontenttype = "application/json".to_string();
+        {%- set _schemaformat = message.dataschemaformat | default("", true) | lower %}
+        {%- set _uses_binary_schema = _schemaformat.startswith("xsd") or _schemaformat.startswith("xmlschema") or _schemaformat.startswith("avro") or _schemaformat.startswith("proto") %}
+        let datacontenttype = {{ util.get_content_type(message) }}.to_string();
+        {%- if _uses_binary_schema %}
+        let data_json: Option<serde_json::Value> = None;
+        let body = data.to_byte_array(&datacontenttype)?;
+        {%- else %}
         let data_json = Some(serde_json::to_value(&data)?);
         let body = serde_json::to_vec(&data)?;
+        {%- endif %}
         {%- else %}
         let datacontenttype = {{ util.get_content_type(message) }}.to_string();
         let data_json: Option<serde_json::Value> = None;

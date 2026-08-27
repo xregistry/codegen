@@ -99,7 +99,20 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
                 {
                     throw new ArgumentNullException(nameof(cloudEvent));
                 }
-                cloudEvent.Data = data;
+                if (formatter is CloudNative.CloudEvents.SystemTextJson.JsonEventFormatter &&
+                    new System.Net.Mime.ContentType(contentType).MediaType == System.Net.Mime.MediaTypeNames.Application.Json)
+                {
+                    cloudEvent.Data = data;
+                }
+                else
+                {
+                    bool isRawBytes = typeof(T) == typeof(byte[]);
+                    if (bodySerializer == null && !isRawBytes)
+                    {
+                        throw new ArgumentNullException(nameof(bodySerializer));
+                    }
+                    cloudEvent.Data = bodySerializer == null ? data : bodySerializer(data, contentType);
+                }
                 var eventBody = formatter.EncodeStructuredModeMessage(cloudEvent, out var eventContentType);
                 var message = new ServiceBusMessage(eventBody)
                 {
@@ -126,11 +139,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {%- elif is_amqp -%}
         {{- amqp.DeclareUriTemplateArguments(message) -}}
         {%- endif -%}
-        {%- if isCloudEvent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
-        , string contentType = "{{ message.envelopemetadata["datacontenttype"]["value"] }}"
-        {%- else -%}
-        , string contentType = System.Net.Mime.MediaTypeNames.Application.Json
-        {%- endif %}
+        , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
         {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %})
         {
             {% if type_name != "byte[]" %}

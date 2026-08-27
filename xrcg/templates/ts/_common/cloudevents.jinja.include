@@ -11,6 +11,42 @@ true
 true
 {%- endif -%}
 {%- endmacro %}
+{%- macro DefaultContentType(message) -%}
+{%- set schema_format = message.dataschemaformat | default("", true) | lower -%}
+{%- if schema_format.startswith("avro") -%}
+'avro/binary'
+{%- elif schema_format.startswith("proto") -%}
+'application/protobuf'
+{%- elif schema_format.startswith("xsd") or schema_format.startswith("xmlschema") -%}
+{%- if message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
+'{{ message.envelopemetadata.datacontenttype.value }}'
+{%- else -%}
+'application/xml'
+{%- endif -%}
+{%- elif schema_format.startswith("jsonschema") or schema_format.startswith("jsonstructure") -%}
+'application/json'
+{%- elif message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
+'{{ message.envelopemetadata.datacontenttype.value }}'
+{%- else -%}
+'application/json'
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro SerializeData(dataVar, contentTypeVar) -%}
+((): Buffer => {
+    const serializable = {{ dataVar }} as unknown as { toByteArray(contentType?: string): Uint8Array };
+    if (typeof serializable.toByteArray === 'function') {
+        return Buffer.from(serializable.toByteArray({{ contentTypeVar }}));
+    }
+    if ({{ dataVar }} instanceof Uint8Array) {
+        return Buffer.from({{ dataVar }});
+    }
+    if (typeof {{ dataVar }} === 'string') {
+        return Buffer.from({{ dataVar }}, 'utf-8');
+    }
+    return Buffer.from(JSON.stringify({{ dataVar }}), 'utf-8');
+})()
+{%- endmacro -%}
 
 {#- Generates a list of arguments for "send" methods that correspond to placeholders in uritemplates -#}
 {%- macro DeclareUriTemplateArguments(message) -%}

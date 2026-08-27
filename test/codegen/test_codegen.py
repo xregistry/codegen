@@ -10,6 +10,7 @@ import subprocess
 import shutil
 import time
 import tempfile
+import xml.etree.ElementTree as ET
 
 import pytest
 from xrcg.generator.generator_context import GeneratorContext
@@ -340,6 +341,226 @@ def test_codegen_py_kafkaproducer_keeps_jstruct_exports_with_unused_avro_schemas
         assert 'from test_issue_371_data import Info' in producer_contents
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def test_codegen_py_xsd_emits_xml_serialization():
+    """XSD schemas are converted to Avro and emitted with XML serialization.
+
+    When a message references an ``XSD`` schema (typically paired with a
+    ``datacontenttype`` of ``application/xml``), codegen must convert the XSD
+    to Avro via avrotize and enable XML annotations on the generated data
+    classes so the runtime ``to_byte_array`` / ``from_data`` handle
+    ``application/xml``.
+    """
+    output_dir = os.path.join(
+        tempfile.gettempdir(),
+        'tmp/test/py/xsd-amqpproducer'.replace('/', os.path.sep))
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir, ignore_errors=True)
+
+    sys.argv = [
+        'xrcg', 'generate',
+        '--style', 'amqpproducer',
+        '--language', 'py',
+        '--definitions', os.path.join(
+            project_root,
+            'samples/message-definitions/minimal-xsd.xreg.json'.replace('/', os.path.sep)),
+        '--output', output_dir,
+        '--projectname', 'test_xsd'
+    ]
+    assert xrcg.cli() == 0
+
+    person_path = os.path.join(
+        output_dir, 'test_xsd_data', 'src', 'test_xsd_data',
+        'com', 'example', 'grp1', 'person.py')
+    assert os.path.exists(person_path), f"Expected data class not generated: {person_path}"
+    with open(person_path, 'r', encoding='utf-8') as handle:
+        person_contents = handle.read()
+    assert 'application/xml' in person_contents
+    assert 'def to_byte_array' in person_contents
+    assert 'def from_data' in person_contents
+
+    # The XML runtime helper module must be emitted alongside the data class.
+    xml_runtime_path = os.path.join(
+        output_dir, 'test_xsd_data', 'src', 'test_xsd_data', 'xml_runtime.py')
+    assert os.path.exists(xml_runtime_path), "xml_runtime.py was not generated for XSD/XML data"
+
+    # Generated data class must import cleanly.
+    import py_compile
+    py_compile.compile(person_path, doraise=True)
+
+    data_src = os.path.join(output_dir, 'test_xsd_data', 'src')
+    sys.path.insert(0, data_src)
+    try:
+        from test_xsd_data.com.example.grp1.person import Person
+
+        person = Person(name='Ada', age=37, id='person-1')
+        xml_bytes = person.to_byte_array('application/xml')
+        assert isinstance(xml_bytes, bytes)
+        root = ET.fromstring(xml_bytes)
+        assert root.tag.rsplit('}', 1)[-1] == 'Person'
+        assert root.attrib['id'] == 'person-1'
+        children = {child.tag.rsplit('}', 1)[-1]: child.text for child in root}
+        assert children == {'name': 'Ada', 'age': '37'}
+
+        round_tripped = Person.from_data(xml_bytes, 'application/xml')
+        assert round_tripped == person
+    finally:
+        sys.path.remove(data_src)
+        for module_name in list(sys.modules):
+            if module_name == 'test_xsd_data' or module_name.startswith('test_xsd_data.'):
+                del sys.modules[module_name]
+
+
+@pytest.mark.parametrize('language,style,xml_marker', [
+    ('cs', 'amqpproducer', 'Xml'),
+    ('java', 'amqpproducer', 'Xml'),
+    ('ts', 'amqpproducer', 'xml'),
+    ('go', 'amqpproducer', 'xml:"'),
+    ('rust', 'producer', 'rename'),
+])
+def test_codegen_xsd_generates_xml_annotations(language, style, xml_marker):
+    """XSD/XML generation succeeds and emits XML metadata for every language.
+
+    Regression guard: previously XSD schemas were silently dropped (empty data
+    classes) and the Go emitter crashed. With avrotize XML support wired in,
+    each language must generate without error and produce XML-aware types.
+    """
+    output_dir = os.path.join(
+        tempfile.gettempdir(),
+        f'tmp/test/{language}/xsd-{style}'.replace('/', os.path.sep))
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir, ignore_errors=True)
+
+    sys.argv = [
+        'xrcg', 'generate',
+        '--style', style,
+        '--language', language,
+        '--definitions', os.path.join(
+            project_root,
+            'samples/message-definitions/minimal-xsd.xreg.json'.replace('/', os.path.sep)),
+        '--output', output_dir,
+        '--projectname', 'test_xsd'
+    ]
+    assert xrcg.cli() == 0
+
+    source_exts = {'.cs', '.java', '.ts', '.go', '.rs'}
+    found_xml = False
+    for root, _dirs, files in os.walk(output_dir):
+        for fn in files:
+            if os.path.splitext(fn)[1] in source_exts:
+                with open(os.path.join(root, fn), 'r', encoding='utf-8', errors='ignore') as handle:
+                    if xml_marker in handle.read():
+                        found_xml = True
+                        break
+        if found_xml:
+            break
+    assert found_xml, f"No XML annotations found in generated {language} sources"
+
+
+def _producer_sources(output_dir, projectname):
+    """Yield generated *producer* (main-project) source paths, excluding the
+    avrotize data project (whose data classes always contain XML support and
+    would mask what the producer itself defaults to)."""
+    data_marker = projectname.lower().replace('_', '') + 'data'
+    exts = {'.cs', '.java', '.ts', '.go', '.rs', '.py'}
+    for root, _dirs, files in os.walk(output_dir):
+        relative_root = os.path.relpath(root, output_dir)
+        segs = [s.lower().replace('_', '') for s in relative_root.split(os.sep)]
+        if data_marker in segs or any(seg in ('test', 'tests') for seg in segs):
+            continue
+        for fn in files:
+            if os.path.splitext(fn)[1] in exts:
+                yield os.path.join(root, fn)
+
+
+def _generate_producer(language, style, sample, projectname, subdir):
+    output_dir = os.path.join(
+        tempfile.gettempdir(),
+        f'tmp/test/{language}/ct-{subdir}'.replace('/', os.path.sep))
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir, ignore_errors=True)
+    definitions_path = sample if os.path.isabs(sample) else os.path.join(
+        project_root,
+        f'samples/message-definitions/{sample}'.replace('/', os.path.sep))
+    sys.argv = [
+        'xrcg', 'generate',
+        '--style', style,
+        '--language', language,
+        '--definitions', definitions_path,
+        '--output', output_dir,
+        '--projectname', projectname,
+    ]
+    assert xrcg.cli() == 0
+    return output_dir
+
+
+@pytest.mark.parametrize('language,style,serializer_marker', [
+    ('py', 'amqpproducer', 'to_byte_array(content_type)'),
+    ('cs', 'amqpproducer', 'ToByteArray(contentType)'),
+    ('java', 'amqpproducer', 'toByteArray(contentType)'),
+    ('ts', 'amqpproducer', 'toByteArray(contentType)'),
+    ('go', 'amqpproducer', 'ToByteArray(event.DataContentType())'),
+    ('rust', 'producer', 'to_byte_array(&datacontenttype)'),
+])
+def test_codegen_producer_content_type_defaults_from_datacontenttype(
+        language, style, serializer_marker):
+    """Producer metadata and payload serialization follow the schema format."""
+    # XSD sample declares datacontenttype: application/xml.
+    xml_dir = _generate_producer(
+        language, style, 'minimal-xsd.xreg.json', 'test_xsd', 'ct-xml')
+    xml_sources = [
+        open(p, 'r', encoding='utf-8', errors='ignore').read()
+        for p in _producer_sources(xml_dir, 'test_xsd')
+    ]
+    assert any('application/xml' in source for source in xml_sources), (
+        f"{language} producer did not default content type to application/xml "
+        f"for an application/xml message")
+    assert any(serializer_marker in source for source in xml_sources), (
+        f"{language} producer labels XML but does not invoke its schema-aware "
+        "byte serializer")
+
+    # A conflicting XML declaration must not make JSON Schema serializers
+    # advertise XML while emitting JSON.
+    work_dir = tempfile.mkdtemp()
+    try:
+        json_sample = os.path.join(
+            project_root,
+            'samples/message-definitions/contoso-erp.xreg.json'.replace('/', os.path.sep))
+        with open(json_sample, 'r', encoding='utf-8') as handle:
+            document = json.load(handle)
+        for group in document['messagegroups'].values():
+            for message in group['messages'].values():
+                if message.get('dataschemaformat', '').lower().startswith('json'):
+                    message.setdefault('envelopemetadata', {})['datacontenttype'] = {
+                        'type': 'string',
+                        'value': 'application/xml',
+                    }
+        conflicting_sample = os.path.join(work_dir, 'json-declared-as-xml.xreg.json')
+        with open(conflicting_sample, 'w', encoding='utf-8') as handle:
+            json.dump(document, handle)
+
+        json_dir = _generate_producer(
+            language, style, conflicting_sample, 'test_erp', 'ct-json')
+        json_sources = [
+            open(p, 'r', encoding='utf-8', errors='ignore').read()
+            for p in _producer_sources(json_dir, 'test_erp')
+        ]
+        assert any('application/json' in source for source in json_sources), (
+            f"{language} producer lost the JSON Schema content type")
+        assert not any('application/xml' in source for source in json_sources), (
+            f"{language} producer advertised XML for JSON Schema data")
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+    avro_dir = _generate_producer(
+        language, style, 'inkjet.xreg.json', 'test_avro', 'ct-avro')
+    avro_sources = [
+        open(p, 'r', encoding='utf-8', errors='ignore').read()
+        for p in _producer_sources(avro_dir, 'test_avro')
+    ]
+    assert any('avro/binary' in source for source in avro_sources), (
+        f"{language} producer did not preserve the Avro binary content type")
 
 
 def test_codegen_cs_mqttclient_dedups_repeated_topic_placeholder():

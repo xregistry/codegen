@@ -1108,6 +1108,12 @@ def test_amqpproducer_emits_cloudevents_prefix_not_ce_prefix():
 
 def test_kafkaproducer_time_uritemplate_is_normalized_before_cloudevent_creation():
     """Kafka producer must expose `_time` while still accepting legacy time placeholders."""
+    import ast
+    import base64
+    import glob
+    from cloudevents.http import CloudEvent
+    from cloudevents.kafka import KafkaMessage, from_binary, to_binary, to_structured
+
     src = _generate_kafka_producer_src_from_document(_build_kafka_time_document())
     assert "def _resolve_cloudevents_time(" in src
     assert "def __binary_data_marshaller(data: typing.Any) -> bytes:" in src
@@ -1119,6 +1125,70 @@ def test_kafkaproducer_time_uritemplate_is_normalized_before_cloudevent_creation
     assert '"{event_time}".format(event_time=_event_time)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
     assert "data_marshaller=lambda x: self.__binary_data_marshaller(x)" in src
+
+    parsed = ast.parse(src)
+    producer_class = next(
+        node
+        for node in parsed.body
+        if isinstance(node, ast.ClassDef) and node.name.endswith("KafkaEventProducer")
+    )
+    marshaller_method = next(
+        node
+        for node in producer_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__binary_data_marshaller"
+    )
+    helper_module = ast.Module(
+        body=[
+            ast.Import(names=[ast.alias(name="typing")]),
+            ast.ClassDef(
+                name="GeneratedProducer",
+                bases=[],
+                keywords=[],
+                body=[marshaller_method],
+                decorator_list=[],
+            ),
+        ],
+        type_ignores=[],
+    )
+    ast.fix_missing_locations(helper_module)
+    namespace = {}
+    exec(compile(helper_module, "<generated kafka marshaller>", "exec"), namespace)
+    marshaller = namespace["GeneratedProducer"]._GeneratedProducer__binary_data_marshaller
+
+    payload = b"\x00\xffavro"
+    assert marshaller(payload) == payload
+    attributes = {
+        "specversion": "1.0",
+        "id": "test-id",
+        "source": "urn:test",
+        "type": "Example.Event",
+        "datacontenttype": "avro/binary",
+    }
+    event = CloudEvent.create(attributes, payload)
+    structured = to_structured(event, data_marshaller=marshaller)
+    envelope = json.loads(structured.value)
+    assert envelope["data_base64"] == base64.b64encode(payload).decode("ascii")
+    binary = to_binary(event, data_marshaller=marshaller)
+    assert binary.value == payload
+    assert binary.headers["content-type"] == b"avro/binary"
+    parsed = from_binary(
+        KafkaMessage(headers=binary.headers, key=binary.key, value=binary.value),
+        data_unmarshaller=lambda data: data,
+    )
+    assert parsed.data == payload
+
+    generated_dir, _ = _generate_python_project_from_document(
+        _build_kafka_time_document(),
+        "kafkaproducer",
+        "test_kafka_binary_parser",
+    )
+    generated_tests = glob.glob(
+        os.path.join(generated_dir, "**", "test_producer.py"),
+        recursive=True,
+    )
+    assert generated_tests
+    generated_test_src = open(generated_tests[0], encoding="utf-8").read()
+    assert "from_binary(message, data_unmarshaller=lambda data: data)" in generated_test_src
 
 
 def test_kafkaproducer_exposes_resilient_flush_helper():
