@@ -10,7 +10,7 @@ azure-storage-blob>=12.31.0
 cloudevents>=2.2.0
 confluent-kafka>=2.16.0
 paho-mqtt>=2.1.0
-python-qpid-proton>=0.40.0
+python-qpid-proton>=0.41.1
 
 # Development dependencies
 flake8>=7.4.1
