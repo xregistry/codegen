@@ -13,7 +13,7 @@ paho-mqtt>=2.1.0
 python-qpid-proton>=0.41.1
 
 # Development dependencies
-flake8>=7.4.1
+flake8>=7.5.0
 mypy>=2.4.1
 pylint>=4.1.3
 pytest>=9.1.1
