@@ -1,6 +1,8 @@
+{%- import "util.jinja.include" as util -%}
 {
   "name": "dashboard",
   "version": "1.0.0",
+  "overrides": {{ util.DependencyOverrides() }},
   "scripts": {
     "bootstrap": "npm install",
     "build": "npm run build --workspaces",

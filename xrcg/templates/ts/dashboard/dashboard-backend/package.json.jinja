@@ -1,11 +1,13 @@
+{%- import "util.jinja.include" as util -%}
 {
   "name": "{{project_name|dotdash|lower}}-dashboard-backend",
   "version": "1.0.0",
   "description": "Backend server for dashboard",
   "type": "module",
   "main": "dist/index.js",
+  "overrides": {{ util.DependencyOverrides() }},
   "scripts": {
-    "build": "tsc && cpx \"public/**/*\" dist/public",
+    "build": "tsc && node -e \"const fs = require('node:fs'); if (fs.existsSync('public')) fs.cpSync('public', 'dist/public', { recursive: true })\"",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "debug": "nodemon --inspect --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts"
@@ -16,20 +18,19 @@
   "dependencies": {
     "async-sema": "3.1.1",
     "azure-kusto-data": "^6.0.2",
-    "cloudevents": "^8.0.2",
+    {{ dependency("ts", "node22", "cloudevents") }},
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
-    "kafkajs": "^2.2.4",
+    {{ dependency("ts", "node22", "kafkajs") }},
     "pako": "^2.1.0",
     "socket.io": "^4.8.0",
     "winston": "^3.14.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
-    "@types/node": "^22.7.5",
-    "cpx": "^1.5.0",
+    {{ dependency("ts", "node22", "@types/node") }},
     "nodemon": "^3.0.1",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.6.3"
+    {{ dependency("ts", "node22", "ts-node") }},
+    {{ dependency("ts", "node22", "typescript") }}
   }
 }

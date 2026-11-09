@@ -167,7 +167,7 @@ describe('{{ test_class_name }}', () => {
         await new Promise(resolve => setTimeout(resolve, 500));
 
         const received: Array<{
-            cloudEvent: CloudEvent;
+            cloudEvent: CloudEvent<unknown>;
             data: {{ body_type }};
             topicParams: Record<string, string>;
         }> = [];
@@ -175,7 +175,7 @@ describe('{{ test_class_name }}', () => {
         const donePromise = new Promise<void>(resolve => { _resolve = resolve; });
 
         subscriber.{{ messagename }}Handler = async (
-            cloudEvent: CloudEvent,
+            cloudEvent: CloudEvent<unknown>,
             data: {{ body_type }},
             topicParams: Record<string, string>,
         ) => {
@@ -229,9 +229,9 @@ describe('{{ test_class_name }}', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         jest.spyOn((client as any).client as mqtt.MqttClient, 'publish').mockImplementation(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (t: any, p: any, o: any, cb?: (err?: Error | null) => void) => {
+            (t: any, p: any, o: any, cb?: mqtt.PacketCallback) => {
                 captured.push({ topic: String(t), payload: String(p), opts: o as mqtt.IClientPublishOptions });
-                cb?.(null);
+                cb?.();
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 return (client as any).client;
             },
@@ -274,9 +274,9 @@ describe('{{ test_class_name }}', () => {
     test('{{ messagename }}: binary-mode User Property decoding (no-broker)', async () => {
         // Tests handleMessage with a simulated MQTT5 PUBLISH packet carrying CE User Properties.
         const client = new {{ class_name }}('mqtt://localhost:1', { manualConnect: true }, undefined, 'binary');
-        const received: Array<{ cloudEvent: CloudEvent; data: {{ body_type }}; topicParams: Record<string, string> }> = [];
+        const received: Array<{ cloudEvent: CloudEvent<unknown>; data: {{ body_type }}; topicParams: Record<string, string> }> = [];
         client.{{ messagename }}Handler = async (
-            cloudEvent: CloudEvent,
+            cloudEvent: CloudEvent<unknown>,
             data: {{ body_type }},
             topicParams: Record<string, string>,
         ) => {

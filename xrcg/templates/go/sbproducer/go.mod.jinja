@@ -1,9 +1,10 @@
 {%- import "util.jinja.include" as util -%}
 module {{ project_name | snake }}
 
-go 1.23.0
+go 1.26.0
 
 require (
+	{{ dependency("go", "go121", "golang.org/x/net") }}
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.9.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/google/uuid v1.6.0

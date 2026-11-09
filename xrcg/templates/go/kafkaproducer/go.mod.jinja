@@ -1,16 +1,17 @@
 {%- import "util.jinja.include" as util -%}
 module {{ project_name | snake }}
 
-go 1.21
+go 1.26.0
 
 require (
+	{{ dependency("go", "go121", "golang.org/x/net") }}
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/segmentio/kafka-go v0.4.47
 	github.com/google/uuid v1.6.0
 	github.com/username/{{ data_project_name | go_package }} v0.0.0
-	github.com/testcontainers/testcontainers-go v0.27.0
-	github.com/testcontainers/testcontainers-go/modules/kafka v0.27.0
-	github.com/stretchr/testify v1.8.4
+	github.com/testcontainers/testcontainers-go v0.38.0
+	github.com/testcontainers/testcontainers-go/modules/kafka v0.38.0
+	github.com/stretchr/testify v1.10.0
 )
 
 replace github.com/username/{{ data_project_name | go_package }} => ../{{ data_project_name }}

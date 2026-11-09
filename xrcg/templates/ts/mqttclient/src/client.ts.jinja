@@ -123,7 +123,7 @@ export class {{ class_name }} {
      * {{ message.description }}
      {%- endif %}
      */
-    public {{ messagename }}Handler?: ({% if isCloudEvent %}cloudEvent: CloudEvent, {% endif %}data: {{ message_body_type }}, topicParams: Record<string, string>) => Promise<void>;
+    public {{ messagename }}Handler?: ({% if isCloudEvent %}cloudEvent: CloudEvent<unknown>, {% endif %}data: {{ message_body_type }}, topicParams: Record<string, string>) => Promise<void>;
     {%- endfor %}
 
     /**
@@ -275,7 +275,7 @@ export class {{ class_name }} {
                 });
                 const cloudEvent = Array.isArray(result) ? result[0] : result;
                 if (cloudEvent) {
-                    await this.dispatchCloudEvent(topic, cloudEvent);
+                    await this.dispatchCloudEvent(topic, new CloudEvent(cloudEvent));
                     return;
                 }
             }
