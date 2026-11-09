@@ -31,7 +31,7 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v7
       with:
-        node-version: '20'
+        node-version: '22'
     - name: Validate VSCode extension for duplicate commands
       run: python tools/validate_vscode_package.py --package-json xrcg_vscode/package.json
     - name: Build VSCode extension
