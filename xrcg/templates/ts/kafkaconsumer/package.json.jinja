@@ -1,3 +1,4 @@
+{%- import "util.jinja.include" as util -%}
 {
   "name": "{{ project_name | snake | replace('_', '-') }}",
   "version": "1.0.0",
@@ -5,6 +6,7 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "overrides": {{ util.DependencyOverrides() }},
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
@@ -18,22 +20,22 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "kafkajs": "^2.2.4",
-    "cloudevents": "^8.0.2"
+    {{ dependency("ts", "node22", "kafkajs") }},
+    {{ dependency("ts", "node22", "cloudevents") }}
   },
   "devDependencies": {
-    "@jest/globals": "^29.7.0",
-    "@types/jest": "^29.5.12",
-    "@types/node": "^22.7.5",
-    "@typescript-eslint/eslint-plugin": "^8.8.1",
-    "@typescript-eslint/parser": "^8.8.1",
-    "@stylistic/eslint-plugin": "^2.9.0",
-    "eslint": "^9.12.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.5",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.6.3",
-    "testcontainers": "^10.13.2",
-    "@testcontainers/kafka": "^11.7.2"
+    {{ dependency("ts", "node22", "@jest/globals") }},
+    {{ dependency("ts", "node22", "@types/jest") }},
+    {{ dependency("ts", "node22", "@types/node") }},
+    {{ dependency("ts", "node22", "@typescript-eslint/eslint-plugin") }},
+    {{ dependency("ts", "node22", "@typescript-eslint/parser") }},
+    {{ dependency("ts", "node22", "@stylistic/eslint-plugin") }},
+    {{ dependency("ts", "node22", "eslint") }},
+    {{ dependency("ts", "node22", "jest") }},
+    {{ dependency("ts", "node22", "ts-jest") }},
+    {{ dependency("ts", "node22", "ts-node") }},
+    {{ dependency("ts", "node22", "typescript") }},
+    {{ dependency("ts", "node22", "testcontainers") }},
+    {{ dependency("ts", "node22", "@testcontainers/kafka") }}
   }
 }

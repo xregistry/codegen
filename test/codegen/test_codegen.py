@@ -719,6 +719,43 @@ def test_codegen_cs_data_project_targetframework_matches_main():
         shutil.rmtree(output_dir, ignore_errors=True)
 
 
+@pytest.mark.parametrize("language,style", [
+    ("ts", "kafkaproducer"), ("ts", "egproducer"), ("ts", "producerhttp"),
+    ("ts", "dashboard"), ("ts", "mqttclient"),
+    ("go", "ehproducer"), ("go", "kafkaproducer"),
+])
+def test_generated_projects_use_central_dependency_floors(tmp_path, monkeypatch, language, style):
+    definitions = os.path.join(project_root, "test", "xreg", "lightbulb.xreg.json")
+    monkeypatch.setattr(sys, "argv", [
+        "xrcg", "generate", "--definitions", definitions,
+        "--output", str(tmp_path), "--projectname", "DependencyFloors",
+        "--language", language, "--style", style,
+    ])
+    assert xrcg.cli() == 0
+    if language == "ts":
+        with open(os.path.join(project_root, "xrcg", "dependencies", "typescript",
+                               "node22", "package.json"), encoding="utf-8") as handle:
+            central = json.load(handle)
+        manifests = list(tmp_path.rglob("package.json"))
+        assert manifests
+        overrides_found = False
+        for manifest in manifests:
+            package = json.loads(manifest.read_text(encoding="utf-8"))
+            if "overrides" in package:
+                overrides_found = True
+                assert package["overrides"] == central["overrides"]
+            for section in ("dependencies", "devDependencies"):
+                for name, version in package.get(section, {}).items():
+                    if name in central.get(section, {}) and "overrides" in package:
+                        assert version == central[section][name]
+        assert overrides_found
+    else:
+        manifest = tmp_path / "DependencyFloors" / "go.mod"
+        content = manifest.read_text(encoding="utf-8")
+        floor = TemplateRenderer.dependency("go", "go121", "golang.org/x/net").strip()
+        assert floor in content
+
+
 def test_extract_schema_info_keeps_names_for_top_level_schemagroup_refs():
     """Top-level schemagroup refs must retain class and namespace metadata.
 

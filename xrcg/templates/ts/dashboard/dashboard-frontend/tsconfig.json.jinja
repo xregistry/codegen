@@ -3,6 +3,10 @@
   "compileOnSave": false,
   "compilerOptions": {
     "baseUrl": "./",
+    "paths": {
+      "buffer": ["node_modules/buffer", "../node_modules/buffer"],
+      "util": ["node_modules/util", "../node_modules/util"]
+    },
     "outDir": "./dist/out-tsc",
     "forceConsistentCasingInFileNames": true,
     "strict": true,
