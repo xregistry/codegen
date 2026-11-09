@@ -130,7 +130,8 @@ export class {{ class_name }} {
             datacontenttype: contentType
         });
         
-        await this.client.send([cloudEvent]);
+        const { time, ...event } = cloudEvent;
+        await this.client.send([{ ...event, ...(time ? { time: new Date(time) } : {}) }]);
     }
     
     /**
@@ -185,7 +186,10 @@ export class {{ class_name }} {
             });
         });
         
-        await this.client.send(events);
+        await this.client.send(events.map(({ time, ...event }) => ({
+            ...event,
+            ...(time ? { time: new Date(time) } : {}),
+        })));
     }
     {% endfor %}
 }
