@@ -14,7 +14,11 @@
 {%- macro DefaultContentType(message) -%}
 {%- set schema_format = message.dataschemaformat | default("", true) | lower -%}
 {%- if schema_format.startswith("avro") -%}
+{%- if message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and message.envelopemetadata.datacontenttype.value -%}
+'{{ message.envelopemetadata.datacontenttype.value }}'
+{%- else -%}
 'avro/binary'
+{%- endif -%}
 {%- elif schema_format.startswith("proto") -%}
 'application/protobuf'
 {%- elif schema_format.startswith("xsd") or schema_format.startswith("xmlschema") -%}
@@ -30,6 +34,11 @@
 {%- else -%}
 'application/json'
 {%- endif -%}
+{%- endmacro -%}
+
+{# Normalize the Avro media-type alias for Avrotize, not for wire metadata. #}
+{%- macro SerializerContentType(content_type) -%}
+{{ content_type }}.replace("application/vnd.apache.org.avro+avro", "application/vnd.apache.avro+avro", 1)
 {%- endmacro -%}
 
 {%- macro DeclareRfc3339TimeNormalizer() -%}

@@ -823,7 +823,7 @@ class {{ class_name }}(_ClientBase):
         }
         attributes["datacontenttype"] = content_type
         attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))
-        byte_data = data.to_byte_array(content_type) if data is not None else b''
+        byte_data = data.to_byte_array({{ cloudEvents.SerializerContentType("content_type") }}) if data is not None else b''
         # to_byte_array returns str for text content types (e.g. JSON);
         # paho-mqtt will UTF-8 encode str payloads, but cloudevents-sdk's
         # to_binary/to_structured embed the str directly which then becomes
@@ -953,7 +953,7 @@ class {{ class_name }}(_ClientBase):
         else:
             payload = json.dumps(data).encode('utf-8')
         {%- else %}
-        payload = data.to_byte_array(content_type) if data is not None else b''
+        payload = data.to_byte_array({{ cloudEvents.SerializerContentType("content_type") }}) if data is not None else b''
         if isinstance(payload, str):
             payload = payload.encode('utf-8')
         {%- endif %}

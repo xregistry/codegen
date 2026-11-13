@@ -131,7 +131,7 @@ class {{ class_name }}:
         }
         attributes["datacontenttype"] = content_type
         attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))
-        byte_data = data.to_byte_array(content_type) if data is not None else b''
+        byte_data = data.to_byte_array({{ cloudEvents.SerializerContentType("content_type") }}) if data is not None else b''
         # to_byte_array returns str for text content types (e.g. JSON);
         # coerce to bytes so the cloudevents-sdk emits a binary AMQP data
         # section rather than a string section containing escaped JSON.

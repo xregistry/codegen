@@ -229,7 +229,7 @@ class {{ class_name }}:
         attributes["datacontenttype"] = content_type
         attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))
         {% if data_type != "object" -%}
-        byte_data = data.to_byte_array(content_type) if data is not None else b''
+        byte_data = data.to_byte_array({{ cloudEvents.SerializerContentType("content_type") }}) if data is not None else b''
         {%- else -%}
         byte_data = json.dumps(data).encode('utf-8') if data is not None else b''
         {%- endif %}
@@ -237,7 +237,12 @@ class {{ class_name }}:
             byte_data = byte_data.encode('utf-8')
         event = CloudEvent.create(attributes, byte_data)
         if self.content_mode == "structured":
-            message = to_structured(event, data_marshaller=lambda x: self.__binary_data_marshaller(x), key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key))
+            message = to_structured(
+                event,
+                data_marshaller=lambda x: self.__binary_data_marshaller(x),
+                envelope_marshaller=lambda envelope: json.dumps({**envelope, "datacontenttype": content_type}),
+                key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key),
+            )
             message.headers["content-type"] = b"application/cloudevents+json"
         else:
             # For binary mode, datacontenttype is already set in attributes above
