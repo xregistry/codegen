@@ -1191,6 +1191,110 @@ def test_kafkaproducer_time_uritemplate_is_normalized_before_cloudevent_creation
     assert "from_binary(message, data_unmarshaller=lambda data: data)" in generated_test_src
 
 
+@pytest.mark.parametrize("style", ["kafkaproducer", "amqpproducer"])
+def test_python_producer_inherited_avro_content_type(style):
+    """Inherited media types select the serializer, not the Avro schema format."""
+    import base64
+    import glob
+    import inspect
+    import io
+    import py_compile
+    import avro.io
+    from unittest.mock import Mock
+
+    avro_type = "application/vnd.apache.org.avro+avro"
+    base = {
+        "messageid": "Example.Post",
+        "envelope": "CloudEvents/1.0",
+        "envelopemetadata": {
+            "type": {"value": "Example.Post"},
+            "source": {"value": "urn:test"},
+            "subject": {"value": "post"},
+            "datacontenttype": {"value": "application/json"},
+        },
+        "dataschemaformat": "Avro/1.11.1",
+        "dataschemauri": "#/schemagroups/Example/schemas/Example.Post",
+    }
+    document = {"messagegroups": {
+        "Base": {"messages": {"Example.Post": base}},
+        "Avro": {"messages": {"Example.Post": {
+            "basemessage": "/messagegroups/Base/messages/Example.Post",
+            "envelopemetadata": {"datacontenttype": {"value": avro_type}},
+        }}},
+        "Inherited": {"messages": {"Example.Post": {
+            "basemessage": "/messagegroups/Avro/messages/Example.Post",
+        }}},
+    }}
+    document["schemagroups"] = {"Example": {"schemas": {"Example.Post": {
+        "format": "Avro/1.11.1",
+        "versions": {"1": {
+            "format": "Avro/1.11.1",
+            "schema": {
+                "type": "record",
+                "name": "Post",
+                "namespace": "Example",
+                "fields": [{"name": "text", "type": "string"}],
+            },
+        }},
+    }}}}
+    directory, producer_file = _generate_python_entrypoint_from_document(
+        document, style, "producer.py")
+    for path in glob.glob(os.path.join(directory, "**", "*.py"), recursive=True):
+        py_compile.compile(path, doraise=True)
+    if style == "amqpproducer":
+        import ast
+        with open(producer_file, encoding="utf-8") as handle:
+            tree = ast.parse(handle.read())
+        defaults = {}
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                for method in node.body:
+                    if isinstance(method, ast.FunctionDef) and method.name == "send_post":
+                        arguments = method.args.args[-len(method.args.defaults):]
+                        defaults[node.name] = dict(zip(
+                            [arg.arg for arg in arguments], method.args.defaults))["content_type"].value
+        assert defaults["BaseProducer"] == "application/json"
+        assert defaults["AvroProducer"] == avro_type
+        assert defaults["InheritedProducer"] == avro_type
+        return
+
+    paths = glob.glob(os.path.join(directory, "**", "src"), recursive=True)
+    module = _load_generated_python_module_from_path(producer_file, extra_paths=paths)
+    data = module.Post(text="hello")
+    for group, default_type in [("Base", "application/json"), ("Avro", avro_type),
+                                ("Inherited", avro_type)]:
+        producer_class = getattr(module, f"{group}EventProducer")
+        assert inspect.signature(producer_class.send_example_post).parameters[
+            "content_type"].default == default_type
+        for mode in ("binary", "structured"):
+            for override in (
+                None, "application/json", avro_type, "avro/binary",
+                "application/vnd.apache.avro+avro", avro_type + "; charset=binary",
+            ):
+                recording = Mock()
+                producer = producer_class(recording, "posts", content_mode=mode)
+                kwargs = {"content_type": override} if override else {}
+                producer.send_example_post(data=data, flush_producer=False, **kwargs)
+                sent = recording.produce.call_args.kwargs
+                content_type = override or default_type
+                if mode == "binary":
+                    assert sent["headers"]["content-type"] == content_type.encode("utf-8")
+                    payload = sent["value"]
+                else:
+                    assert sent["headers"]["content-type"] == b"application/cloudevents+json"
+                    event = json.loads(sent["value"])
+                    assert event["datacontenttype"] == content_type
+                    payload = base64.b64decode(event["data_base64"])
+                    assert "data" not in event
+                if content_type == "application/json":
+                    assert json.loads(payload)["text"] == "hello"
+                else:
+                    stream = io.BytesIO(payload)
+                    assert avro.io.DatumReader(data.AvroType).read(
+                        avro.io.BinaryDecoder(stream)) == {"text": "hello"}
+                    assert stream.tell() == len(payload)
+
+
 def test_kafkaproducer_exposes_resilient_flush_helper():
     """Regression for #430: the generated Kafka producer must expose a
     ``flush(timeout, retries, backoff_factor)`` helper that retries with
@@ -1574,7 +1678,7 @@ def test_mqttclient_body_is_bytes_not_str():
     have to double-decode JSON.
     """
     src = _generate_mqtt_client_src()
-    assert "byte_data = data.to_byte_array(content_type)" in src, (
+    assert "byte_data = data.to_byte_array(content_type.replace(" in src, (
         "client.py must call to_byte_array on the dataclass"
     )
     # The coercion guard must be immediately downstream.
@@ -1792,7 +1896,7 @@ def test_ehproducer_body_is_bytes_not_str():
     data section, not a string section containing escaped JSON.
     """
     src = _generate_eh_producer_src("test/xreg/lightbulb.xreg.json")
-    assert "byte_data = data.to_byte_array(content_type)" in src
+    assert "byte_data = data.to_byte_array(content_type.replace(" in src
     assert "isinstance(byte_data, str)" in src and "byte_data.encode('utf-8')" in src, (
         "ehproducer must coerce to_byte_array str result to bytes before "
         "handing to the CloudEvent constructor"

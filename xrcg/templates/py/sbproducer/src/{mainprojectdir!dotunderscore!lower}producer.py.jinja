@@ -150,7 +150,7 @@ class {{ class_name }}:
         }
         attributes["datacontenttype"] = content_type
         attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))
-        byte_data = data.to_byte_array(content_type) if data is not None else b''
+        byte_data = data.to_byte_array({{ cloudEvents.SerializerContentType("content_type") }}) if data is not None else b''
         # to_byte_array returns str for text content types (e.g. JSON); coerce
         # to bytes so the wire body is the exact serialized representation
         # (binary AMQP data section) and receivers do not double-decode JSON.
