@@ -196,7 +196,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
         {%- if is_cloudevent %}, CloudEventFormatter? formatter = null{% endif %}
         , int? qosOverride = null
-        , bool? retainOverride = null)
+        , bool? retainOverride = null, System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null)
         {
             {%- set is_mqtt_message = message.protocol and message.protocol.startswith("MQTT") and message.protocoloptions %}
             {%- set qos = message.protocoloptions['qos'] if is_mqtt_message else 0 %}

@@ -31,6 +31,29 @@ import java.util.concurrent.CompletableFuture;
  * Producer class to send messages in the `{{ messagegroupid }}` message group to Azure Service Bus.
  */
 public class {{ pascal_group_name | strip_namespace }}Producer {
+
+    @SafeVarargs
+    private static java.util.Map<String, String> copyDataschemaOverrides(java.util.Map<String, String>... overrides) {
+        if (overrides.length > 1) {
+            throw new IllegalArgumentException("provide at most one dataschema override map");
+        }
+        java.util.Map<String, String> result = overrides.length == 0
+            ? java.util.Collections.emptyMap() : java.util.Map.copyOf(overrides[0]);
+        result.forEach((key, value) -> {
+            if (key.isEmpty() || value.isEmpty()) {
+                throw new IllegalArgumentException("dataschema overrides require nonempty URI strings");
+            }
+        });
+        return result;
+    }
+
+    @SafeVarargs
+    private static String resolveDataschema(String uri, java.util.Map<String, String>... overrides) {
+        return copyDataschemaOverrides(overrides).getOrDefault(uri, uri);
+    }
+
+    private final java.util.Map<String, String> dataschemaOverrides;
+
     private static final Logger logger = LogManager.getLogger({{ pascal_group_name | strip_namespace }}Producer.class);
     private final ServiceBusSenderClient senderClient;
     {%- if cloudEvents.usesCloudEvents(root) %}
@@ -43,11 +66,12 @@ public class {{ pascal_group_name | strip_namespace }}Producer {
      * 
      * @param senderClient The Service Bus sender client to use for sending messages
      */
-    public {{ pascal_group_name | strip_namespace }}Producer(ServiceBusSenderClient senderClient) {
+    public {{ pascal_group_name | strip_namespace }}Producer(ServiceBusSenderClient senderClient, java.util.Map<String, String>... dataschemaOverrides) {
         {%- if cloudEvents.usesCloudEvents(root) %}
-        this(senderClient, ContentMode.STRUCTURED, "application/json");
+        this(senderClient, ContentMode.STRUCTURED, "application/json", dataschemaOverrides);
         {%- else %}
         this.senderClient = senderClient;
+        this.dataschemaOverrides = copyDataschemaOverrides(dataschemaOverrides);
         {%- endif %}
     }
 
@@ -60,8 +84,9 @@ public class {{ pascal_group_name | strip_namespace }}Producer {
      * @param contentMode The content mode (BINARY or STRUCTURED)
      * @param format The content format (e.g., "application/json")
      */
-    public {{ pascal_group_name | strip_namespace }}Producer(ServiceBusSenderClient senderClient, ContentMode contentMode, String format) {
+    public {{ pascal_group_name | strip_namespace }}Producer(ServiceBusSenderClient senderClient, ContentMode contentMode, String format, java.util.Map<String, String>... dataschemaOverrides) {
         this.senderClient = senderClient;
+        this.dataschemaOverrides = copyDataschemaOverrides(dataschemaOverrides);
         this.contentMode = contentMode;
         this.format = format;
     }
@@ -202,7 +227,7 @@ public class {{ pascal_group_name | strip_namespace }}Producer {
         return CompletableFuture.runAsync(() -> {
             try {
                 {%- if isCloudEvent %}
-                ServiceBusMessage message = {{ pascal_group_name | strip_namespace }}MessageFactory.create{{ messagename }}Message(data, this.contentMode, this.format);
+                ServiceBusMessage message = {{ pascal_group_name | strip_namespace }}MessageFactory.create{{ messagename }}Message(data, this.contentMode, this.format, this.dataschemaOverrides);
                 {%- else %}
                 ServiceBusMessage message = {{ pascal_group_name | strip_namespace }}MessageFactory.create{{ messagename }}Message(data);
                 {%- endif %}
@@ -226,7 +251,7 @@ public class {{ pascal_group_name | strip_namespace }}Producer {
         return CompletableFuture.runAsync(() -> {
             try {
                 {%- if isCloudEvent %}
-                ServiceBusMessage message = {{ pascal_group_name | strip_namespace }}MessageFactory.create{{ messagename }}Message(data, this.contentMode, this.format);
+                ServiceBusMessage message = {{ pascal_group_name | strip_namespace }}MessageFactory.create{{ messagename }}Message(data, this.contentMode, this.format, this.dataschemaOverrides);
                 {%- else %}
                 ServiceBusMessage message = {{ pascal_group_name | strip_namespace }}MessageFactory.create{{ messagename }}Message(data);
                 {%- endif %}

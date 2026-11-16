@@ -32,17 +32,35 @@ type MessageSender interface {
 }
 
 {%- set messagegroups = root.messagegroups %}
+
+func copyDataschemaOverrides(overrides []map[string]string) map[string]string {
+    if len(overrides) > 1 {
+        panic("provide at most one dataschema override map")
+    }
+    result := map[string]string{}
+    if len(overrides) == 1 {
+        for key, value := range overrides[0] {
+            if key == "" || value == "" {
+                panic("dataschema overrides require nonempty URI strings")
+            }
+            result[key] = value
+        }
+    }
+    return result
+}
+
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set groupname = messagegroupid | pascal | strip_namespace %}
 {%- set class_name = groupname + "Producer" %}
 
 type {{ class_name }} struct {
+    dataschemaOverrides map[string]string
 	client      *azservicebus.Client
 	sender      MessageSender
 	contentMode ContentMode
 }
 
-func New{{ class_name }}(connectionString, entity string) (*{{ class_name }}, error) {
+func New{{ class_name }}(connectionString, entity string, dataschemaOverrides ...map[string]string) (*{{ class_name }}, error) {
 	client, err := azservicebus.NewClientFromConnectionString(connectionString, nil)
 	if err != nil {
 		return nil, err
@@ -52,11 +70,11 @@ func New{{ class_name }}(connectionString, entity string) (*{{ class_name }}, er
 		_ = client.Close(context.Background())
 		return nil, err
 	}
-	return &{{ class_name }}{client: client, sender: sender, contentMode: ContentModeStructured}, nil
+	return &{{ class_name }}{dataschemaOverrides: copyDataschemaOverrides(dataschemaOverrides),client: client, sender: sender, contentMode: ContentModeStructured}, nil
 }
 
-func New{{ class_name }}WithSender(sender MessageSender) *{{ class_name }} {
-	return &{{ class_name }}{sender: sender, contentMode: ContentModeStructured}
+func New{{ class_name }}WithSender(sender MessageSender, dataschemaOverrides ...map[string]string) *{{ class_name }} {
+	return &{{ class_name }}{dataschemaOverrides: copyDataschemaOverrides(dataschemaOverrides),sender: sender, contentMode: ContentModeStructured}
 }
 
 func (p *{{ class_name }}) SetContentMode(mode ContentMode) {
@@ -112,7 +130,11 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	contentType := {{ cloudEvents.DefaultContentType(message) }}
 	event.SetDataContentType(contentType)
 	{%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
-	event.SetDataSchema({{ message.envelopemetadata.dataschema.value | tojson }})
+	schemaURI := {{ message.envelopemetadata.dataschema.value | tojson }}
+    if override, ok := p.dataschemaOverrides[schemaURI]; ok {
+        schemaURI = override
+    }
+    event.SetDataSchema(schemaURI)
 	{%- endif %}
 	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "dataschema"] and attribute.value %}
 	event.SetExtension("{{ attrname }}", "{{ attribute.value }}")

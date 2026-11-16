@@ -1298,7 +1298,7 @@ def test_python_producer_inherited_avro_content_type(style):
 def test_amqpproducer_versioned_dataschema_on_wire():
     import glob
     import py_compile
-    from unittest.mock import Mock
+    from unittest.mock import Mock, patch
     from proton import Message
 
     document = _build_kafka_time_document()
@@ -1345,9 +1345,10 @@ def test_amqpproducer_versioned_dataschema_on_wire():
                     if producer_class.__name__.startswith("Pinned") else
                     "xreg://./schemagroups/Example/schemas/Event/versions/stable")
         for mode in ("binary", "structured"):
-            producer = producer_class.__new__(producer_class)
-            producer.content_mode = mode
-            producer.format_type = "application/cloudevents+json"
+            with patch.object(producer_class, "_init_blocking_sender"):
+                producer = producer_class(
+                    "localhost", "events", content_mode=mode,
+                    format_type="application/cloudevents+json")
             producer._send_via_blocking_sender = Mock()
             producer.send_event(data={"value": "hello"})
             sent = producer._send_via_blocking_sender.call_args.args[0]

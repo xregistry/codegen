@@ -36,6 +36,29 @@ import java.util.function.Consumer;
  * Event producer for {{ groupname }} message group
  */
 public class {{ class_name }} {
+
+    @SafeVarargs
+    private static java.util.Map<String, String> copyDataschemaOverrides(java.util.Map<String, String>... overrides) {
+        if (overrides.length > 1) {
+            throw new IllegalArgumentException("provide at most one dataschema override map");
+        }
+        java.util.Map<String, String> result = overrides.length == 0
+            ? java.util.Collections.emptyMap() : java.util.Map.copyOf(overrides[0]);
+        result.forEach((key, value) -> {
+            if (key.isEmpty() || value.isEmpty()) {
+                throw new IllegalArgumentException("dataschema overrides require nonempty URI strings");
+            }
+        });
+        return result;
+    }
+
+    @SafeVarargs
+    private static String resolveDataschema(String uri, java.util.Map<String, String>... overrides) {
+        return copyDataschemaOverrides(overrides).getOrDefault(uri, uri);
+    }
+
+    private final java.util.Map<String, String> dataschemaOverrides;
+
     private static final Logger logger = LogManager.getLogger({{ class_name }}.class);
     
     {%- if uses_cloudevents_message %}
@@ -46,8 +69,9 @@ public class {{ class_name }} {
     private AmqpContentMode contentMode = AmqpContentMode.STRUCTURED;
     {%- endif %}
     
-    private {{ class_name }}(AmqpProducer endpoint{%- if uses_cloudevents_message -%}, Consumer<io.cloudevents.CloudEvent> beforeSend{%- endif -%}) {
+    private {{ class_name }}(AmqpProducer endpoint{%- if uses_cloudevents_message -%}, Consumer<io.cloudevents.CloudEvent> beforeSend{%- endif -%}, java.util.Map<String, String>... dataschemaOverrides) {
         this.endpoint = endpoint;
+        this.dataschemaOverrides = copyDataschemaOverrides(dataschemaOverrides);
         {%- if uses_cloudevents_message %}
         this.beforeSend = beforeSend;
         {%- endif %}
@@ -82,6 +106,7 @@ public class {{ class_name }} {
         {%- if uses_cloudevents_message -%}
         , Consumer<io.cloudevents.CloudEvent> beforeSend
         {%- endif -%}
+        , java.util.Map<String, String>... dataschemaOverrides
     ) {
         {%- if options %}
         Map<String, String> options = new HashMap<>();
@@ -104,6 +129,7 @@ public class {{ class_name }} {
             {%- if uses_cloudevents_message -%}
             , beforeSend
             {%- endif -%}
+            , dataschemaOverrides
         );
     }
     {%- endif %}
@@ -119,13 +145,15 @@ public class {{ class_name }} {
         Consumer<io.cloudevents.CloudEvent> beforeSend,
         {%- endif %}
         Map<String, String> options,
-        List<URI> endpoints
+        List<URI> endpoints,
+        java.util.Map<String, String>... dataschemaOverrides
     ) {
         return new {{ class_name }}(
             new AmqpProducer(credential, options, endpoints)
             {%- if uses_cloudevents_message -%}
             , beforeSend
             {%- endif -%}
+            , dataschemaOverrides
         );
     }
     

@@ -45,6 +45,27 @@ enum ContentMode {
  * Factory class to create Azure Event Hubs EventData for the messages declared in the `{{ messagegroupid }}` message group.
  */
 public class {{ class_name }} {
+
+    @SafeVarargs
+    private static java.util.Map<String, String> copyDataschemaOverrides(java.util.Map<String, String>... overrides) {
+        if (overrides.length > 1) {
+            throw new IllegalArgumentException("provide at most one dataschema override map");
+        }
+        java.util.Map<String, String> result = overrides.length == 0
+            ? java.util.Collections.emptyMap() : java.util.Map.copyOf(overrides[0]);
+        result.forEach((key, value) -> {
+            if (key.isEmpty() || value.isEmpty()) {
+                throw new IllegalArgumentException("dataschema overrides require nonempty URI strings");
+            }
+        });
+        return result;
+    }
+
+    @SafeVarargs
+    private static String resolveDataschema(String uri, java.util.Map<String, String>... overrides) {
+        return copyDataschemaOverrides(overrides).getOrDefault(uri, uri);
+    }
+
     private static final Logger logger = LogManager.getLogger({{ class_name }}.class);
     {%- if cloudEvents.usesCloudEvents(root) %}
     private static final String CE_PREFIX = "cloudEvents_";
@@ -67,7 +88,7 @@ public class {{ class_name }} {
      {%- endif %}
      * @return An EventData instance
      */
-    public static EventData create{{ messagename }}Message({{ message_body_type }} data{% if isCloudEvent %}, ContentMode contentMode, String format{% endif %}) {
+    public static EventData create{{ messagename }}Message({{ message_body_type }} data{% if isCloudEvent %}, ContentMode contentMode, String format{% endif %}, java.util.Map<String, String>... dataschemaOverrides) {
         try {
             String dataContentType = {{ cloudEvents.DefaultContentType(message) }};
             {%- if message_body_type == "byte[]" %}
@@ -99,7 +120,7 @@ public class {{ class_name }} {
                 {%- endif %}
                 .withDataContentType(dataContentType)
                 {%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
-                .withDataSchema(URI.create({{ message.envelopemetadata.dataschema.value | tojson }}))
+                .withDataSchema(URI.create(resolveDataschema({{ message.envelopemetadata.dataschema.value | tojson }}, dataschemaOverrides)))
                 {%- endif %}
                 .withData(serializedData);
 

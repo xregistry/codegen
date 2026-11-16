@@ -3,6 +3,7 @@
 // Changes to this file may cause incorrect behavior and will be lost if the code is regenerated.
 
 use std::error::Error;
+use std::collections::HashMap;
 
 use base64::Engine as _;
 use chrono::Utc;
@@ -34,26 +35,43 @@ pub struct {{ struct_name }} {
     client: reqwest::blocking::Client,
     target: String,
     content_mode: ContentMode,
+    dataschema_overrides: HashMap<String, String>,
 }
 
 impl {{ struct_name }} {
     /// Creates a `{{ struct_name }}` that posts to `target` using structured content mode (default).
     pub fn new(target: impl Into<String>) -> Result<Self, Box<dyn Error>> {
+        Self::new_with_dataschema_overrides(target, HashMap::new())
+    }
+
+    pub fn new_with_dataschema_overrides(
+        target: impl Into<String>,
+        dataschema_overrides: HashMap<String, String>,
+    ) -> Result<Self, Box<dyn Error>> {
         let client = reqwest::blocking::Client::builder().build()?;
-        Ok(Self {
-            client,
-            target: target.into(),
-            content_mode: ContentMode::Structured,
-        })
+        Self::with_client_and_dataschema_overrides(client, target, dataschema_overrides)
     }
 
     /// Creates a `{{ struct_name }}` from an existing `reqwest` client (useful for testing).
     pub fn with_client(client: reqwest::blocking::Client, target: impl Into<String>) -> Self {
-        Self {
+        Self::with_client_and_dataschema_overrides(client, target, HashMap::new())
+            .expect("empty dataschema override map is valid")
+    }
+
+    pub fn with_client_and_dataschema_overrides(
+        client: reqwest::blocking::Client,
+        target: impl Into<String>,
+        dataschema_overrides: HashMap<String, String>,
+    ) -> Result<Self, Box<dyn Error>> {
+        if dataschema_overrides.iter().any(|(key, value)| key.is_empty() || value.is_empty()) {
+            return Err("dataschema overrides require nonempty URI strings".into());
+        }
+        Ok(Self {
             client,
             target: target.into(),
             content_mode: ContentMode::Structured,
-        }
+            dataschema_overrides,
+        })
     }
 
     /// Sets the HTTP content mode used for subsequent sends.
@@ -87,7 +105,11 @@ impl {{ struct_name }} {
                     serde_json::json!(datacontenttype),
                 );
                 for ext in extensions {
-                    envelope.insert(ext.name.to_string(), serde_json::json!(ext.value));
+                    envelope.insert(ext.name.to_string(), serde_json::json!(
+                        if ext.name == "dataschema" {
+                            self.dataschema_overrides.get(&ext.value).unwrap_or(&ext.value)
+                        } else { &ext.value }
+                    ));
                 }
                 match data_json {
                     Some(value) => {
@@ -116,7 +138,10 @@ impl {{ struct_name }} {
                     .header("ce-type", event_type)
                     .header("ce-time", &time);
                 for ext in extensions {
-                    request = request.header(format!("ce-{}", ext.name), &ext.value);
+                    request = request.header(format!("ce-{}", ext.name),
+                        if ext.name == "dataschema" {
+                            self.dataschema_overrides.get(&ext.value).unwrap_or(&ext.value)
+                        } else { &ext.value });
                 }
                 request.body(body).send()?
             }

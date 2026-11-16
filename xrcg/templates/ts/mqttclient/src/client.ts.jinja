@@ -106,6 +106,12 @@ export function getSubscriptionTopics{{ groupname | strip_namespace }}(topicMapp
  * MQTT client for the `{{ messagegroupid }}` message group.
  */
 export class {{ class_name }} {
+    private readonly dataschemaOverrides: Readonly<Record<string, string>>;
+
+    private resolveDataschema(uri: string): string {
+        return Object.prototype.hasOwnProperty.call(this.dataschemaOverrides, uri)
+            ? this.dataschemaOverrides[uri] : uri;
+    }
     private client: mqtt.MqttClient;
     private mode: 'binary' | 'structured';
     private format: string;
@@ -138,8 +144,13 @@ export class {{ class_name }} {
         options?: mqtt.IClientOptions,
         topicMappings?: Record<string, string>,
         mode: 'binary' | 'structured' = 'structured',
-        format: string = 'application/json'
+        format: string = 'application/json',
+        dataschemaOverrides: Readonly<Record<string, string>> = {}
     ) {
+        this.dataschemaOverrides = { ...dataschemaOverrides };
+        if (Object.entries(this.dataschemaOverrides).some(([key, value]) => !key || typeof value !== 'string' || !value)) {
+            throw new Error('dataschemaOverrides must map nonempty URI strings to nonempty URI strings');
+        }
         this.mode = mode;
         this.format = format;
         this.topicMappings = topicMappings ?? getDefaultTopicMappings{{ groupname | strip_namespace }}();
@@ -454,7 +465,7 @@ export class {{ class_name }} {
                 {%- elif attrname in ["id", "time"] %}
                 {# auto-generated #}
                 {%- elif attrname == "dataschema" %}
-                {% if attribute.value %}dataschema: {{ attribute.value | tojson }},{% endif %}
+                {% if attribute.value %}dataschema: this.resolveDataschema({{ attribute.value | tojson }}),{% endif %}
                 {%- elif attrname == "datacontenttype" %}
                 {# handled below #}
                 {%- elif attribute.value %}

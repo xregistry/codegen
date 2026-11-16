@@ -33,6 +33,29 @@ import java.util.concurrent.CompletableFuture;
  * Producer class to send events in the `{{ messagegroupid }}` message group.
  */
 public class {{ class_name }} {
+
+    @SafeVarargs
+    private static java.util.Map<String, String> copyDataschemaOverrides(java.util.Map<String, String>... overrides) {
+        if (overrides.length > 1) {
+            throw new IllegalArgumentException("provide at most one dataschema override map");
+        }
+        java.util.Map<String, String> result = overrides.length == 0
+            ? java.util.Collections.emptyMap() : java.util.Map.copyOf(overrides[0]);
+        result.forEach((key, value) -> {
+            if (key.isEmpty() || value.isEmpty()) {
+                throw new IllegalArgumentException("dataschema overrides require nonempty URI strings");
+            }
+        });
+        return result;
+    }
+
+    @SafeVarargs
+    private static String resolveDataschema(String uri, java.util.Map<String, String>... overrides) {
+        return copyDataschemaOverrides(overrides).getOrDefault(uri, uri);
+    }
+
+    private final java.util.Map<String, String> dataschemaOverrides;
+
     private static final Logger logger = LogManager.getLogger({{ class_name }}.class);
     private final EventHubProducerClient producerClient;
     private final ContentMode contentMode;
@@ -43,8 +66,8 @@ public class {{ class_name }} {
      * 
      * @param producerClient The Event Hub producer client to use for sending events
      */
-    public {{ class_name }}(EventHubProducerClient producerClient) {
-        this(producerClient, ContentMode.STRUCTURED, "application/json");
+    public {{ class_name }}(EventHubProducerClient producerClient, java.util.Map<String, String>... dataschemaOverrides) {
+        this(producerClient, ContentMode.STRUCTURED, "application/json", dataschemaOverrides);
     }
 
     /**
@@ -54,8 +77,9 @@ public class {{ class_name }} {
      * @param contentMode CloudEvents content mode (BINARY or STRUCTURED)
      * @param format Content type format for structured mode
      */
-    public {{ class_name }}(EventHubProducerClient producerClient, ContentMode contentMode, String format) {
+    public {{ class_name }}(EventHubProducerClient producerClient, ContentMode contentMode, String format, java.util.Map<String, String>... dataschemaOverrides) {
         this.producerClient = producerClient;
+        this.dataschemaOverrides = copyDataschemaOverrides(dataschemaOverrides);
         this.contentMode = contentMode;
         this.format = format;
     }
@@ -139,7 +163,7 @@ public class {{ class_name }} {
         return CompletableFuture.runAsync(() -> {
             try {
                 {%- if isCloudEvent %}
-                EventData eventData = {{ pascal_group_name | strip_namespace }}EventFactory.create{{ messagename }}Message(data, this.contentMode, this.format);
+                EventData eventData = {{ pascal_group_name | strip_namespace }}EventFactory.create{{ messagename }}Message(data, this.contentMode, this.format, this.dataschemaOverrides);
                 {%- else %}
                 EventData eventData = {{ pascal_group_name | strip_namespace }}EventFactory.create{{ messagename }}Message(data);
                 {%- endif %}
@@ -169,7 +193,7 @@ public class {{ class_name }} {
         return CompletableFuture.runAsync(() -> {
             try {
                 {%- if isCloudEvent %}
-                EventData eventData = {{ pascal_group_name | strip_namespace }}EventFactory.create{{ messagename }}Message(data, this.contentMode, this.format);
+                EventData eventData = {{ pascal_group_name | strip_namespace }}EventFactory.create{{ messagename }}Message(data, this.contentMode, this.format, this.dataschemaOverrides);
                 {%- else %}
                 EventData eventData = {{ pascal_group_name | strip_namespace }}EventFactory.create{{ messagename }}Message(data);
                 {%- endif %}

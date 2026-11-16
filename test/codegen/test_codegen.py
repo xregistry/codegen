@@ -731,7 +731,7 @@ def test_versioned_dataschema_api_input(entry, reference, monkeypatch):
 @pytest.mark.parametrize("language,style", [
     ("cs", "amqpproducer"), ("cs", "kafkaproducer"),
     ("cs", "ehproducer"), ("cs", "sbproducer"), ("cs", "egproducer"), ("cs", "mqttclient"),
-    ("java", "producer"), ("java", "amqpproducer"), ("java", "kafkaproducer"),
+    ("java", "producer"), ("java", "amqpproducer"), ("java", "amqpjmsproducer"), ("java", "kafkaproducer"),
     ("java", "ehproducer"), ("java", "sbproducer"), ("java", "mqttclient"),
     ("py", "producer"), ("py", "amqpproducer"), ("py", "kafkaproducer"), ("py", "ehproducer"),
     ("py", "sbproducer"), ("py", "mqttclient"),
@@ -743,19 +743,21 @@ def test_versioned_dataschema_api_input(entry, reference, monkeypatch):
     ("asyncapi", "producer"), ("asyncapi", "consumer"),
     ("openapi", "producer"), ("openapi", "subscriber"),
 ])
-def test_codegen_producer_versioned_dataschema(language, style, tmp_path, monkeypatch):
+def test_codegen_producer_versioned_dataschema(language, style, tmp_path, monkeypatch, caplog):
     import copy
 
     document = _versioned_schema_document()
     messages = document["messagegroups"]["Example"]["messages"]
     messages["Override"] = copy.deepcopy(messages["Reading"])
     messages["Override"]["messageid"] = "Override"
+    messages["Override"]["envelopemetadata"]["type"]["value"] = "Example.Override"
     messages["Override"]["envelopemetadata"]["dataschema"] = {
         "type": "uri", "value": "https://registered.example/avro/versions/17"}
     is_specification = language in ("asyncapi", "openapi")
     if not is_specification:
         messages["Pinned"] = copy.deepcopy(messages["Reading"])
         messages["Pinned"]["messageid"] = "Pinned"
+        messages["Pinned"]["envelopemetadata"]["type"]["value"] = "Example.Pinned"
         messages["Pinned"]["dataschemauri"] += "/versions/zzz"
     document["endpoints"] = {
         "http": {
@@ -773,6 +775,7 @@ def test_codegen_producer_versioned_dataschema(language, style, tmp_path, monkey
         "--projectname", "SchemaContract",
     ])
     assert xrcg.cli() == 0
+    assert not [record.message for record in caplog.records if record.levelno >= 40]
     paths = (output.rglob("*.yml") if is_specification else
              _producer_sources(str(output), "SchemaContract"))
     sources = "\n".join(open(path, encoding="utf-8").read() for path in paths)
@@ -789,6 +792,9 @@ def test_codegen_producer_versioned_dataschema(language, style, tmp_path, monkey
         import py_compile
         for path in output.rglob("*.py"):
             py_compile.compile(str(path), doraise=True)
+    if not is_specification:
+        override_name = "dataschema_overrides" if language in ("py", "rust") else "dataschemaOverrides"
+        assert override_name in sources
 
 
 @pytest.mark.parametrize("pinned", [False, True])
@@ -817,6 +823,73 @@ def test_codegen_dataschema_matches_generated_payload_version(pinned, tmp_path, 
         ["pinned_value"] if pinned else ["stable_value"])
     source = next(output.rglob("producer.py")).read_text(encoding="utf-8")
     assert ("/versions/zzz" if pinned else "/versions/stable") in source
+
+
+@pytest.mark.parametrize("content_mode", ["binary", "structured"])
+@pytest.mark.parametrize("mapping_kind", ["none", "empty", "match", "unmatched", "chain"])
+def test_generated_dataschema_overrides(content_mode, mapping_kind, tmp_path, monkeypatch):
+    import copy
+    import runpy
+
+    original = "xreg://./schemagroups/Example/schemas/Reading/versions/stable"
+    registered = "https://registered.example/schemas/Reading/versions/2"
+    explicit = "https://explicit.example/schemas/Reading/versions/1"
+    mappings = {
+        "none": None,
+        "empty": {},
+        "match": {original: registered, explicit: registered},
+        "unmatched": {"urn:unrelated": registered},
+        "chain": {original: registered, registered: "urn:must-not-chain", explicit: registered},
+    }
+    overrides = mappings[mapping_kind]
+    document = _versioned_schema_document()
+    messages = document["messagegroups"]["Example"]["messages"]
+    for name in ("Shared", "Explicit"):
+        messages[name] = copy.deepcopy(messages["Reading"])
+        messages[name]["messageid"] = name
+    messages["Explicit"]["envelopemetadata"]["dataschema"] = {"type": "uri", "value": explicit}
+    definitions = tmp_path / "catalog.json"
+    definitions.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "out"
+    monkeypatch.setattr(sys, "argv", [
+        "xrcg", "generate", "--language", "py", "--style", "kafkaproducer",
+        "--definitions", str(definitions), "--output", str(output),
+        "--projectname", "UriOverrideContract",
+    ])
+    assert xrcg.cli() == 0
+    for directory in output.rglob("src"):
+        monkeypatch.syspath_prepend(str(directory))
+    generated = runpy.run_path(str(next(output.rglob("producer.py"))))
+    producer_class = generated["ExampleEventProducer"]
+    data = generated["Reading"](value="live")
+
+    class CaptureProducer:
+        def __init__(self):
+            self.messages = []
+
+        def produce(self, topic, **kwargs):
+            self.messages.append(kwargs)
+
+    sender = CaptureProducer()
+    producer = producer_class(sender, "readings", content_mode, dataschema_overrides=overrides)
+    if overrides is not None:
+        overrides[original] = "urn:caller-mutated"
+    for name in ("reading", "shared", "explicit"):
+        getattr(producer, "send_" + name)(data, flush_producer=False)
+
+    def schema(message):
+        if content_mode == "structured":
+            return json.loads(message["value"])["dataschema"]
+        return message["headers"]["ce_dataschema"].decode("utf-8")
+
+    expected = registered if mapping_kind in ("match", "chain") else original
+    expected_explicit = registered if mapping_kind in ("match", "chain") else explicit
+    assert list(map(schema, sender.messages)) == [expected, expected, expected_explicit]
+    untouched = CaptureProducer()
+    producer_class(untouched, "readings", content_mode).send_reading(data, flush_producer=False)
+    assert schema(untouched.messages[0]) == original
+    with pytest.raises(ValueError, match="nonempty URI strings"):
+        producer_class(sender, "readings", dataschema_overrides={original: ""})
 
 
 @pytest.mark.parametrize('language,style,serializer_marker', [

@@ -326,7 +326,8 @@ class {{ class_name }}(_ClientBase):
         client: mqtt.Client, 
         topic_mappings: Optional[Dict[str, str]] = None,
         content_mode: typing.Literal['structured', 'binary'] = 'structured', 
-        loop: Optional[asyncio.AbstractEventLoop] = None
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+        dataschema_overrides: typing.Optional[typing.Mapping[str, str]] = None
     ):
         """
         Initialize the MQTT client.
@@ -342,6 +343,10 @@ class {{ class_name }}(_ClientBase):
         """
         self.client = client
         self.content_mode = content_mode
+        self._dataschema_overrides = dict(dataschema_overrides) if dataschema_overrides is not None else {}
+        if any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
+               for key, value in self._dataschema_overrides.items()):
+            raise ValueError("dataschema_overrides must map nonempty URI strings to nonempty URI strings")
         self.loop = loop
         self._topic_mappings = topic_mappings or get_default_topic_mappings_{{ groupName }}()
         self._topic_patterns = {k: _build_topic_regex(v) for k, v in self._topic_mappings.items()}
@@ -831,6 +836,8 @@ class {{ class_name }}(_ClientBase):
         # bytes up-front so receivers can json.loads(payload) once.
         if isinstance(byte_data, str):
             byte_data = byte_data.encode('utf-8')
+        if "dataschema" in attributes:
+            attributes["dataschema"] = self._dataschema_overrides.get(attributes["dataschema"], attributes["dataschema"])
         event = CloudEvent(attributes, byte_data)
 
         _effective_qos = {{ default_qos }} if qos is None else qos

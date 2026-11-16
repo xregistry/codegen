@@ -24,6 +24,22 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
     /// </summary>
     public partial class {{ class_name }}
     {
+        private readonly System.Collections.Generic.IReadOnlyDictionary<string, string> dataschemaOverrides;
+        private static System.Collections.Generic.IReadOnlyDictionary<string, string> CopyDataschemaOverrides(System.Collections.Generic.IReadOnlyDictionary<string, string>? overrides)
+        {
+            var result = new System.Collections.Generic.Dictionary<string, string>();
+            if (overrides != null)
+            {
+                foreach (var entry in overrides)
+                {
+                    if (string.IsNullOrEmpty(entry.Key) || string.IsNullOrEmpty(entry.Value))
+                        throw new System.ArgumentException("Dataschema overrides require nonempty URI strings", nameof(overrides));
+                    result.Add(entry.Key, entry.Value);
+                }
+            }
+            return result;
+        }
+
         {%- if root.endpoints -%}
         {%- for endpointid, endpoint in root.endpoints.items() -%}
                 {%- if endpoint.usage and "producer" in endpoint.usage -%}
@@ -62,8 +78,9 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         /// Constructor
         /// </summary>
         /// <param name="client">The MQTT client instance.</param>
-        public {{ class_name }}(IMqttClient client)
+        public {{ class_name }}(IMqttClient client, System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null)
         {
+            this.dataschemaOverrides = CopyDataschemaOverrides(dataschemaOverrides);
             this.Client = client;
         }
 
@@ -176,7 +193,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
                 contentType
                 {%- if isCloudEvent %}, formatter{% endif -%}
                 , qosOverride: qos
-                , retainOverride: retain
+                , retainOverride: retain, dataschemaOverrides: this.dataschemaOverrides
             );
             await this.Client.PublishAsync(message);
         }

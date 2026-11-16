@@ -23,6 +23,12 @@ import * as {{ data_module_name }} from '../../{{ data_project_name }}/dist/inde
  * Producer class to send events in the `{{ messagegroupid }}` message group.
  */
 export class {{ class_name }} {
+    private readonly dataschemaOverrides: Readonly<Record<string, string>>;
+
+    private resolveDataschema(uri: string): string {
+        return Object.prototype.hasOwnProperty.call(this.dataschemaOverrides, uri)
+            ? this.dataschemaOverrides[uri] : uri;
+    }
     private producer: Producer;
     private topic: string;
     private mode: 'binary' | 'structured';
@@ -35,7 +41,11 @@ export class {{ class_name }} {
      * @param mode CloudEvents binding mode: 'binary' or 'structured' (default: 'structured')
      * @param format CloudEvents format for structured mode (default: 'application/json')
      */
-    constructor(producer: Producer, topic?: string, mode: 'binary' | 'structured' = 'structured', format: string = 'application/json') {
+    constructor(producer: Producer, topic?: string, mode: 'binary' | 'structured' = 'structured', format: string = 'application/json', dataschemaOverrides: Readonly<Record<string, string>> = {}) {
+        this.dataschemaOverrides = { ...dataschemaOverrides };
+        if (Object.entries(this.dataschemaOverrides).some(([key, value]) => !key || typeof value !== 'string' || !value)) {
+            throw new Error('dataschemaOverrides must map nonempty URI strings to nonempty URI strings');
+        }
         this.producer = producer;
         this.topic = topic || '{{ messagegroupid }}';
         this.mode = mode;
@@ -246,7 +256,7 @@ export class {{ class_name }} {
         {%- elif attrname == "datacontenttype" %}
             {# handled separately #}
         {%- elif attrname == "dataschema" %}
-            {% if attribute.value %}dataschema: {{ attribute.value | tojson }},{% endif %}
+            {% if attribute.value %}dataschema: this.resolveDataschema({{ attribute.value | tojson }}),{% endif %}
         {%- elif attribute.value %}
             {{ attrname }}: {% if attribute.type == "uritemplate" %}`{{ attribute.value | regex_replace('\\{([A-Za-z0-9_]+)\\}', '${\\1}') }}`{% else %}'{{ attribute.value }}'{% endif %},
         {%- else %}

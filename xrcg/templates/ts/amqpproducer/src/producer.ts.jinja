@@ -37,6 +37,12 @@ import * as {{ data_module_name }} from '../../{{ data_project_name }}/dist/inde
  * Producer class to send messages in the `{{ messagegroupid }}` message group.
  */
 export class {{ class_name }} {
+    private readonly dataschemaOverrides: Readonly<Record<string, string>>;
+
+    private resolveDataschema(uri: string): string {
+        return Object.prototype.hasOwnProperty.call(this.dataschemaOverrides, uri)
+            ? this.dataschemaOverrides[uri] : uri;
+    }
     private connection: rhea.Connection;
     private sender: rhea.Sender;
     private mode: 'binary' | 'structured';
@@ -59,8 +65,13 @@ export class {{ class_name }} {
         username?: string,
         password?: string,
         mode: 'binary' | 'structured' = 'structured',
-        format: string = 'application/json'
+        format: string = 'application/json',
+        dataschemaOverrides: Readonly<Record<string, string>> = {}
     ) {
+        this.dataschemaOverrides = { ...dataschemaOverrides };
+        if (Object.entries(this.dataschemaOverrides).some(([key, value]) => !key || typeof value !== 'string' || !value)) {
+            throw new Error('dataschemaOverrides must map nonempty URI strings to nonempty URI strings');
+        }
         this.mode = mode;
         this.format = format;
         const connectionOptions: rhea.ConnectionOptions = {
@@ -164,7 +175,7 @@ export class {{ class_name }} {
             {%- elif attrname == "datacontenttype" %}
                 {# handled separately #}
             {%- elif attrname == "dataschema" %}
-                {% if attribute.value %}dataschema: {{ attribute.value | tojson }},{% endif %}
+                {% if attribute.value %}dataschema: this.resolveDataschema({{ attribute.value | tojson }}),{% endif %}
             {%- elif attribute.value %}
                 {{ attrname }}: {% if attribute.type == "uritemplate" %}`{{ attribute.value | regex_replace('\\{([A-Za-z0-9_]+)\\}', '${\\1}') }}`{% else %}'{{ attribute.value }}'{% endif %},
             {%- else %}
