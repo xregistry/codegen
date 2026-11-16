@@ -15,6 +15,8 @@ import xml.etree.ElementTree as ET
 import pytest
 from xrcg.generator.generator_context import GeneratorContext
 from xrcg.generator.template_renderer import TemplateRenderer
+from xrcg.generator.schema_utils import SchemaUtils
+from xrcg.generator.xregistry_loader import SchemaReference
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '../..'))
@@ -493,6 +495,328 @@ def _generate_producer(language, style, sample, projectname, subdir):
     ]
     assert xrcg.cli() == 0
     return output_dir
+
+
+def _versioned_schema_document():
+    schema = {
+        "versionid": "stable",
+        "format": "Avro/1.11.0",
+        "schema": {
+            "type": "record", "name": "Reading", "namespace": "Example",
+            "fields": [{"name": "value", "type": "string"}],
+        },
+    }
+    return {
+        "messagegroups": {
+            "Example": {
+                "messagegroupid": "Example",
+                "messages": {
+                    "Reading": {
+                        "messageid": "Reading",
+                        "envelope": "CloudEvents/1.0",
+                        "dataschemaformat": "Avro/1.11.0",
+                        "dataschemauri": "#/schemagroups/Example/schemas/Reading",
+                        "envelopemetadata": {
+                            "type": {"type": "string", "value": "Example.Reading"},
+                            "source": {"type": "uri", "value": "urn:readings"},
+                        },
+                    },
+                },
+            },
+        },
+        "schemagroups": {
+            "Example": {
+                "schemagroupid": "Example",
+                "schemas": {
+                    "Reading": {
+                        "schemaid": "Reading", "defaultversionid": "stable",
+                        "versions": {
+                            "stable": schema,
+                            "zzz": {**schema, "versionid": "zzz"},
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+
+@pytest.mark.parametrize("origin,reference,expected", [
+    ("catalog.json", "#/schemagroups/Example/schemas/Reading",
+     "xreg://./schemagroups/Example/schemas/Reading/versions/stable"),
+    ("catalog.json", "#/schemagroups/Example/schemas/Reading/versions/zzz",
+     "xreg://./schemagroups/Example/schemas/Reading/versions/zzz"),
+    ("catalog.json", "#/schemagroups/Example/schemas/Reading:Example.Reading",
+     "xreg://./schemagroups/Example/schemas/Reading/versions/stable"),
+    ("https://api.example/tenant/registry", "#/schemagroups/Example/schemas/Reading",
+     "https://api.example/tenant/registry/schemagroups/Example/schemas/Reading/versions/stable"),
+    ("https://api.example/tenant/registry/messagegroups/Example/messages/Reading",
+     "/schemagroups/Example/schemas/Reading",
+     "https://api.example/tenant/registry/schemagroups/Example/schemas/Reading/versions/stable"),
+    ("https://api.example/tenant/registry/messagegroups/Example/messages/Reading",
+     "../../../schemagroups/Example/schemas/Reading",
+     "https://api.example/tenant/registry/schemagroups/Example/schemas/Reading/versions/stable"),
+])
+def test_versioned_dataschema_resolution(origin, reference, expected):
+    document = _versioned_schema_document()
+    message = document["messagegroups"]["Example"]["messages"]["Reading"]
+    message["dataschemauri"] = SchemaReference(reference, origin)
+    ctx = GeneratorContext()
+    ctx.base_uri = origin
+    SchemaUtils.project_schema_references(ctx, document)
+    assert message["envelopemetadata"]["dataschema"]["value"] == expected
+
+
+def test_versioned_dataschema_does_not_add_envelope_to_plain_message():
+    document = _versioned_schema_document()
+    message = document["messagegroups"]["Example"]["messages"]["Reading"]
+    message.pop("envelope")
+    message.pop("envelopemetadata")
+    message["protocol"] = "AMQP/1.0"
+    ctx = GeneratorContext()
+    ctx.base_uri = "catalog.json"
+    SchemaUtils.project_schema_references(ctx, document)
+    assert "envelopemetadata" not in message
+
+
+def test_versioned_dataschema_override_and_unresolved_reference():
+    document = _versioned_schema_document()
+    message = document["messagegroups"]["Example"]["messages"]["Reading"]
+    message["envelopemetadata"]["dataschema"] = {
+        "type": "uri", "value": "https://registered.example/avro/versions/17"}
+    ctx = GeneratorContext()
+    ctx.base_uri = "catalog.json"
+    SchemaUtils.project_schema_references(ctx, document)
+    assert message["envelopemetadata"]["dataschema"]["value"] == (
+        "https://registered.example/avro/versions/17")
+    message["dataschemauri"] += "/versions/missing"
+    with pytest.raises(RuntimeError, match=r"message /messagegroups/Example/messages/Reading: .*missing"):
+        SchemaUtils.project_schema_references(ctx, document)
+
+
+@pytest.mark.parametrize("selection", ["meta", "defaultversionurl", "version-body"])
+def test_versioned_dataschema_default_selection(selection):
+    document = _versioned_schema_document()
+    schemas = document["schemagroups"]["Example"]["schemas"]
+    resource = schemas["Reading"]
+    resource.pop("defaultversionid")
+    if selection == "version-body":
+        schemas["Reading"] = resource["versions"]["stable"]
+    elif selection == "meta":
+        resource["meta"] = {"defaultversionid": "stable"}
+    else:
+        resource["defaultversionurl"] = "https://api.example/schemas/Reading/versions/stable?api-version=1"
+    ctx = GeneratorContext()
+    ctx.base_uri = "catalog.json"
+    SchemaUtils.project_schema_references(ctx, document)
+    message = document["messagegroups"]["Example"]["messages"]["Reading"]
+    assert message["envelopemetadata"]["dataschema"]["value"] == (
+        "xreg://./schemagroups/Example/schemas/Reading/versions/stable")
+
+
+@pytest.mark.parametrize("reference", [
+    "schemas.xreg.json#/schemagroups/Example/schemas/Reading",
+    "absolute-file",
+    "file-uri",
+    "https://schemas.example/registry/schemagroups/Example/schemas/Reading",
+    "https://schemas.example/registry/schemagroups/Example/schemas/Reading?api-version=1",
+])
+def test_versioned_dataschema_external_origin(reference, tmp_path, monkeypatch):
+    if reference in ("absolute-file", "file-uri"):
+        path = tmp_path / "schemas.xreg.json"
+        reference = (path.as_uri() if reference == "file-uri" else str(path)) + (
+            "#/schemagroups/Example/schemas/Reading")
+    document = _versioned_schema_document()
+    message = document["messagegroups"]["Example"]["messages"]["Reading"]
+    message["dataschemauri"] = SchemaReference(reference, str(tmp_path / "catalog.json"))
+    external = document if "#" in reference else document["schemagroups"]["Example"]["schemas"]["Reading"]
+    ctx = GeneratorContext()
+    monkeypatch.setattr(ctx.loader, "_load_core", lambda *args, **kwargs: (args[0], external))
+    SchemaUtils.project_schema_references(ctx, document)
+    expected = (reference if reference.startswith("https:") else
+                "schemas.xreg.json#/schemagroups/Example/schemas/Reading")
+    expected = expected.replace("?api-version=1", "") + "/versions/stable"
+    if "?" in reference:
+        expected += "?api-version=1"
+    if not expected.startswith("https:"):
+        expected = "xreg://./" + expected
+    assert message["envelopemetadata"]["dataschema"]["value"] == expected
+
+
+@pytest.mark.parametrize("api", [False, True])
+def test_versioned_dataschema_escaped_version(api):
+    document = _versioned_schema_document()
+    resource = document["schemagroups"]["Example"]["schemas"]["Reading"]
+    resource["defaultversionid"] = "release/1~b"
+    resource["versions"]["release/1~b"] = {
+        **resource["versions"]["stable"], "versionid": "release/1~b"}
+    ctx = GeneratorContext()
+    ctx.base_uri = "https://api.example/registry" if api else "catalog.json"
+    SchemaUtils.project_schema_references(ctx, document)
+    value = document["messagegroups"]["Example"]["messages"]["Reading"]["envelopemetadata"]["dataschema"]["value"]
+    assert value.endswith("/versions/release%2F1~b")
+
+
+def test_versioned_dataschema_stacked_inheritance(tmp_path):
+    document = _versioned_schema_document()
+    base_dir = tmp_path / "contracts"
+    base_dir.mkdir()
+    base = base_dir / "catalog.json"
+    external = base_dir / "schemas.xreg.json"
+    external.write_text(json.dumps({"schemagroups": document.pop("schemagroups")}), encoding="utf-8")
+    document["messagegroups"]["Example"]["messages"]["Reading"]["dataschemauri"] = (
+        "schemas.xreg.json#/schemagroups/Example/schemas/Reading")
+    base.write_text(json.dumps(document), encoding="utf-8")
+    overlay = tmp_path / "overlay.json"
+    overlay.write_text(json.dumps({
+        "messagegroups": {"Transport": {"messages": {
+            "Reading": {"basemessageuri": "#/messagegroups/Example/messages/Reading"},
+        }}},
+    }), encoding="utf-8")
+    ctx = GeneratorContext()
+    ctx.base_uri = str(base)
+    _, loaded = ctx.loader.load_stacked([str(base), str(overlay)], {})
+    assert loaded is not None
+    SchemaUtils.project_schema_references(ctx, loaded)
+    message = loaded["messagegroups"]["Transport"]["messages"]["Reading"]
+    assert message["envelopemetadata"]["dataschema"]["value"] == (
+        "xreg://./schemas.xreg.json#/schemagroups/Example/schemas/Reading/versions/stable")
+
+
+@pytest.mark.parametrize("entry,reference", [
+    ("", "#/schemagroups/Example/schemas/Reading"),
+    ("/messagegroups/Example", "#/schemagroups/Example/schemas/Reading"),
+    ("/messagegroups/Example", "/schemagroups/Example/schemas/Reading"),
+    ("/messagegroups/Example", "schemagroups/Example/schemas/Reading"),
+    ("/messagegroups/Example", "../../../schemagroups/Example/schemas/Reading"),
+])
+def test_versioned_dataschema_api_input(entry, reference, monkeypatch):
+    import io
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    document = _versioned_schema_document()
+    base = "https://api.example/tenant/registry"
+    message = document["messagegroups"]["Example"]["messages"]["Reading"]
+    message["dataschemauri"] = reference
+    message["self"] = base + "/messagegroups/Example/messages/Reading"
+    responses = {
+        base: document,
+        base + "/capabilities": {},
+        base + "/messagegroups/Example": document["messagegroups"]["Example"],
+        base + "/schemagroups/Example/schemas/Reading": document["schemagroups"]["Example"]["schemas"]["Reading"],
+    }
+
+    def open_request(request):
+        url = request.full_url.split("?", 1)[0]
+        if url not in responses:
+            raise urllib.error.HTTPError(url, 404, "Not found", {}, None)
+        return io.BytesIO(json.dumps(responses[url]).encode("utf-8"))
+
+    ctx = GeneratorContext()
+    ctx.base_uri = base + entry
+    monkeypatch.setattr(urllib.request, "urlopen", open_request)
+    _, loaded = ctx.loader.load_with_dependencies(base + entry, {})
+    assert loaded is not None
+    SchemaUtils.project_schema_references(ctx, loaded)
+    effective = loaded["messagegroups"]["Example"]["messages"]["Reading"]
+    assert effective["envelopemetadata"]["dataschema"]["value"] == (
+        base + "/schemagroups/Example/schemas/Reading/versions/stable")
+    assert SchemaUtils.schema_type(
+        ctx, effective["dataschemauri"], "Generated", loaded, "Avro/1.11.0"
+    ) == "Generated.Example.Reading"
+
+
+@pytest.mark.parametrize("language,style", [
+    ("cs", "amqpproducer"), ("cs", "kafkaproducer"),
+    ("cs", "ehproducer"), ("cs", "sbproducer"), ("cs", "egproducer"), ("cs", "mqttclient"),
+    ("java", "producer"), ("java", "amqpproducer"), ("java", "kafkaproducer"),
+    ("java", "ehproducer"), ("java", "sbproducer"), ("java", "mqttclient"),
+    ("py", "producer"), ("py", "amqpproducer"), ("py", "kafkaproducer"), ("py", "ehproducer"),
+    ("py", "sbproducer"), ("py", "mqttclient"),
+    ("ts", "producerhttp"), ("ts", "amqpproducer"), ("ts", "kafkaproducer"),
+    ("ts", "ehproducer"), ("ts", "sbproducer"), ("ts", "egproducer"), ("ts", "mqttclient"),
+    ("go", "producer"), ("go", "amqpproducer"), ("go", "kafkaproducer"),
+    ("go", "ehproducer"), ("go", "sbproducer"), ("go", "mqttclient"),
+    ("rust", "producer"),
+    ("asyncapi", "producer"), ("asyncapi", "consumer"),
+    ("openapi", "producer"), ("openapi", "subscriber"),
+])
+def test_codegen_producer_versioned_dataschema(language, style, tmp_path, monkeypatch):
+    import copy
+
+    document = _versioned_schema_document()
+    messages = document["messagegroups"]["Example"]["messages"]
+    messages["Override"] = copy.deepcopy(messages["Reading"])
+    messages["Override"]["messageid"] = "Override"
+    messages["Override"]["envelopemetadata"]["dataschema"] = {
+        "type": "uri", "value": "https://registered.example/avro/versions/17"}
+    is_specification = language in ("asyncapi", "openapi")
+    if not is_specification:
+        messages["Pinned"] = copy.deepcopy(messages["Reading"])
+        messages["Pinned"]["messageid"] = "Pinned"
+        messages["Pinned"]["dataschemauri"] += "/versions/zzz"
+    document["endpoints"] = {
+        "http": {
+            "endpointid": "http", "protocol": "HTTP/1.1",
+            "usage": ["producer"], "messagegroups": ["#/messagegroups/Example"],
+            "config": {"uri": "https://events.example/"},
+        },
+    }
+    definitions = tmp_path / "catalog.json"
+    definitions.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "out"
+    monkeypatch.setattr(sys, "argv", [
+        "xrcg", "generate", "--language", language, "--style", style,
+        "--definitions", str(definitions), "--output", str(output),
+        "--projectname", "SchemaContract",
+    ])
+    assert xrcg.cli() == 0
+    paths = (output.rglob("*.yml") if is_specification else
+             _producer_sources(str(output), "SchemaContract"))
+    sources = "\n".join(open(path, encoding="utf-8").read() for path in paths)
+    assert "xreg://./schemagroups/Example/schemas/Reading/versions/stable" in sources
+    if not is_specification:
+        assert "xreg://./schemagroups/Example/schemas/Reading/versions/zzz" in sources
+    assert "https://registered.example/avro/versions/17" in sources
+    assert "xreg:schemagroups" not in sources
+    assert str(tmp_path) not in sources
+    if language == "go":
+        assert 'SetExtension("dataschema"' not in sources
+        assert "event.SetDataSchema(" in sources
+    if language == "py":
+        import py_compile
+        for path in output.rglob("*.py"):
+            py_compile.compile(str(path), doraise=True)
+
+
+@pytest.mark.parametrize("pinned", [False, True])
+def test_codegen_dataschema_matches_generated_payload_version(pinned, tmp_path, monkeypatch):
+    import copy
+    import runpy
+
+    document = _versioned_schema_document()
+    versions = document["schemagroups"]["Example"]["schemas"]["Reading"]["versions"]
+    versions["zzz"] = copy.deepcopy(versions["zzz"])
+    versions["stable"]["schema"]["fields"][0]["name"] = "stable_value"
+    versions["zzz"]["schema"]["fields"][0]["name"] = "pinned_value"
+    if pinned:
+        document["messagegroups"]["Example"]["messages"]["Reading"]["dataschemauri"] += "/versions/zzz"
+    definitions = tmp_path / "catalog.json"
+    definitions.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "out"
+    monkeypatch.setattr(sys, "argv", [
+        "xrcg", "generate", "--language", "py", "--style", "amqpproducer",
+        "--definitions", str(definitions), "--output", str(output),
+        "--projectname", "VersionContract",
+    ])
+    assert xrcg.cli() == 0
+    generated = runpy.run_path(str(next(output.rglob("reading.py"))))
+    assert [field.name for field in generated["Reading"].AvroType.fields] == (
+        ["pinned_value"] if pinned else ["stable_value"])
+    source = next(output.rglob("producer.py")).read_text(encoding="utf-8")
+    assert ("/versions/zzz" if pinned else "/versions/stable") in source
 
 
 @pytest.mark.parametrize('language,style,serializer_marker', [

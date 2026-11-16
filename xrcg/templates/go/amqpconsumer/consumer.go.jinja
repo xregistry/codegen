@@ -178,6 +178,9 @@ func (c *{{ class_name }}) processCloudEvent(ctx context.Context, msg *amqp.Mess
 		event.SetType(c.getApplicationProperty(msg, "cloudEvents:type"))
 		event.SetSource(c.getApplicationProperty(msg, "cloudEvents:source"))
 		event.SetID(c.getApplicationProperty(msg, "cloudEvents:id"))
+		if schema := c.getApplicationProperty(msg, "cloudEvents:dataschema"); schema != "" {
+			event.SetDataSchema(schema)
+		}
 		if subject := c.getApplicationProperty(msg, "cloudEvents:subject"); subject != "" {
 			event.SetSubject(subject)
 		}
@@ -198,7 +201,7 @@ func (c *{{ class_name }}) processCloudEvent(ctx context.Context, msg *amqp.Mess
 				if strings.HasPrefix(key, "cloudEvents:") {
 					name := strings.TrimPrefix(key, "cloudEvents:")
 					switch name {
-					case "specversion", "id", "type", "source", "subject", "time", "datacontenttype":
+					case "specversion", "id", "type", "source", "subject", "time", "datacontenttype", "dataschema":
 						continue
 					}
 					event.SetExtension(name, val)

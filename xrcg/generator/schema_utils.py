@@ -1,5 +1,8 @@
+import copy
+import os
 import re
 import urllib.parse
+import urllib.request
 from typing import Any, Dict, List, Optional, Set, Union
 
 import jsonpointer
@@ -15,6 +18,187 @@ class SchemaUtils:
 
     schema_files_collected: Set[str] = set()
     schema_references_collected: Set[str] = set()
+
+    @staticmethod
+    def select_schema_version(schema: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+        versions = schema.get("versions")
+        if not isinstance(versions, dict) or not versions:
+            raise RuntimeError("Schema has no versions")
+        metadata = schema.get("meta") or {}
+        version_id = str(schema.get("defaultversionid") or metadata.get("defaultversionid") or "")
+        if not version_id:
+            version_url = schema.get("defaultversionurl") or metadata.get("defaultversionurl", "")
+            if version_url:
+                path = urllib.parse.urlsplit(str(version_url)).path
+                version_id = urllib.parse.unquote(path.rstrip("/").rsplit("/", 1)[-1])
+        if not version_id:
+            version_id = max(versions.keys())
+        version = versions.get(version_id)
+        if not isinstance(version, dict):
+            raise RuntimeError(f"Schema version not found: {version_id}")
+        return version_id, version
+
+    @staticmethod
+    def registry_base_uri(ctx: GeneratorContext, origin: str) -> str:
+        parsed = urllib.parse.urlsplit(origin)
+        parts = parsed.path.split("/")
+        for index, part in enumerate(parts):
+            if part in ctx.loader.model.groups:
+                return urllib.parse.urlunsplit((
+                    parsed.scheme, parsed.netloc, "/".join(parts[:index]), "", ""))
+        return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
+
+    @staticmethod
+    def split_schema_reference(reference: str) -> tuple[str, str]:
+        """Separate the optional type selector without splitting URL schemes/ports."""
+        document, separator, fragment = reference.partition("#")
+        if separator:
+            pointer, selector, name = fragment.rpartition(":")
+            return (document + "#" + pointer, name) if selector else (reference, "")
+        if "://" not in reference and ":" in reference and not re.match(r"^[A-Za-z]:[\\/]", reference):
+            return tuple(reference.rsplit(":", 1))
+        return reference, ""
+
+    @staticmethod
+    def project_schema_references(ctx: GeneratorContext, root: Dict[str, Any],
+                                  headers: Optional[Dict[str, str]] = None) -> None:
+        """Project effective schema-version references into CloudEvents metadata."""
+        if not isinstance(root, dict):
+            return
+
+        def project(message: Dict[str, Any], path: str) -> None:
+            reference = message.get("dataschemauri")
+            if not isinstance(reference, str) or not reference:
+                return
+            try:
+                uri = SchemaUtils.versioned_schema_uri(ctx, root, message, headers or {})
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Cannot resolve dataschema for message {path}: {reference}: {exc}") from exc
+            if str(message.get("envelope", "")).lower().startswith("cloudevents"):
+                metadata = dict(message.get("envelopemetadata") or {})
+                metadata.setdefault("dataschema", {"type": "uri", "value": uri})
+                message["envelopemetadata"] = metadata
+
+        def messages(collection: Dict[str, Any], path: str) -> None:
+            if not isinstance(collection, dict):
+                return
+            for name, message in collection.items():
+                if isinstance(message, dict):
+                    project(message, f"{path}/{name}")
+                    if isinstance(message.get("versions"), dict):
+                        messages(message["versions"], f"{path}/{name}/versions")
+
+        for group_id, group in root.get("messagegroups", {}).items():
+            if isinstance(group, dict):
+                messages(group.get("messages", {}), f"/messagegroups/{group_id}/messages")
+        for endpoint_id, endpoint in root.get("endpoints", {}).items():
+            if isinstance(endpoint, dict):
+                messages(endpoint.get("messages", {}), f"/endpoints/{endpoint_id}/messages")
+
+    @staticmethod
+    def versioned_schema_uri(ctx: GeneratorContext, root: Dict[str, Any],
+                             message: Dict[str, Any], headers: Dict[str, str]) -> str:
+        reference = message["dataschemauri"]
+        origin = getattr(reference, "origin", "") or ctx.base_uri
+        authored, _ = SchemaUtils.split_schema_reference(
+            getattr(reference, "authored", str(reference)))
+        code_reference, selector = SchemaUtils.split_schema_reference(str(reference))
+        is_api = origin.startswith(("http://", "https://"))
+        base = SchemaUtils.registry_base_uri(ctx, origin) if is_api else ""
+
+        if code_reference.startswith("#"):
+            pointer = urllib.parse.unquote(code_reference[1:])
+            schema = jsonpointer.resolve_pointer(root, pointer, None)
+            wire_reference = authored
+            if is_api:
+                wire_reference = base.rstrip("/") + "/" + "/".join(
+                    urllib.parse.quote(part, safe="") for part in jsonpointer.JsonPointer(pointer).parts)
+                if schema is None:
+                    resolved_message = {**message, "dataschemauri": wire_reference}
+                    uri = SchemaUtils.versioned_schema_uri(ctx, root, resolved_message, headers)
+                    message["dataschemauri"] = resolved_message["dataschemauri"]
+                    return uri
+        else:
+            location, fragment = urllib.parse.urldefrag(authored)
+            if urllib.parse.urlsplit(location).scheme in ("http", "https"):
+                resolved = location
+            elif is_api:
+                if location.startswith(("/schemagroups/", "schemagroups/")):
+                    resolved = base.rstrip("/") + "/" + location.lstrip("/")
+                else:
+                    resolved = urllib.parse.urljoin(message.get("self") or origin, location)
+            else:
+                local_path = (urllib.request.url2pathname(urllib.parse.urlsplit(location).path)
+                              if location.startswith("file:") else location)
+                resolved = os.path.normpath(os.path.join(os.path.dirname(origin), local_path))
+            parsed = urllib.parse.urlsplit(resolved)
+            resource_path = parsed.path
+            marker = resource_path.find("/schemagroups/")
+            pointer = "/" + fragment.lstrip("/") if fragment else (
+                resource_path[marker:] if marker >= 0 else "")
+            pointer = urllib.parse.unquote(pointer)
+            same_registry = is_api and resolved.startswith(base.rstrip("/") + "/")
+            schema = jsonpointer.resolve_pointer(root, pointer, None) if same_registry and pointer else None
+            if schema is None:
+                _, external = ctx.loader._load_core(resolved, headers, ignore_handled=True)
+                if external is None:
+                    raise RuntimeError(f"Schema document not found: {resolved}")
+                schema = jsonpointer.resolve_pointer(external, "/" + fragment.lstrip("/")) if fragment else external
+                if pointer.startswith("/schemagroups/"):
+                    parts = jsonpointer.JsonPointer(pointer).parts
+                    if len(parts) not in (4, 6) or parts[2] != "schemas":
+                        raise RuntimeError(f"Not a schema resource/version: {authored}")
+                    schemas = root.setdefault("schemagroups", {}).setdefault(parts[1], {}).setdefault("schemas", {})
+                    if len(parts) == 6:
+                        resource = schemas.setdefault(parts[3], {"versions": {}})
+                        versions = resource.setdefault("versions", {})
+                        if parts[5] in versions and versions[parts[5]] != schema:
+                            raise RuntimeError(f"Conflicting schema version: {authored}")
+                        versions.setdefault(parts[5], copy.deepcopy(schema))
+                    elif parts[3] not in schemas:
+                        schemas[parts[3]] = copy.deepcopy(schema)
+                    elif schemas[parts[3]] != schema:
+                        raise RuntimeError(f"Conflicting schema resource: {authored}")
+            wire_reference = (resolved + ("#" + fragment if fragment else "")) if is_api else authored
+            if urllib.parse.urlsplit(authored).scheme in ("http", "https"):
+                wire_reference = authored
+            elif not is_api and (location.startswith("file:") or os.path.isabs(location)):
+                wire_reference = os.path.relpath(
+                    resolved, os.path.dirname(os.path.abspath(origin))).replace(os.sep, "/")
+                if fragment:
+                    wire_reference += "#" + fragment
+            if pointer.startswith("/schemagroups/"):
+                message["dataschemauri"] = "#" + pointer + (":" + selector if selector else "")
+
+        if not isinstance(schema, dict):
+            raise RuntimeError("Schema reference does not identify a schema resource or version")
+        version_id = ""
+        if "versions" in schema:
+            version_id, _ = SchemaUtils.select_schema_version(schema)
+        elif "/versions/" not in code_reference and "/versions/" not in authored:
+            version_id = str(schema.get("versionid") or "")
+            if not version_id:
+                raise RuntimeError("Schema reference has no selected version")
+        if version_id:
+            if "#" in wire_reference:
+                token = version_id.replace("~", "~0").replace("/", "~1")
+                suffix = "/versions/" + urllib.parse.quote(token, safe="")
+                document, fragment = wire_reference.split("#", 1)
+                wire_reference = document + "#" + fragment.rstrip("/") + suffix
+            else:
+                suffix = "/versions/" + urllib.parse.quote(version_id, safe="")
+                parsed_wire = urllib.parse.urlsplit(wire_reference)
+                wire_reference = urllib.parse.urlunsplit(
+                    parsed_wire._replace(path=parsed_wire.path.rstrip("/") + suffix))
+        if wire_reference.startswith("file:") or os.path.isabs(wire_reference) and not wire_reference.startswith("/"):
+            raise RuntimeError("A local filesystem path cannot be emitted as dataschema")
+        if not urllib.parse.urlsplit(wire_reference).scheme:
+            if wire_reference.startswith("#/"):
+                parts = jsonpointer.JsonPointer(urllib.parse.unquote(wire_reference[1:])).parts
+                wire_reference = "/".join(urllib.parse.quote(part, safe="") for part in parts)
+            wire_reference = "xreg://./" + wire_reference.lstrip("/")
+        return wire_reference
 
     @staticmethod
     def get_json_pointer(root: JsonNode, node: JsonNode) -> str:
@@ -59,7 +243,7 @@ class SchemaUtils:
         def resolve_pointer(root: JsonNode, schema_ref: str) -> JsonNode:
             if schema_ref.startswith("#"):
                 try:
-                    obj = jsonpointer.resolve_pointer(root, schema_ref[1:])
+                    obj = jsonpointer.resolve_pointer(root, urllib.parse.unquote(schema_ref[1:]))
                     if isinstance(obj, (dict, list, str)):
                         return obj
                     else:
@@ -83,8 +267,7 @@ class SchemaUtils:
             schema_obj = schema_ref
             schema_ref = '#' + ptr
         elif isinstance(schema_ref, str):
-            if ":" in schema_ref:
-                schema_ref, class_name = schema_ref.split(":")
+            schema_ref, class_name = SchemaUtils.split_schema_reference(schema_ref)
             if schema_ref.startswith("#"):
                 if schema_ref not in SchemaUtils.schema_references_collected:
                     SchemaUtils.schema_references_collected.add(schema_ref)
@@ -98,13 +281,7 @@ class SchemaUtils:
 
             schema_version = None
             if isinstance(schema_obj, dict) and "versions" in schema_obj and isinstance(schema_obj['versions'], dict):
-                latestversion = str(schema_obj.get('defaultversionid', ''))
-                if not latestversion or latestversion not in schema_obj['versions']:
-                    versions = schema_obj['versions']
-                    latestversion = max(versions.keys())
-                if latestversion not in schema_obj['versions']:
-                    raise RuntimeError(f"Schema version not found: {latestversion}")
-                schema_version = schema_obj['versions'][latestversion]
+                _, schema_version = SchemaUtils.select_schema_version(schema_obj)
                 if not class_name:
                     class_name = str(schema_obj.get("schemaid", ''))
                 if not class_name:
@@ -131,36 +308,14 @@ class SchemaUtils:
                             class_name = prefix + '.' + class_name
                 except jsonpointer.JsonPointerException:
                     raise RuntimeError(f"Schema not found: {parent_reference}")
-            elif isinstance(schema_obj, dict) and "versionid" in schema_obj:
+            elif isinstance(schema_obj, dict) and ("versionid" in schema_obj or "/versions/" in schema_ref):
                 schema_version = schema_obj
-                parent_reference = schema_ref.rsplit("/", 1)[0]
-                if "schemaid" not in schema_obj:
-                    parent = jsonpointer.resolve_pointer(root, parent_reference[1:])
-                    if parent and isinstance(parent, dict) and not class_name:
-                        class_name = parent.get("schemaid", class_name)
-                else:
-                    class_name = str(schema_obj.get("schemaid", class_name))
-                # we now get the group to see whether we need to prefix the class name
-                if "defaultversionurl" not in schema_obj and "self" not in schema_obj:
-                    parent_reference = parent_reference.rsplit("/", 2)[0]
-                    try:
-                        parent = jsonpointer.resolve_pointer(root, parent_reference[1:])
-                        if parent and isinstance(parent, dict):
-                            prefix = parent.get("schemagroupid", '')
-                            if not class_name.startswith(prefix):
-                                class_name = prefix + '.' + class_name
-                    except jsonpointer.JsonPointerException:
-                        raise RuntimeError(f"Schema not found: {parent_reference}")
-                else:
-                    version_url = str(schema_obj.get("defaultversionurl", schema_obj.get("self", '')))
-                    # version url is {baseurl}/schemagroups/{schemagroupid}/schemas/{schemaid}/versions/{versionid}
-                    match = re.search(r"/schemagroups/([^/]+)/", version_url)
-                    if match:
-                        prefix = match.group(1)
-                    else:
-                        raise RuntimeError(f"Schema group ID not found in version URL: {version_url}")
-                    if not class_name.startswith(prefix):
-                        class_name = prefix + '.' + class_name
+                resource_reference = schema_ref.rsplit("/versions/", 1)[0]
+                parent = resolve_pointer(root, resource_reference)
+                parts = jsonpointer.JsonPointer(urllib.parse.unquote(resource_reference.lstrip("#"))).parts
+                class_name = class_name or str(schema_obj.get("schemaid") or parent.get("schemaid") or parts[-1])
+                if len(parts) == 4 and parts[0] == "schemagroups" and not class_name.startswith(parts[1] + "."):
+                    class_name = parts[1] + "." + class_name
 
             if not schema_version or not isinstance(schema_version, dict):
                 raise RuntimeError(f"Schema version not found: {schema_ref}")

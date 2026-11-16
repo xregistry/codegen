@@ -93,6 +93,9 @@ public class {{ pascal_group_name | strip_namespace }}MessageFactory {
                 {%- endif %}
                 {%- endif %}
                 .withDataContentType(dataContentType)
+                {%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
+                .withDataSchema(URI.create({{ message.envelopemetadata.dataschema.value | tojson }}))
+                {%- endif %}
                 .withData(serializedData);
 
             CloudEvent cloudEvent = builder.build();

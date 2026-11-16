@@ -199,6 +199,9 @@ func (c *{{ class_name }}) processCloudEvent(ctx context.Context, eventData *aze
 		event.SetID(getEventHubPropertyString(eventData, "cloudEvents:id"))
 		event.SetType(getEventHubPropertyString(eventData, "cloudEvents:type"))
 		event.SetSource(getEventHubPropertyString(eventData, "cloudEvents:source"))
+		if schema := getEventHubPropertyString(eventData, "cloudEvents:dataschema"); schema != "" {
+			event.SetDataSchema(schema)
+		}
 		if subject := getEventHubPropertyString(eventData, "cloudEvents:subject"); subject != "" {
 			event.SetSubject(subject)
 		}
@@ -303,7 +306,7 @@ func getEventHubPropertyString(eventData *azeventhubs.ReceivedEventData, key str
 
 func isCoreCloudEventAttribute(name string) bool {
 	switch name {
-	case "specversion", "id", "type", "source", "subject", "time", "datacontenttype":
+	case "specversion", "id", "type", "source", "subject", "time", "datacontenttype", "dataschema":
 		return true
 	default:
 		return false

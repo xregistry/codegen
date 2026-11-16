@@ -96,6 +96,30 @@ After resolution, `TemperatureSensorEvent` will have:
 - `datacontenttype` inherited from `BaseDeviceEvent`: `application/json`
 - `dataschemaformat` inherited from `BaseDeviceEvent`: `JSONSchema/draft-07`
 
+## CloudEvents Schema References
+
+Generated CloudEvents producers set `dataschema` from the effective
+`dataschemauri`, including inherited references. The URI identifies the schema
+version selected for payload generation. An explicit envelope `dataschema`
+value takes precedence.
+
+File-backed definitions use the `xreg://./` prefix for catalog-local references.
+For example, `#/schemagroups/devices/schemas/Temperature` becomes
+`xreg://./schemagroups/devices/schemas/Temperature/versions/1` when version `1`
+is selected. A document-relative reference such as
+`schemas.json#/schemagroups/devices/schemas/Temperature` retains its document
+path and fragment after the prefix. Generated URIs never contain the generator's
+absolute filesystem path. The `xreg` URI identifies a local catalog resource;
+it does not imply an HTTP endpoint.
+
+API-backed definitions use the actual API host and registry prefix. Explicit
+absolute schema URIs retain their host and path. Unversioned resource references
+gain `/versions/{versionid}`; already pinned references retain their version.
+Selection uses the declared default version, including `meta` and
+`defaultversionurl`, or the existing lexicographic fallback when no default is
+declared. Unresolved references fail generation with the message and reference
+in the error.
+
 ## Endpoint Message Inheritance
 
 The basemessage mechanism also applies to messages embedded in endpoint definitions:

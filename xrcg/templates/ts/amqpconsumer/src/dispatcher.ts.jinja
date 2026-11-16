@@ -236,6 +236,9 @@ export class {{ class_name }} {
             id: (props['cloudEvents:id'] || props['cloudEvents_id']) as string,
             time: props['cloudEvents:time'] || props['cloudEvents_time'],
             datacontenttype: message.content_type || 'application/json',
+            ...((props['cloudEvents:dataschema'] || props['cloudEvents_dataschema']) ? {
+                dataschema: String(props['cloudEvents:dataschema'] || props['cloudEvents_dataschema'])
+            } : {}),
             data: message.body
         });
     }

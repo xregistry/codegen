@@ -176,6 +176,9 @@ func (c *{{ class_name }}) processCloudEvent(ctx context.Context, msg *azservice
 		event.SetID(c.propertyString(msg, "cloudEvents:id"))
 		event.SetType(c.propertyString(msg, "cloudEvents:type"))
 		event.SetSource(c.propertyString(msg, "cloudEvents:source"))
+		if schema := c.propertyString(msg, "cloudEvents:dataschema"); schema != "" {
+			event.SetDataSchema(schema)
+		}
 		if subject := c.propertyString(msg, "cloudEvents:subject"); subject != "" {
 			event.SetSubject(subject)
 		}
@@ -195,7 +198,7 @@ func (c *{{ class_name }}) processCloudEvent(ctx context.Context, msg *azservice
 			const prefix = "cloudEvents:"
 			if len(key) > len(prefix) && key[:len(prefix)] == prefix {
 				name := key[len(prefix):]
-				if name != "specversion" && name != "id" && name != "type" && name != "source" && name != "subject" && name != "time" && name != "datacontenttype" {
+				if name != "specversion" && name != "id" && name != "type" && name != "source" && name != "subject" && name != "time" && name != "datacontenttype" && name != "dataschema" {
 					event.SetExtension(name, fmt.Sprint(value))
 				}
 			}

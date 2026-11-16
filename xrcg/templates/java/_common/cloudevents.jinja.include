@@ -58,8 +58,8 @@ CloudEvent cloudEvent = CloudEventBuilder.v1()
 {%- elif attrname == "datacontenttype" %}
 {%- set emitted.datacontenttype = true %}
     .withDataContentType({% if defaultContentType %}{{ defaultContentType }}{% elif 'value' in attribute %}"{{ attribute.value }}"{% else %}contentType{% endif %})
-{%- elif attrname == "dataschema" and message.dataschemauri %}
-    .withDataSchema(java.net.URI.create("xreg:{{ message.dataschemauri.lstrip('#/') }}"))
+{%- elif attrname == "dataschema" and attribute.value %}
+    .withDataSchema(java.net.URI.create({{ attribute.value | tojson }}))
 {%- endif %}
 {%- endfor %}
 {%- if not emitted.datacontenttype and defaultContentType %}

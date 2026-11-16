@@ -17,10 +17,20 @@ JsonNode = Union[Dict[str, 'JsonNode'], List['JsonNode'], str, bool, int, float,
 logger = logging.getLogger(__name__)
 
 
+class SchemaReference(str):
+    """A schema reference retaining its authored form and definition origin."""
+
+    def __new__(cls, value: str, origin: str = "", authored: Optional[str] = None):
+        instance = super().__new__(cls, value)
+        instance.origin = origin
+        instance.authored = value if authored is None else authored
+        return instance
+
+
 class XRegistryUrlParser:
     """Parse xRegistry URLs to determine entry point and resource paths."""
     
-    def __init__(self, url: str):
+    def __init__(self, url: str, group_types: Optional[Dict[str, Any]] = None):
         self.url = url
         self.parsed = urllib.parse.urlparse(url)
         self.base_url = f"{self.parsed.scheme}://{self.parsed.netloc}"
@@ -42,6 +52,14 @@ class XRegistryUrlParser:
             else:
                 # /registry/something - strip registry prefix
                 self.path_parts = self.path_parts[1:]
+        if group_types:
+            parts = [p for p in self.parsed.path.strip('/').split('/') if p]
+            group_index = next((i for i, part in enumerate(parts) if part in group_types), None)
+            if group_index is not None:
+                prefix = "/" + "/".join(parts[:group_index]) if group_index else ""
+                self.base_url += prefix
+                self.path_parts = parts[group_index:]
+                self.is_registry_root = False
         
     def get_base_url(self) -> str:
         """Get the base registry URL."""
@@ -206,7 +224,10 @@ class DependencyResolver:
         """
         # Resolve relative references against base URL
         if base_url and ref_url.startswith("/"):
-            ref_url = urllib.parse.urljoin(base_url, ref_url)
+            if any(ref_url.startswith(f"/{group}/") for group in self.model.groups):
+                ref_url = base_url.rstrip("/") + ref_url
+            else:
+                ref_url = urllib.parse.urljoin(base_url, ref_url)
             self.logger.debug(f"Resolved relative reference to: {ref_url}")
         
         if ref_url in self.resolved_resources:
@@ -226,15 +247,14 @@ class DependencyResolver:
                 self.resolved_resources[ref_url] = resource_data
                 
                 # Find and resolve nested dependencies
-                parser = XRegistryUrlParser(ref_url)
+                parser = XRegistryUrlParser(ref_url, self.model.groups)
                 group_type = parser.get_group_type() or "unknown"
                 nested_refs = self.find_xid_references(resource_data, group_type)
                 
                 # Extract base URL from ref_url for resolving nested relative references
                 nested_base_url = None
                 if ref_url.startswith("http"):
-                    parsed = urllib.parse.urlparse(ref_url)
-                    nested_base_url = f"{parsed.scheme}://{parsed.netloc}"
+                    nested_base_url = parser.get_base_url()
                 
                 for nested_ref in nested_refs:
                     self.resolve_reference(nested_ref, headers, nested_base_url)
@@ -277,7 +297,9 @@ class DependencyResolver:
                         schema_uri = msg["dataschemauri"]
                         if isinstance(schema_uri, str) and schema_uri.startswith("/"):
                             # Convert relative URI to JSON pointer
-                            msg["dataschemauri"] = "#" + schema_uri
+                            msg["dataschemauri"] = SchemaReference(
+                                "#" + schema_uri, getattr(schema_uri, "origin", ""),
+                                getattr(schema_uri, "authored", schema_uri))
         
         # Process all endpoints (they may also reference schemas or messages)
         if "endpoints" in doc and isinstance(doc["endpoints"], dict):
@@ -296,7 +318,9 @@ class DependencyResolver:
                             schema_uri = msg["dataschemauri"]
                             if isinstance(schema_uri, str) and schema_uri.startswith("/"):
                                 # Convert relative URI to JSON pointer
-                                msg["dataschemauri"] = "#" + schema_uri
+                                msg["dataschemauri"] = SchemaReference(
+                                    "#" + schema_uri, getattr(schema_uri, "origin", ""),
+                                    getattr(schema_uri, "authored", schema_uri))
     
     def _restructure_single_resource(self, version_obj: Dict[str, Any], group_type: str, resource_id: str) -> Dict[str, Any]:
         """Restructure a single message/schema version object into proper group structure.
@@ -379,7 +403,7 @@ class DependencyResolver:
         Returns:
             Composed document with all dependencies
         """
-        parser = XRegistryUrlParser(entry_url)
+        parser = XRegistryUrlParser(entry_url, self.model.groups)
         entry_type = parser.get_entry_type()
         
         # Start with empty document structure
@@ -450,7 +474,7 @@ class DependencyResolver:
     
     def _add_resource_to_document(self, doc: Dict[str, Any], resource_url: str, resource_data: JsonNode) -> None:
         """Add a resolved resource to the composed document."""
-        parser = XRegistryUrlParser(resource_url)
+        parser = XRegistryUrlParser(resource_url, self.model.groups)
         group_type = parser.get_group_type()
         group_id = parser.get_group_id()
         resource_id = parser.get_resource_id()
@@ -474,7 +498,7 @@ class DependencyResolver:
             if resource_id:
                 # Determine the resource collection name from the URL path
                 # URL format: /grouptype/groupid/resourcecollection/resourceid
-                url_parts = [p for p in urllib.parse.urlparse(resource_url).path.split('/') if p]
+                url_parts = parser.path_parts
                 resource_collection = url_parts[2] if len(url_parts) > 2 else None
                 
                 if not resource_collection:
@@ -1227,7 +1251,7 @@ class XRegistryLoader:
                 
                 if not is_full_document:
                     # This appears to be a single resource - wrap it
-                    parser = XRegistryUrlParser(resolved_uri)
+                    parser = XRegistryUrlParser(resolved_uri, self.model.groups)
                     entry_type = parser.get_entry_type()
                     
                     if entry_type in ["group_instance", "resource_collection", "resource", "version"]:
@@ -1482,7 +1506,7 @@ class XRegistryLoader:
                     
                     # Check if this is a reference to a resource within a group
                     # If so, we should also fetch the parent group instance
-                    parser = XRegistryUrlParser(full_ref_url)
+                    parser = XRegistryUrlParser(full_ref_url, self.model.groups)
                     entry_type = parser.get_entry_type()
                     
                     if entry_type in ["resource", "version"]:
@@ -1567,25 +1591,38 @@ class XRegistryLoader:
             
             if uri.startswith(('http://', 'https://')):
                 # Load from HTTP/HTTPS
-                return self._load_from_url(uri, headers)
+                result = self._load_from_url(uri, headers)
             elif uri.startswith('file://'):
                 # Load from file URI
                 file_path = uri[7:]  # Remove 'file://' prefix
-                return self._load_from_file(file_path)
+                result = self._load_from_file(file_path)
             else:
                 # Assume local file path
-                return self._load_from_file(uri)
+                result = self._load_from_file(uri)
+            self._record_schema_origins(result[1], result[0])
+            return result
                 
         except Exception as e:
             self.logger.error(f"Error loading from {uri}: {e}")
             return uri, None
+
+    def _record_schema_origins(self, node: JsonNode, origin: str) -> None:
+        if isinstance(node, dict):
+            reference = node.get("dataschemauri")
+            if isinstance(reference, str) and not isinstance(reference, SchemaReference):
+                node["dataschemauri"] = SchemaReference(reference, origin)
+            for value in node.values():
+                self._record_schema_origins(value, origin)
+        elif isinstance(node, list):
+            for value in node:
+                self._record_schema_origins(value, origin)
     
     def _load_from_url(self, url: str, headers: Dict[str, str]) -> Tuple[str, Optional[JsonNode]]:
         """Load document from HTTP/HTTPS URL."""
         try:
             # Use the ?inline flag to fetch nested collections automatically
             # This avoids the need to make multiple HTTP requests
-            parser = XRegistryUrlParser(url)
+            parser = XRegistryUrlParser(url, self.model.groups)
             entry_type = parser.get_entry_type()
             
             # Add ?inline parameter for group instances and resources to fetch their collections

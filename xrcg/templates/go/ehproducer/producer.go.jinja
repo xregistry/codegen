@@ -145,7 +145,10 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	{%- else %}
 	event.SetType(eventType)
 	{%- endif %}
-	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype"] %}
+	{%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
+	event.SetDataSchema({{ message.envelopemetadata.dataschema.value | tojson }})
+	{%- endif %}
+	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "dataschema"] %}
 	{%- if attribute.value %}
 	event.SetExtension("{{ attrname }}", "{{ attribute.value }}")
 	{%- elif attribute.required and not attribute.value %}
@@ -225,6 +228,9 @@ func eventDataFromCloudEvent(event cloudevents.Event, data any, mode ContentMode
 		}
 		if event.Subject() != "" {
 			properties["cloudEvents:subject"] = event.Subject()
+		}
+		if event.DataSchema() != "" {
+			properties["cloudEvents:dataschema"] = event.DataSchema()
 		}
 		if contentType != "" {
 			properties["cloudEvents:datacontenttype"] = contentType
