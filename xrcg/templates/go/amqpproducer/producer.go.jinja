@@ -32,17 +32,35 @@ type AmqpMessageSender interface {
 }
 
 {%- set messagegroups = root.messagegroups %}
+
+func copyDataschemaOverrides(overrides []map[string]string) map[string]string {
+    if len(overrides) > 1 {
+        panic("provide at most one dataschema override map")
+    }
+    result := map[string]string{}
+    if len(overrides) == 1 {
+        for key, value := range overrides[0] {
+            if key == "" || value == "" {
+                panic("dataschema overrides require nonempty URI strings")
+            }
+            result[key] = value
+        }
+    }
+    return result
+}
+
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set groupname = messagegroupid | pascal | strip_namespace %}
 {%- set class_name = groupname + "Producer" %}
 
 type {{ class_name }} struct {
+    dataschemaOverrides map[string]string
 	sender      AmqpMessageSender
 	defaultNode string
 	contentMode ContentMode
 }
 
-func New{{ class_name }}(addr, node string) (*{{ class_name }}, error) {
+func New{{ class_name }}(addr, node string, dataschemaOverrides ...map[string]string) (*{{ class_name }}, error) {
 	conn, err := amqp.Dial(context.Background(), addr, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial AMQP broker: %w", err)
@@ -60,11 +78,11 @@ func New{{ class_name }}(addr, node string) (*{{ class_name }}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create AMQP sender: %w", err)
 	}
-	return New{{ class_name }}WithSender(sender, node), nil
+	return New{{ class_name }}WithSender(sender, node, dataschemaOverrides...), nil
 }
 
-func New{{ class_name }}WithSender(sender AmqpMessageSender, defaultNode string) *{{ class_name }} {
-	return &{{ class_name }}{
+func New{{ class_name }}WithSender(sender AmqpMessageSender, defaultNode string, dataschemaOverrides ...map[string]string) *{{ class_name }} {
+	return &{{ class_name }}{dataschemaOverrides: copyDataschemaOverrides(dataschemaOverrides),
 		sender:      sender,
 		defaultNode: defaultNode,
 		contentMode: ContentModeStructured,
@@ -124,7 +142,11 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	{%- endif %}
 	event.SetDataContentType({{ content_type }})
 	{%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
-	event.SetDataSchema({{ message.envelopemetadata.dataschema.value | tojson }})
+	schemaURI := {{ message.envelopemetadata.dataschema.value | tojson }}
+    if override, ok := p.dataschemaOverrides[schemaURI]; ok {
+        schemaURI = override
+    }
+    event.SetDataSchema(schemaURI)
 	{%- endif %}
 	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "subject", "dataschema"] %}
 	{%- if attribute.value %}

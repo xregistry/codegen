@@ -25,6 +25,12 @@ import * as {{ data_module_name }} from '../../{{ data_project_name }}/dist/inde
  * Producer class to send messages in the `{{ messagegroupid }}` message group.
  */
 export class {{ class_name }} {
+    private readonly dataschemaOverrides: Readonly<Record<string, string>>;
+
+    private resolveDataschema(uri: string): string {
+        return Object.prototype.hasOwnProperty.call(this.dataschemaOverrides, uri)
+            ? this.dataschemaOverrides[uri] : uri;
+    }
     private client: ServiceBusClient;
     private sender: ServiceBusSender;
     private mode: 'binary' | 'structured';
@@ -37,7 +43,7 @@ export class {{ class_name }} {
      * @param mode CloudEvents binding mode: 'binary' or 'structured' (default: 'structured')
      * @param format CloudEvents format for structured mode (default: 'application/json')
      */
-    constructor(client: ServiceBusClient, queueName: string, mode?: 'binary' | 'structured', format?: string);
+    constructor(client: ServiceBusClient, queueName: string, mode?: 'binary' | 'structured', format?: string, dataschemaOverrides?: Readonly<Record<string, string>>);
     
     /**
      * Constructor for topic
@@ -47,22 +53,27 @@ export class {{ class_name }} {
      * @param mode CloudEvents binding mode: 'binary' or 'structured' (default: 'structured')
      * @param format CloudEvents format for structured mode (default: 'application/json')
      */
-    constructor(client: ServiceBusClient, topicOrQueueName: string, isQueue?: boolean, mode?: 'binary' | 'structured', format?: string);
+    constructor(client: ServiceBusClient, topicOrQueueName: string, isQueue?: boolean, mode?: 'binary' | 'structured', format?: string, dataschemaOverrides?: Readonly<Record<string, string>>);
     
     constructor(
         client: ServiceBusClient, 
         topicOrQueueName: string, 
         isQueueOrMode: boolean | 'binary' | 'structured' = true,
         modeOrFormat?: 'binary' | 'structured' | string,
-        formatParam?: string
+        formatParam?: string | Readonly<Record<string, string>>,
+        dataschemaOverrides: Readonly<Record<string, string>> = {}
     ) {
+        this.dataschemaOverrides = { ...(typeof formatParam === 'object' ? formatParam : dataschemaOverrides) };
+        if (Object.entries(this.dataschemaOverrides).some(([key, value]) => !key || typeof value !== 'string' || !value)) {
+            throw new Error('dataschemaOverrides must map nonempty URI strings to nonempty URI strings');
+        }
         this.client = client;
         this.sender = client.createSender(topicOrQueueName);
         
         // Handle overloaded constructor parameters
         if (typeof isQueueOrMode === 'boolean') {
             this.mode = (modeOrFormat as 'binary' | 'structured') || 'structured';
-            this.format = formatParam || 'application/json';
+            this.format = (typeof formatParam === 'string' ? formatParam : undefined) || 'application/json';
         } else {
             this.mode = isQueueOrMode;
             this.format = (modeOrFormat as string) || 'application/json';
@@ -174,7 +185,7 @@ export class {{ class_name }} {
         {%- elif attrname == "datacontenttype" %}
             {# handled separately #}
         {%- elif attrname == "dataschema" %}
-            {% if attribute.value %}dataschema: {{ attribute.value | tojson }},{% endif %}
+            {% if attribute.value %}dataschema: this.resolveDataschema({{ attribute.value | tojson }}),{% endif %}
         {%- elif attribute.value %}
             {{ attrname }}: {% if attribute.type == "uritemplate" %}`{{ attribute.value | regex_replace('\\{([A-Za-z0-9_]+)\\}', '${\\1}') }}`{% else %}'{{ attribute.value }}'{% endif %},
         {%- else %}
@@ -283,7 +294,7 @@ export class {{ class_name }} {
             {%- elif attrname == "datacontenttype" %}
                 {# handled separately #}
             {%- elif attrname == "dataschema" %}
-                {% if attribute.value %}dataschema: {{ attribute.value | tojson }},{% endif %}
+                {% if attribute.value %}dataschema: this.resolveDataschema({{ attribute.value | tojson }}),{% endif %}
             {%- elif attribute.value %}
                 {{ attrname }}: {% if attribute.type == "uritemplate" %}`{{ attribute.value | regex_replace('\\{([A-Za-z0-9_]+)\\}', '${\\1}') }}`{% else %}'{{ attribute.value }}'{% endif %},
             {%- else %}

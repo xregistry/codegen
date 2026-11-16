@@ -190,7 +190,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {{- uriargs -}}
         {%- endif -%}
         , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
-        {%- if is_cloudevent %}, CloudEventFormatter? formatter = null{% endif %})
+        {%- if is_cloudevent %}, CloudEventFormatter? formatter = null, System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null{% endif %})
         {
             {%- if "protocolmetadata" in message %}
             {%- if "key" in message.protocolmetadata and "value" in message.protocolmetadata.key %}
