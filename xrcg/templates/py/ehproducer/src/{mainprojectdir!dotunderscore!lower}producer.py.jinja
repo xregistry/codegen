@@ -36,7 +36,7 @@ from cloudevents.http import CloudEvent
 {%- set class_name = ( groupname | strip_dots )+"EventProducer" %}
 
 class {{ class_name }}:
-    def __init__(self, producer: EventHubProducerClient, content_mode:typing.Literal['structured','binary']= 'structured'):
+    def __init__(self, producer: EventHubProducerClient, content_mode:typing.Literal['structured','binary']= 'structured', dataschema_overrides: typing.Optional[typing.Mapping[str, str]] = None):
         """
         Initializes the EventHub producer
 
@@ -46,6 +46,10 @@ class {{ class_name }}:
         """
         self.producer = producer
         self.content_mode = content_mode
+        self._dataschema_overrides = dict(dataschema_overrides) if dataschema_overrides is not None else {}
+        if any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
+               for key, value in self._dataschema_overrides.items()):
+            raise ValueError("dataschema_overrides must map nonempty URI strings to nonempty URI strings")
 
     {% for messageid, message in messagegroup.messages.items() if (message | exists("envelope","CloudEvents/1.0")) -%}
     {%- set messagename = messageid | dotunderscore | snake %}
@@ -137,6 +141,8 @@ class {{ class_name }}:
         # section rather than a string section containing escaped JSON.
         if isinstance(byte_data, str):
             byte_data = byte_data.encode('utf-8')
+        if "dataschema" in attributes:
+            attributes["dataschema"] = self._dataschema_overrides.get(attributes["dataschema"], attributes["dataschema"])
         event = CloudEvent(attributes, byte_data)
         if self.content_mode == "structured":
             headers, body = to_structured(event)

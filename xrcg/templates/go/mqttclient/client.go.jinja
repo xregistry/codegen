@@ -137,6 +137,23 @@ func newCloudEventBase() cloudevents.Event {
 	return event
 }
 
+
+func copyDataschemaOverrides(overrides []map[string]string) map[string]string {
+    if len(overrides) > 1 {
+        panic("provide at most one dataschema override map")
+    }
+    result := map[string]string{}
+    if len(overrides) == 1 {
+        for key, value := range overrides[0] {
+            if key == "" || value == "" {
+                panic("dataschema overrides require nonempty URI strings")
+            }
+            result[key] = value
+        }
+    }
+    return result
+}
+
 {%- for messagegroupid, messagegroup in root.messagegroups.items() %}
 {%- set groupname = messagegroupid | pascal | strip_namespace %}
 {%- set class_name = groupname + "Client" %}
@@ -156,6 +173,7 @@ type {{ class_name }}Handler interface {
 }
 
 type {{ class_name }} struct {
+    dataschemaOverrides map[string]string
 	publisher      MqttPublisher
 	conn           MqttConnection
 	contentMode    ContentMode
@@ -166,7 +184,7 @@ type {{ class_name }} struct {
 	mu             sync.Mutex
 }
 
-func New{{ class_name }}(ctx context.Context, brokerURL string, clientID string, contentMode ContentMode) (*{{ class_name }}, error) {
+func New{{ class_name }}(ctx context.Context, brokerURL string, clientID string, contentMode ContentMode, dataschemaOverrides ...map[string]string) (*{{ class_name }}, error) {
 	u, err := url.Parse(brokerURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid MQTT broker URL: %w", err)
@@ -185,18 +203,18 @@ func New{{ class_name }}(ctx context.Context, brokerURL string, clientID string,
 	if err := cm.AwaitConnection(ctx); err != nil {
 		return nil, err
 	}
-	return new{{ class_name }}(cm, cm, contentMode), nil
+	return new{{ class_name }}(cm, cm, contentMode, dataschemaOverrides...), nil
 }
 
-func New{{ class_name }}WithPublisher(pub MqttPublisher) *{{ class_name }} {
-	return new{{ class_name }}(pub, nil, ContentModeStructured)
+func New{{ class_name }}WithPublisher(pub MqttPublisher, dataschemaOverrides ...map[string]string) *{{ class_name }} {
+	return new{{ class_name }}(pub, nil, ContentModeStructured, dataschemaOverrides...)
 }
 
-func new{{ class_name }}(pub MqttPublisher, conn MqttConnection, contentMode ContentMode) *{{ class_name }} {
+func new{{ class_name }}(pub MqttPublisher, conn MqttConnection, contentMode ContentMode, dataschemaOverrides ...map[string]string) *{{ class_name }} {
 	if contentMode == "" {
 		contentMode = ContentModeStructured
 	}
-	return &{{ class_name }}{
+	return &{{ class_name }}{dataschemaOverrides: copyDataschemaOverrides(dataschemaOverrides),
 		publisher:   pub,
 		conn:        conn,
 		contentMode: contentMode,
@@ -431,7 +449,11 @@ func (c *{{ class_name }}) Publish{{ messagename }}(ctx context.Context, data {{
 	{%- endif %}
 	event.SetDataContentType(contentType)
 	{%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
-	event.SetDataSchema({{ message.envelopemetadata.dataschema.value | tojson }})
+	schemaURI := {{ message.envelopemetadata.dataschema.value | tojson }}
+    if override, ok := c.dataschemaOverrides[schemaURI]; ok {
+        schemaURI = override
+    }
+    event.SetDataSchema(schemaURI)
 	{%- endif %}
 	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "subject", "dataschema"] %}
 		{%- if attribute.value %}

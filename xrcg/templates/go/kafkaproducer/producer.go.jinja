@@ -39,24 +39,42 @@ type KafkaMessageWriter interface {
 }
 
 {%- set messagegroups = root.messagegroups %}
+
+func copyDataschemaOverrides(overrides []map[string]string) map[string]string {
+    if len(overrides) > 1 {
+        panic("provide at most one dataschema override map")
+    }
+    result := map[string]string{}
+    if len(overrides) == 1 {
+        for key, value := range overrides[0] {
+            if key == "" || value == "" {
+                panic("dataschema overrides require nonempty URI strings")
+            }
+            result[key] = value
+        }
+    }
+    return result
+}
+
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set groupname = messagegroupid | pascal | strip_namespace %}
 {%- set class_name = groupname + "Producer" %}
 
 // {{ class_name }} is a Kafka producer for the {{ messagegroupid }} message group
 type {{ class_name }} struct {
+    dataschemaOverrides map[string]string
 	writer       KafkaMessageWriter
 	defaultTopic string
 	contentMode  ContentMode
 }
 
 // New{{ class_name }} creates a new {{ class_name }} instance with structured content mode (default)
-func New{{ class_name }}(bootstrapServers string) (*{{ class_name }}, error) {
-	return New{{ class_name }}WithContentMode(bootstrapServers, ContentModeStructured)
+func New{{ class_name }}(bootstrapServers string, dataschemaOverrides ...map[string]string) (*{{ class_name }}, error) {
+	return New{{ class_name }}WithContentMode(bootstrapServers, ContentModeStructured, dataschemaOverrides...)
 }
 
 // New{{ class_name }}WithContentMode creates a new {{ class_name }} instance with specified content mode
-func New{{ class_name }}WithContentMode(bootstrapServers string, contentMode ContentMode) (*{{ class_name }}, error) {
+func New{{ class_name }}WithContentMode(bootstrapServers string, contentMode ContentMode, dataschemaOverrides ...map[string]string) (*{{ class_name }}, error) {
 	// Parse bootstrap servers - segmentio/kafka-go expects a slice
 	servers := []string{bootstrapServers}
 	
@@ -68,7 +86,7 @@ func New{{ class_name }}WithContentMode(bootstrapServers string, contentMode Con
 	{%- set first_message = messagegroup.messages.values() | first %}
 	{%- set default_topic = kafka.get_topic(first_message) %}
 	
-	return &{{ class_name }}{
+	return &{{ class_name }}{dataschemaOverrides: copyDataschemaOverrides(dataschemaOverrides),
 		writer:      writer,
 		{%- if default_topic %}
 		defaultTopic: "{{ default_topic }}",
@@ -78,8 +96,8 @@ func New{{ class_name }}WithContentMode(bootstrapServers string, contentMode Con
 }
 
 // New{{ class_name }}WithWriter creates a new {{ class_name }} with an existing Kafka writer
-func New{{ class_name }}WithWriter(writer KafkaMessageWriter, defaultTopic string) *{{ class_name }} {
-	return &{{ class_name }}{
+func New{{ class_name }}WithWriter(writer KafkaMessageWriter, defaultTopic string, dataschemaOverrides ...map[string]string) *{{ class_name }} {
+	return &{{ class_name }}{dataschemaOverrides: copyDataschemaOverrides(dataschemaOverrides),
 		writer:       writer,
 		defaultTopic: defaultTopic,
 		contentMode:  ContentModeStructured, // Default to structured mode
@@ -173,7 +191,11 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	event.SetType(eventType)
 	{%- endif %}
 	{%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
-	event.SetDataSchema({{ message.envelopemetadata.dataschema.value | tojson }})
+	schemaURI := {{ message.envelopemetadata.dataschema.value | tojson }}
+    if override, ok := p.dataschemaOverrides[schemaURI]; ok {
+        schemaURI = override
+    }
+    event.SetDataSchema(schemaURI)
 	{%- endif %}
 	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "dataschema"] %}
 	{%- if attribute.value %}

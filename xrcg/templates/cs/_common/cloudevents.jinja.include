@@ -64,7 +64,9 @@ CloudEvent {{ variable }} = new CloudEvent()
     DataContentType = contentType,
 {%- endif -%}
 {%- if attrname == "dataschema" and attribute.value %}
-    DataSchema = new Uri({{ attribute.value | tojson }}, UriKind.RelativeOrAbsolute),
+    DataSchema = new Uri(
+        dataschemaOverrides != null && dataschemaOverrides.TryGetValue({{ attribute.value | tojson }}, out var mappedDataschema)
+            ? mappedDataschema : {{ attribute.value | tojson }}, UriKind.RelativeOrAbsolute),
 {%- endif -%}
 {%- if attrname in ["subject", "type"] %}
     {%- set attrProp = attrname | pascal %}

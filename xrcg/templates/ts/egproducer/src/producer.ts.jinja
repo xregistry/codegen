@@ -23,6 +23,12 @@ import * as {{ data_module_name }} from '../../{{ data_project_name }}/dist/inde
  * Azure Event Grid producer for the `{{ messagegroupid }}` message group.
  */
 export class {{ class_name }} {
+    private readonly dataschemaOverrides: Readonly<Record<string, string>>;
+
+    private resolveDataschema(uri: string): string {
+        return Object.prototype.hasOwnProperty.call(this.dataschemaOverrides, uri)
+            ? this.dataschemaOverrides[uri] : uri;
+    }
     private client: EventGridPublisherClient<"CloudEvent">;
     
     /**
@@ -30,15 +36,19 @@ export class {{ class_name }} {
      * @param endpoint The Event Grid topic endpoint URL
      * @param accessKey The access key for authentication
      */
-    constructor(endpoint: string, accessKey: string);
+    constructor(endpoint: string, accessKey: string, dataschemaOverrides?: Readonly<Record<string, string>>);
     
     /**
      * Constructor using Azure AD authentication
      * @param endpoint The Event Grid topic endpoint URL
      */
-    constructor(endpoint: string);
+    constructor(endpoint: string, accessKey?: undefined, dataschemaOverrides?: Readonly<Record<string, string>>);
     
-    constructor(endpoint: string, accessKey?: string) {
+    constructor(endpoint: string, accessKey?: string, dataschemaOverrides: Readonly<Record<string, string>> = {}) {
+        this.dataschemaOverrides = { ...dataschemaOverrides };
+        if (Object.entries(this.dataschemaOverrides).some(([key, value]) => !key || typeof value !== 'string' || !value)) {
+            throw new Error('dataschemaOverrides must map nonempty URI strings to nonempty URI strings');
+        }
         if (accessKey) {
             this.client = new EventGridPublisherClient(
                 endpoint,
@@ -118,7 +128,7 @@ export class {{ class_name }} {
         {%- elif attrname == "datacontenttype" %}
             {# handled separately #}
         {%- elif attrname == "dataschema" %}
-            {% if attribute.value %}dataschema: {{ attribute.value | tojson }},{% endif %}
+            {% if attribute.value %}dataschema: this.resolveDataschema({{ attribute.value | tojson }}),{% endif %}
         {%- elif attribute.value %}
             {{ attrname }}: {% if attribute.type == "uritemplate" %}`{{ attribute.value | regex_replace('\\{([A-Za-z0-9_]+)\\}', '${\\1}') }}`{% else %}'{{ attribute.value }}'{% endif %},
         {%- else %}
@@ -173,7 +183,7 @@ export class {{ class_name }} {
         {%- elif attrname == "datacontenttype" %}
             {# handled separately #}
         {%- elif attrname == "dataschema" %}
-            {% if attribute.value %}dataschema: {{ attribute.value | tojson }},{% endif %}
+            {% if attribute.value %}dataschema: this.resolveDataschema({{ attribute.value | tojson }}),{% endif %}
         {%- elif attribute.value %}
             {{ attrname }}: {% if attribute.type == "uritemplate" %}`{{ attribute.value | regex_replace('\\{([A-Za-z0-9_]+)\\}', '${\\1}') }}`{% else %}'{{ attribute.value }}'{% endif %},
         {%- else %}

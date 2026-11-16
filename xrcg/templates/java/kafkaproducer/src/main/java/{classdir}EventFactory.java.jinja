@@ -47,6 +47,27 @@ enum ContentMode {
  * Factory class to create Kafka ProducerRecords for the {{ messagegroupid }} message group.
  */
 public class {{ class_name }} {
+
+    @SafeVarargs
+    private static java.util.Map<String, String> copyDataschemaOverrides(java.util.Map<String, String>... overrides) {
+        if (overrides.length > 1) {
+            throw new IllegalArgumentException("provide at most one dataschema override map");
+        }
+        java.util.Map<String, String> result = overrides.length == 0
+            ? java.util.Collections.emptyMap() : java.util.Map.copyOf(overrides[0]);
+        result.forEach((key, value) -> {
+            if (key.isEmpty() || value.isEmpty()) {
+                throw new IllegalArgumentException("dataschema overrides require nonempty URI strings");
+            }
+        });
+        return result;
+    }
+
+    @SafeVarargs
+    private static String resolveDataschema(String uri, java.util.Map<String, String>... overrides) {
+        return copyDataschemaOverrides(overrides).getOrDefault(uri, uri);
+    }
+
     private static final Logger log = LogManager.getLogger({{ class_name }}.class);
     {%- if cloudEvents.usesCloudEvents(root) %}
     private static final String CE_PREFIX = "ce_";
@@ -77,7 +98,7 @@ public class {{ class_name }} {
             {{ message_body_type }} data,
             String key{% if isCloudEvent %},
             ContentMode contentMode,
-            String format{% endif %}) throws Exception {
+            String format{% endif %}, java.util.Map<String, String>... dataschemaOverrides) throws Exception {
         
         byte[] keyBytes = key != null ? key.getBytes(StandardCharsets.UTF_8) : null;
         Headers headers = new RecordHeaders();
@@ -110,7 +131,7 @@ public class {{ class_name }} {
             {%- endif %}
             .withDataContentType(dataContentType)
             {%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
-            .withDataSchema(URI.create({{ message.envelopemetadata.dataschema.value | tojson }}))
+            .withDataSchema(URI.create(resolveDataschema({{ message.envelopemetadata.dataschema.value | tojson }}, dataschemaOverrides)))
             {%- endif %}
             .withData(serializedData)
             .build();

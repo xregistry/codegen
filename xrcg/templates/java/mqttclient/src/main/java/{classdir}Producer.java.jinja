@@ -52,6 +52,29 @@ import {{ message_body_type.rsplit('.', 1)[0] }}.*;
  * MQTT 5.0 Producer for {{ messagegroupid }} message group.
  */
 public class {{ producer_class }} implements AutoCloseable {
+
+    @SafeVarargs
+    private static java.util.Map<String, String> copyDataschemaOverrides(java.util.Map<String, String>... overrides) {
+        if (overrides.length > 1) {
+            throw new IllegalArgumentException("provide at most one dataschema override map");
+        }
+        java.util.Map<String, String> result = overrides.length == 0
+            ? java.util.Collections.emptyMap() : java.util.Map.copyOf(overrides[0]);
+        result.forEach((key, value) -> {
+            if (key.isEmpty() || value.isEmpty()) {
+                throw new IllegalArgumentException("dataschema overrides require nonempty URI strings");
+            }
+        });
+        return result;
+    }
+
+    @SafeVarargs
+    private static String resolveDataschema(String uri, java.util.Map<String, String>... overrides) {
+        return copyDataschemaOverrides(overrides).getOrDefault(uri, uri);
+    }
+
+    private final java.util.Map<String, String> dataschemaOverrides;
+
     private static final Logger logger = LogManager.getLogger({{ producer_class }}.class);
 
     private final MqttClient mqttClient;
@@ -61,8 +84,9 @@ public class {{ producer_class }} implements AutoCloseable {
      *
      * @param mqttClient The MQTT client to use for publishing
      */
-    public {{ producer_class }}(MqttClient mqttClient) {
+    public {{ producer_class }}(MqttClient mqttClient, java.util.Map<String, String>... dataschemaOverrides) {
         this.mqttClient = mqttClient;
+        this.dataschemaOverrides = copyDataschemaOverrides(dataschemaOverrides);
     }
 
     {%- for messageid, message in messagegroup.messages.items() %}

@@ -213,7 +213,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {{- uriargs -}}
         {%- endif -%}
         , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
-        {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %})
+        {%- if isCloudEvent %}, CloudEventFormatter? formatter = null, System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null{% endif %})
         {
             {% if type_name != "byte[]" %}
             Serialize<{{ type_name }}>? bodySerializer = ({{ type_name }} data, string contentType) => {

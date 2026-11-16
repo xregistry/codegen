@@ -67,28 +67,46 @@ func (s *eventHubSender) Close(ctx context.Context) error {
 }
 
 {%- set messagegroups = root.messagegroups %}
+
+func copyDataschemaOverrides(overrides []map[string]string) map[string]string {
+    if len(overrides) > 1 {
+        panic("provide at most one dataschema override map")
+    }
+    result := map[string]string{}
+    if len(overrides) == 1 {
+        for key, value := range overrides[0] {
+            if key == "" || value == "" {
+                panic("dataschema overrides require nonempty URI strings")
+            }
+            result[key] = value
+        }
+    }
+    return result
+}
+
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
 {%- set groupname = messagegroupid | pascal | strip_namespace %}
 {%- set class_name = groupname + "Producer" %}
 
 // {{ class_name }} is an Azure Event Hubs producer for the {{ messagegroupid }} message group.
 type {{ class_name }} struct {
+    dataschemaOverrides map[string]string
 	sender      EventSender
 	contentMode ContentMode
 }
 
 // New{{ class_name }} creates a producer backed by the Azure Event Hubs SDK.
-func New{{ class_name }}(connectionString, eventHubName string) (*{{ class_name }}, error) {
+func New{{ class_name }}(connectionString, eventHubName string, dataschemaOverrides ...map[string]string) (*{{ class_name }}, error) {
 	sender, err := newEventHubSender(connectionString, eventHubName)
 	if err != nil {
 		return nil, err
 	}
-	return New{{ class_name }}WithSender(sender), nil
+	return New{{ class_name }}WithSender(sender, dataschemaOverrides...), nil
 }
 
 // New{{ class_name }}WithSender creates a producer with a caller-provided sender.
-func New{{ class_name }}WithSender(sender EventSender) *{{ class_name }} {
-	return &{{ class_name }}{
+func New{{ class_name }}WithSender(sender EventSender, dataschemaOverrides ...map[string]string) *{{ class_name }} {
+	return &{{ class_name }}{dataschemaOverrides: copyDataschemaOverrides(dataschemaOverrides),
 		sender:      sender,
 		contentMode: ContentModeStructured,
 	}
@@ -146,7 +164,11 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	event.SetType(eventType)
 	{%- endif %}
 	{%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
-	event.SetDataSchema({{ message.envelopemetadata.dataschema.value | tojson }})
+	schemaURI := {{ message.envelopemetadata.dataschema.value | tojson }}
+    if override, ok := p.dataschemaOverrides[schemaURI]; ok {
+        schemaURI = override
+    }
+    event.SetDataSchema(schemaURI)
 	{%- endif %}
 	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "dataschema"] %}
 	{%- if attribute.value %}

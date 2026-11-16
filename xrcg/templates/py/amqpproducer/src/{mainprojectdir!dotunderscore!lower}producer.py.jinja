@@ -484,6 +484,7 @@ class {{ class_name }}:
                  sas_token_ttl_seconds: int = 3600,
                  use_tls: bool = True,
                  {%- endif %}
+                 dataschema_overrides: typing.Optional[typing.Mapping[str, str]] = None,
                  ):
         """
         Initialize the AMQP producer
@@ -524,6 +525,10 @@ class {{ class_name }}:
         self.username = username
         self.password = password
         self.content_mode = content_mode
+        self._dataschema_overrides = dict(dataschema_overrides) if dataschema_overrides is not None else {}
+        if any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
+               for key, value in self._dataschema_overrides.items()):
+            raise ValueError("dataschema_overrides must map nonempty URI strings to nonempty URI strings")
         self.format_type = format_type
         {%- if _azure_cbs_target %}
         self._credential = credential
@@ -870,6 +875,8 @@ class {{ class_name }}:
         byte_data = self._serialize_payload(data, content_type)
         
         # Create CloudEvent
+        if "dataschema" in attributes:
+            attributes["dataschema"] = self._dataschema_overrides.get(attributes["dataschema"], attributes["dataschema"])
         cloud_event = CloudEvent(attributes, byte_data)
         
         # Convert to AMQP message based on content mode
