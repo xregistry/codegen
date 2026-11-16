@@ -567,6 +567,18 @@ def test_versioned_dataschema_resolution(origin, reference, expected):
     assert message["envelopemetadata"]["dataschema"]["value"] == expected
 
 
+def test_versioned_dataschema_does_not_add_envelope_to_plain_message():
+    document = _versioned_schema_document()
+    message = document["messagegroups"]["Example"]["messages"]["Reading"]
+    message.pop("envelope")
+    message.pop("envelopemetadata")
+    message["protocol"] = "AMQP/1.0"
+    ctx = GeneratorContext()
+    ctx.base_uri = "catalog.json"
+    SchemaUtils.project_schema_references(ctx, document)
+    assert "envelopemetadata" not in message
+
+
 def test_versioned_dataschema_override_and_unresolved_reference():
     document = _versioned_schema_document()
     message = document["messagegroups"]["Example"]["messages"]["Reading"]

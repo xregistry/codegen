@@ -75,7 +75,7 @@ class SchemaUtils:
             except Exception as exc:
                 raise RuntimeError(
                     f"Cannot resolve dataschema for message {path}: {reference}: {exc}") from exc
-            if str(message.get("envelope", "CloudEvents/1.0")).lower().startswith("cloudevents"):
+            if str(message.get("envelope", "")).lower().startswith("cloudevents"):
                 metadata = dict(message.get("envelopemetadata") or {})
                 metadata.setdefault("dataschema", {"type": "uri", "value": uri})
                 message["envelopemetadata"] = metadata
