@@ -128,7 +128,7 @@ None
 {%- macro DeclareCloudNativeCloudEvent(variable, message) -%}
 cloud_event = {
     "datacontenttype": content_type,
-    "dataschema": "{{message.dataschemauri.lstrip('#/')}}" if "{{message.dataschemauri}}" else None,
+    "dataschema": {{ message.envelopemetadata.dataschema.value | tojson if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value else "None" }},
     "subject": "{{message.envelopemetadata['subject'].value}}" if "{{message.envelopemetadata['subject'].value}}" else subject,
     "type": "{{message.envelopemetadata['type'].value}}" if "{{message.envelopemetadata['type'].value}}" else type,
     "source": "{{message.envelopemetadata['source'].value}}" if "{{message.envelopemetadata['source'].value}}" else source,

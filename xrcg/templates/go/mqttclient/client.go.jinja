@@ -100,6 +100,8 @@ func cloudEventFromBinaryPublish(pub *paho.Publish) (cloudevents.Event, error) {
 				event.SetSource(user.Value)
 			case "subject":
 				event.SetSubject(user.Value)
+			case "dataschema":
+				event.SetDataSchema(user.Value)
 			case "id":
 				event.SetID(user.Value)
 			case "time":
@@ -428,7 +430,10 @@ func (c *{{ class_name }}) Publish{{ messagename }}(ctx context.Context, data {{
 	event.SetSubject("{{ message.envelopemetadata.subject.value }}")
 	{%- endif %}
 	event.SetDataContentType(contentType)
-	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "subject"] %}
+	{%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
+	event.SetDataSchema({{ message.envelopemetadata.dataschema.value | tojson }})
+	{%- endif %}
+	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "subject", "dataschema"] %}
 		{%- if attribute.value %}
 	event.SetExtension("{{ attrname }}", "{{ attribute.value }}")
 		{%- else %}
@@ -457,6 +462,9 @@ func (c *{{ class_name }}) Publish{{ messagename }}(ctx context.Context, data {{
 		addUserProperty(props, "subject", event.Subject())
 		addUserProperty(props, "id", event.ID())
 		addUserProperty(props, "time", event.Time().Format(time.RFC3339Nano))
+		if event.DataSchema() != "" {
+			addUserProperty(props, "dataschema", event.DataSchema())
+		}
 		for name, value := range event.Extensions() {
 			addUserProperty(props, name, fmt.Sprint(value))
 		}

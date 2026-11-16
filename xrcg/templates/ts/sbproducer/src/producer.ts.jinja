@@ -174,7 +174,7 @@ export class {{ class_name }} {
         {%- elif attrname == "datacontenttype" %}
             {# handled separately #}
         {%- elif attrname == "dataschema" %}
-            {# handled separately if needed #}
+            {% if attribute.value %}dataschema: {{ attribute.value | tojson }},{% endif %}
         {%- elif attribute.value %}
             {{ attrname }}: {% if attribute.type == "uritemplate" %}`{{ attribute.value | regex_replace('\\{([A-Za-z0-9_]+)\\}', '${\\1}') }}`{% else %}'{{ attribute.value }}'{% endif %},
         {%- else %}
@@ -283,7 +283,7 @@ export class {{ class_name }} {
             {%- elif attrname == "datacontenttype" %}
                 {# handled separately #}
             {%- elif attrname == "dataschema" %}
-                {# handled separately if needed #}
+                {% if attribute.value %}dataschema: {{ attribute.value | tojson }},{% endif %}
             {%- elif attribute.value %}
                 {{ attrname }}: {% if attribute.type == "uritemplate" %}`{{ attribute.value | regex_replace('\\{([A-Za-z0-9_]+)\\}', '${\\1}') }}`{% else %}'{{ attribute.value }}'{% endif %},
             {%- else %}
@@ -309,6 +309,7 @@ export class {{ class_name }} {
                 };
                 if (cloudEvent.subject) applicationProperties['cloudEvents:subject'] = cloudEvent.subject;
                 if (cloudEvent.time) applicationProperties['cloudEvents:time'] = cloudEvent.time;
+                if (cloudEvent.dataschema) applicationProperties['cloudEvents:dataschema'] = cloudEvent.dataschema;
                 {%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["id", "type", "source", "subject", "time", "specversion", "datacontenttype", "dataschema", "data"] %}
                 if ((cloudEvent as any).{{ attrname }}) applicationProperties['cloudEvents:{{ attrname }}'] = (cloudEvent as any).{{ attrname }};
                 {%- endfor %}

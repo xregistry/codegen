@@ -1295,6 +1295,70 @@ def test_python_producer_inherited_avro_content_type(style):
                     assert stream.tell() == len(payload)
 
 
+def test_amqpproducer_versioned_dataschema_on_wire():
+    import glob
+    import py_compile
+    from unittest.mock import Mock
+    from proton import Message
+
+    document = _build_kafka_time_document()
+    message = document["messagegroups"]["Example.Kafka"]["messages"]["Example.Event"]
+    schema = message.pop("dataschema")
+    message["envelopemetadata"].pop("time")
+    message["dataschemauri"] = "#/schemagroups/Example/schemas/Event"
+    document["schemagroups"] = {
+        "Example": {"schemas": {"Event": {
+            "defaultversionid": "stable",
+            "versions": {
+                "stable": {"versionid": "stable", "format": "JsonSchema/draft-07", "schema": schema},
+                "zzz": {"versionid": "zzz", "format": "JsonSchema/draft-07", "schema": schema},
+            },
+        }}},
+    }
+    document["messagegroups"]["Derived"] = {"messages": {"Example.Event": {
+        "basemessageuri": "#/messagegroups/Example.Kafka/messages/Example.Event",
+    }}}
+    document["messagegroups"]["Override"] = {"messages": {"Example.Event": {
+        "basemessageuri": "#/messagegroups/Example.Kafka/messages/Example.Event",
+        "envelopemetadata": {"dataschema": {
+            "type": "uri", "value": "https://registered.example/avro/versions/17"}},
+    }}}
+    document["messagegroups"]["Pinned"] = {"messages": {"Example.Event": {
+        "basemessageuri": "#/messagegroups/Example.Kafka/messages/Example.Event",
+        "dataschemauri": "#/schemagroups/Example/schemas/Event/versions/zzz",
+    }}}
+    directory, producer_file = _generate_python_entrypoint_from_document(
+        document, "amqpproducer", "*producer.py")
+    for path in glob.glob(os.path.join(directory, "**", "*.py"), recursive=True):
+        py_compile.compile(path, doraise=True)
+    module = _load_generated_python_module_from_path(
+        producer_file, extra_paths=glob.glob(os.path.join(directory, "**", "src"), recursive=True))
+    classes = [
+        value for value in vars(module).values()
+        if isinstance(value, type) and hasattr(value, "send_event")
+    ]
+    assert len(classes) == 4
+    for producer_class in classes:
+        expected = ("https://registered.example/avro/versions/17"
+                    if producer_class.__name__.startswith("Override") else
+                    "xreg://./schemagroups/Example/schemas/Event/versions/zzz"
+                    if producer_class.__name__.startswith("Pinned") else
+                    "xreg://./schemagroups/Example/schemas/Event/versions/stable")
+        for mode in ("binary", "structured"):
+            producer = producer_class.__new__(producer_class)
+            producer.content_mode = mode
+            producer.format_type = "application/cloudevents+json"
+            producer._send_via_blocking_sender = Mock()
+            producer.send_event(data={"value": "hello"})
+            sent = producer._send_via_blocking_sender.call_args.args[0]
+            received = Message()
+            received.decode(sent.encode())
+            if mode == "binary":
+                assert received.properties["cloudEvents:dataschema"] == expected
+            else:
+                assert json.loads(bytes(received.body))["dataschema"] == expected
+
+
 def test_kafkaproducer_exposes_resilient_flush_helper():
     """Regression for #430: the generated Kafka producer must expose a
     ``flush(timeout, retries, backoff_factor)`` helper that retries with

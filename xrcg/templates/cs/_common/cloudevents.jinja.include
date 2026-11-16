@@ -63,8 +63,8 @@ CloudEvent {{ variable }} = new CloudEvent()
 {%- if attrname in ["datacontenttype"] %}
     DataContentType = contentType,
 {%- endif -%}
-{%- if attrname in ["dataschema"] and message.dataschemauri %}
-    DataSchema = new Uri("xreg:{{message.dataschemauri.lstrip('#/')}}", UriKind.RelativeOrAbsolute),
+{%- if attrname == "dataschema" and attribute.value %}
+    DataSchema = new Uri({{ attribute.value | tojson }}, UriKind.RelativeOrAbsolute),
 {%- endif -%}
 {%- if attrname in ["subject", "type"] %}
     {%- set attrProp = attrname | pascal %}

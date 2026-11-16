@@ -126,6 +126,8 @@ class TemplateRenderer:
             raise RuntimeError(
                 f"Definitions file not found or invalid {self.xreg_file_arg}")
 
+        SchemaUtils.project_schema_references(self.ctx, xregistry_document, self.headers)
+
         pt = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
         code_template_dir = os.path.join(
             pt, "templates", self.language, self.style)
@@ -1130,11 +1132,7 @@ class TemplateRenderer:
         
         # Handle schema definitions with versions
         if "versions" in schema_dict and isinstance(schema_dict["versions"], dict):
-            latest_version_id = schema_dict.get("defaultversionid")
-            if not latest_version_id or latest_version_id not in schema_dict["versions"]:
-                latest_version_id = max(schema_dict["versions"].keys())
-            
-            schema_version = schema_dict["versions"][latest_version_id]
+            _, schema_version = SchemaUtils.select_schema_version(schema_dict)
             if isinstance(schema_version, dict):
                 return self._extract_from_schema_version(schema_ref, schema_version, schema_dict)
 

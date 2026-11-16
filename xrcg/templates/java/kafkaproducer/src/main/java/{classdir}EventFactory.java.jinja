@@ -109,6 +109,9 @@ public class {{ class_name }} {
             .withSource(URI.create("urn:{{ messagegroupid }}"))
             {%- endif %}
             .withDataContentType(dataContentType)
+            {%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
+            .withDataSchema(URI.create({{ message.envelopemetadata.dataschema.value | tojson }}))
+            {%- endif %}
             .withData(serializedData)
             .build();
         

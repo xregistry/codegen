@@ -111,7 +111,10 @@ func (p *{{ class_name }}) Send{{ messagename }}(ctx context.Context, data {{ me
 	{%- endif %}
 	contentType := {{ cloudEvents.DefaultContentType(message) }}
 	event.SetDataContentType(contentType)
-	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype"] and attribute.value %}
+	{%- if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
+	event.SetDataSchema({{ message.envelopemetadata.dataschema.value | tojson }})
+	{%- endif %}
+	{%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["source", "type", "id", "time", "specversion", "datacontenttype", "dataschema"] and attribute.value %}
 	event.SetExtension("{{ attrname }}", "{{ attribute.value }}")
 	{%- endfor %}
 
@@ -191,6 +194,9 @@ func (p *{{ class_name }}) serviceBusMessageFromCloudEvent(event cloudevents.Eve
 		}
 		if event.Subject() != "" {
 			props["cloudEvents:subject"] = event.Subject()
+		}
+		if event.DataSchema() != "" {
+			props["cloudEvents:dataschema"] = event.DataSchema()
 		}
 		for name, val := range event.Extensions() {
 			props["cloudEvents:"+name] = fmt.Sprint(val)

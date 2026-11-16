@@ -155,6 +155,9 @@ func Test{{ class_name }}_IntegrationArtemisRoundTrip(t *testing.T) {
 				var envelope map[string]any
 				require.NoError(t, json.Unmarshal(msg.GetData(), &envelope))
 				assert.Equal(t, "1.0", envelope["specversion"])
+				{%- if first_message.envelopemetadata.dataschema and first_message.envelopemetadata.dataschema.value %}
+				assert.Equal(t, {{ first_message.envelopemetadata.dataschema.value | tojson }}, envelope["dataschema"])
+				{%- endif %}
 				assert.Equal(t, "{{ first_message.envelopemetadata.type.value if "type" in first_message.envelopemetadata and first_message.envelopemetadata.type.value else first_message_id }}", envelope["type"])
 			} else {
 				require.NotNil(t, msg.ApplicationProperties)
@@ -213,6 +216,9 @@ func Test{{ class_name }}_BinaryCloudEventMessage(t *testing.T) {
 	msg := sender.messages[0]
 	assert.Equal(t, "{{ first_message.envelopemetadata.type.value if "type" in first_message.envelopemetadata and first_message.envelopemetadata.type.value else first_message_id }}", msg.ApplicationProperties["cloudEvents:type"])
 	assert.Equal(t, "1.0", msg.ApplicationProperties["cloudEvents:specversion"])
+	{%- if first_message.envelopemetadata.dataschema and first_message.envelopemetadata.dataschema.value %}
+	assert.Equal(t, {{ first_message.envelopemetadata.dataschema.value | tojson }}, msg.ApplicationProperties["cloudEvents:dataschema"])
+	{%- endif %}
 	require.NotEmpty(t, msg.GetData())
 	assert.Equal(t, {{ content_type }}, msg.ApplicationProperties["cloudEvents:datacontenttype"])
 	{%- else %}
