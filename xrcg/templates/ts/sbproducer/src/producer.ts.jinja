@@ -25,6 +25,12 @@ import * as {{ data_module_name }} from '../../{{ data_project_name }}/dist/inde
  * Producer class to send messages in the `{{ messagegroupid }}` message group.
  */
 export class {{ class_name }} {
+    private readonly dataschemaOverrides: Readonly<Record<string, string>>;
+
+    private resolveDataschema(uri: string): string {
+        return Object.prototype.hasOwnProperty.call(this.dataschemaOverrides, uri)
+            ? this.dataschemaOverrides[uri] : uri;
+    }
     private client: ServiceBusClient;
     private sender: ServiceBusSender;
     private mode: 'binary' | 'structured';
@@ -37,7 +43,7 @@ export class {{ class_name }} {
      * @param mode CloudEvents binding mode: 'binary' or 'structured' (default: 'structured')
      * @param format CloudEvents format for structured mode (default: 'application/json')
      */
-    constructor(client: ServiceBusClient, queueName: string, mode?: 'binary' | 'structured', format?: string);
+    constructor(client: ServiceBusClient, queueName: string, mode?: 'binary' | 'structured', format?: string, dataschemaOverrides?: Readonly<Record<string, string>>);
     
     /**
      * Constructor for topic
@@ -47,22 +53,27 @@ export class {{ class_name }} {
      * @param mode CloudEvents binding mode: 'binary' or 'structured' (default: 'structured')
      * @param format CloudEvents format for structured mode (default: 'application/json')
      */
-    constructor(client: ServiceBusClient, topicOrQueueName: string, isQueue?: boolean, mode?: 'binary' | 'structured', format?: string);
+    constructor(client: ServiceBusClient, topicOrQueueName: string, isQueue?: boolean, mode?: 'binary' | 'structured', format?: string, dataschemaOverrides?: Readonly<Record<string, string>>);
     
     constructor(
         client: ServiceBusClient, 
         topicOrQueueName: string, 
         isQueueOrMode: boolean | 'binary' | 'structured' = true,
         modeOrFormat?: 'binary' | 'structured' | string,
-        formatParam?: string
+        formatParam?: string | Readonly<Record<string, string>>,
+        dataschemaOverrides: Readonly<Record<string, string>> = {}
     ) {
+        this.dataschemaOverrides = { ...(typeof formatParam === 'object' ? formatParam : dataschemaOverrides) };
+        if (Object.entries(this.dataschemaOverrides).some(([key, value]) => !key || typeof value !== 'string' || !value)) {
+            throw new Error('dataschemaOverrides must map nonempty URI strings to nonempty URI strings');
+        }
         this.client = client;
         this.sender = client.createSender(topicOrQueueName);
         
         // Handle overloaded constructor parameters
         if (typeof isQueueOrMode === 'boolean') {
             this.mode = (modeOrFormat as 'binary' | 'structured') || 'structured';
-            this.format = formatParam || 'application/json';
+            this.format = (typeof formatParam === 'string' ? formatParam : undefined) || 'application/json';
         } else {
             this.mode = isQueueOrMode;
             this.format = (modeOrFormat as string) || 'application/json';
@@ -123,8 +134,9 @@ export class {{ class_name }} {
      {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
      * @param {{ attrname }} CloudEvent required attribute '{{ attrname }}'
      {%- endfor %}
+     {%- set _emitted_uri_params = [] -%}
      {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
      * @param {{ placeholder }} Value for placeholder {{ placeholder }} in attribute {{ attrname }}
      {%- endfor %}
      {%- endfor %}
@@ -141,8 +153,9 @@ export class {{ class_name }} {
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         {{ attrname }}: string,
         {%- endfor %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         {{ placeholder }}: string,
         {%- endfor %}
         {%- endfor %}
@@ -150,8 +163,9 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
+        const serializedData = {{ cloudEvents.SerializeData("data", "contentType") | indent(8) }};
         {%- if isCloudEvent %}
         const cloudEvent = new CloudEvent({
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
@@ -171,7 +185,7 @@ export class {{ class_name }} {
         {%- elif attrname == "datacontenttype" %}
             {# handled separately #}
         {%- elif attrname == "dataschema" %}
-            {# handled separately if needed #}
+            {% if attribute.value %}dataschema: this.resolveDataschema({{ attribute.value | tojson }}),{% endif %}
         {%- elif attribute.value %}
             {{ attrname }}: {% if attribute.type == "uritemplate" %}`{{ attribute.value | regex_replace('\\{([A-Za-z0-9_]+)\\}', '${\\1}') }}`{% else %}'{{ attribute.value }}'{% endif %},
         {%- else %}
@@ -179,7 +193,7 @@ export class {{ class_name }} {
         {%- endif %}
         {%- endfor %}
             id: uuidv4(),
-            data: data,
+            data: serializedData,
             datacontenttype: contentType
         });
         
@@ -192,27 +206,27 @@ export class {{ class_name }} {
         } else {
             // Binary content mode
             message = {
-                body: data,
+                body: serializedData,
                 contentType: contentType,
                 applicationProperties: {
-                    'ce_specversion': '1.0',
-                    'ce_id': cloudEvent.id,
-                    'ce_type': cloudEvent.type,
-                    'ce_source': cloudEvent.source
+                    'cloudEvents:specversion': '1.0',
+                    'cloudEvents:id': cloudEvent.id,
+                    'cloudEvents:type': cloudEvent.type,
+                    'cloudEvents:source': cloudEvent.source
                 }
             };
             
             {%- for attrname, attribute in message.envelopemetadata.items() %}
             {%- if attrname not in ["id", "type", "source", "specversion", "datacontenttype", "data"] %}
             if (cloudEvent.{{ attrname }}) {
-                message.applicationProperties!['ce_{{ attrname }}'] = String(cloudEvent.{{ attrname }});
+                message.applicationProperties!['cloudEvents:{{ attrname }}'] = String(cloudEvent.{{ attrname }});
             }
             {%- endif %}
             {%- endfor %}
         }
         {%- else %}
         const message: ServiceBusMessage = {
-            body: data,
+            body: serializedData,
             subject: '{{ messageid }}',
             contentType: contentType
         };
@@ -228,8 +242,9 @@ export class {{ class_name }} {
      {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
      * @param {{ attrname }} CloudEvent required attribute '{{ attrname }}'
      {%- endfor %}
+     {%- set _emitted_uri_params = [] -%}
      {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+     {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
      * @param {{ placeholder }} Value for placeholder {{ placeholder }} in attribute {{ attrname }}
      {%- endfor %}
      {%- endfor %}
@@ -246,8 +261,9 @@ export class {{ class_name }} {
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
         {{ attrname }}: string,
         {%- endfor %}
+        {%- set _emitted_uri_params = [] -%}
         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %}
         {{ placeholder }}: string,
         {%- endfor %}
         {%- endfor %}
@@ -255,9 +271,10 @@ export class {{ class_name }} {
         {{ attrname }}{% if not attribute.required %}?{% endif %}: string,
         {%- endfor %}
         {%- endif %}
-        contentType: string = 'application/json'
+        contentType: string = {{ cloudEvents.DefaultContentType(message) }}
     ): Promise<void> {
         const messages: ServiceBusMessage[] = dataArray.map(data => {
+            const serializedData = {{ cloudEvents.SerializeData("data", "contentType") | indent(12) }};
             {%- if isCloudEvent %}
             const cloudEvent = new CloudEvent({
             {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
@@ -277,7 +294,7 @@ export class {{ class_name }} {
             {%- elif attrname == "datacontenttype" %}
                 {# handled separately #}
             {%- elif attrname == "dataschema" %}
-                {# handled separately if needed #}
+                {% if attribute.value %}dataschema: this.resolveDataschema({{ attribute.value | tojson }}),{% endif %}
             {%- elif attribute.value %}
                 {{ attrname }}: {% if attribute.type == "uritemplate" %}`{{ attribute.value | regex_replace('\\{([A-Za-z0-9_]+)\\}', '${\\1}') }}`{% else %}'{{ attribute.value }}'{% endif %},
             {%- else %}
@@ -285,7 +302,7 @@ export class {{ class_name }} {
             {%- endif %}
             {%- endfor %}
                 id: uuidv4(),
-                data: data,
+                data: serializedData,
                 datacontenttype: contentType
             });
             
@@ -296,25 +313,26 @@ export class {{ class_name }} {
                 };
             } else {
                 const applicationProperties: Record<string, any> = {
-                    ce_specversion: '1.0',
-                    ce_id: cloudEvent.id,
-                    ce_type: cloudEvent.type,
-                    ce_source: cloudEvent.source
+                    'cloudEvents:specversion': '1.0',
+                    'cloudEvents:id': cloudEvent.id,
+                    'cloudEvents:type': cloudEvent.type,
+                    'cloudEvents:source': cloudEvent.source
                 };
-                if (cloudEvent.subject) applicationProperties.ce_subject = cloudEvent.subject;
-                if (cloudEvent.time) applicationProperties.ce_time = cloudEvent.time;
+                if (cloudEvent.subject) applicationProperties['cloudEvents:subject'] = cloudEvent.subject;
+                if (cloudEvent.time) applicationProperties['cloudEvents:time'] = cloudEvent.time;
+                if (cloudEvent.dataschema) applicationProperties['cloudEvents:dataschema'] = cloudEvent.dataschema;
                 {%- for attrname, attribute in message.envelopemetadata.items() if attrname not in ["id", "type", "source", "subject", "time", "specversion", "datacontenttype", "dataschema", "data"] %}
-                if ((cloudEvent as any).{{ attrname }}) applicationProperties.ce_{{ attrname }} = (cloudEvent as any).{{ attrname }};
+                if ((cloudEvent as any).{{ attrname }}) applicationProperties['cloudEvents:{{ attrname }}'] = (cloudEvent as any).{{ attrname }};
                 {%- endfor %}
                 return {
-                    body: data,
+                    body: serializedData,
                     contentType: contentType,
                     applicationProperties
                 };
             }
             {%- else %}
             return {
-                body: data,
+                body: serializedData,
                 subject: '{{ messageid }}',
                 contentType: contentType
             };

@@ -1,0 +1,22 @@
+{%- import "util.jinja.include" as util -%}
+{%- set _uses_data = [] -%}
+{%- for _mgid, _mg in root.messagegroups.items() -%}
+{%- for _mid, _m in _mg.messages.items() if util.body_type(data_project_name, root, _m) != "Vec<u8>" -%}
+{%- set _ = _uses_data.append(1) -%}
+{%- endfor -%}
+{%- endfor -%}
+[package]
+name = "{{ project_name | rust_package }}"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json"] }
+base64 = "0.22"
+{%- if _uses_data %}
+{{ data_project_name | rust_package }} = { path = "../{{ data_project_name }}" }
+{%- endif %}

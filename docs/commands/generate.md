@@ -32,6 +32,8 @@ xrcg generate --projectname <name> --language <lang> --style <style> \
 | `cs` | C# / .NET | .NET SDK 6.0+ |
 | `py` | Python | Python 3.9+ |
 | `ts` | TypeScript/JavaScript | Node.js 18+, npm/yarn |
+| `go` | Go | Go 1.21+ |
+| `rust` | Rust | Rust 1.75+ (cargo) |
 | `asyncapi` | AsyncAPI 3.0 specification | None (YAML output) |
 | `openapi` | OpenAPI 3.0 specification | None (YAML output) |
 | `asaql` | Azure Stream Analytics Query | None (SQL output) |
@@ -98,6 +100,16 @@ Styles determine the protocol binding and whether the generated code is a produc
 | `amqpproducer` | AMQP 1.0 producer using rhea |
 | `amqpconsumer` | AMQP 1.0 consumer |
 | `mqttclient` | MQTT 5.0 client |
+
+### Rust Styles
+
+| Style | Description |
+|-------|-------------|
+| `producer` | HTTP CloudEvents producer (structured and binary content modes) using reqwest |
+
+Rust data types are generated as a companion Serde-serializable crate. Additional
+protocol styles (AMQP, Kafka, MQTT, Event Hubs, Service Bus producers/consumers)
+are tracked as follow-up work.
 
 ### AsyncAPI/OpenAPI Styles
 
@@ -244,10 +256,22 @@ generated/
 The generator uses [Avrotize](https://github.com/clemensv/avrotize) to convert schemas between formats. Supported input schemas:
 
 - **JSON Schema** (draft-07, draft-2020-12)
+- **JSON Structure**
 - **Apache Avro**
 - **Protocol Buffers** (proto3)
+- **XML Schema (XSD)** — inline XSD definitions are converted to Avro and emitted with XML serialization support. When a message pairs an XSD schema with a `datacontenttype` of `application/xml`, the generated data classes serialize/deserialize XML (honoring element/attribute mapping and target namespace).
 
 Schemas are automatically converted to the target language's native data structures with proper serialization support.
+
+### Encoding options
+
+Serialization annotations on the generated data classes are controlled with optional template arguments:
+
+| Argument | Default | Effect |
+|----------|---------|--------|
+| `json-encoding` | `true` | Emit JSON serialization support |
+| `avro-encoding` | `false` | Emit Avro binary/JSON serialization support (auto-enabled for Avro input schemas) |
+| `xml-encoding` | `false` | Emit XML serialization support (auto-enabled for XSD input schemas) |
 
 ## Error Handling
 

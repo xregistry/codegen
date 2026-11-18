@@ -23,6 +23,7 @@ using DotNet.Testcontainers.Builders;
 using Confluent.Kafka;
 using Confluent.Kafka.Admin;
 using Testcontainers.Kafka;
+using Moq;
 
 using {{ project_name | pascal }};
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
@@ -247,6 +248,65 @@ namespace {{ project_name | pascal }}.Test
             }
         }
         {%- endfor %}
+    }
+
+    // Broker-free unit tests for the resilient Flush()/FlushAsync() retry logic.
+    // These use a mocked IProducer and therefore do not require the Kafka
+    // testcontainer (no [Collection] attribute), so they run without Docker.
+    public class {{ project_name | strip_dots | pascal }}{{ pascal_group_name | strip_dots }}ProducerFlushTests
+    {
+        [Fact]
+        public void FlushReturnsWhenAllMessagesDelivered()
+        {
+            var mockProducer = new Mock<IProducer<byte[], byte[]>>();
+            mockProducer.Setup(p => p.Flush(It.IsAny<TimeSpan>())).Returns(0);
+            var producer = new {{ class_name }}(mockProducer.Object);
+
+            producer.Flush(TimeSpan.FromMilliseconds(1), retries: 3, backoffFactor: 1.0);
+
+            mockProducer.Verify(p => p.Flush(It.IsAny<TimeSpan>()), Times.Once);
+        }
+
+        [Fact]
+        public void FlushRetriesUntilMessagesDrain()
+        {
+            var mockProducer = new Mock<IProducer<byte[], byte[]>>();
+            mockProducer.SetupSequence(p => p.Flush(It.IsAny<TimeSpan>()))
+                .Returns(2)  // first attempt: messages still pending
+                .Returns(0); // second attempt: fully drained
+            var producer = new {{ class_name }}(mockProducer.Object);
+
+            producer.Flush(TimeSpan.FromMilliseconds(1), retries: 3, backoffFactor: 1.0);
+
+            mockProducer.Verify(p => p.Flush(It.IsAny<TimeSpan>()), Times.Exactly(2));
+        }
+
+        [Fact]
+        public void FlushThrowsWhenMessagesRemainAfterRetries()
+        {
+            var mockProducer = new Mock<IProducer<byte[], byte[]>>();
+            mockProducer.Setup(p => p.Flush(It.IsAny<TimeSpan>())).Returns(5);
+            var producer = new {{ class_name }}(mockProducer.Object);
+
+            Assert.Throws<InvalidOperationException>(
+                () => producer.Flush(TimeSpan.FromMilliseconds(1), retries: 2, backoffFactor: 1.0));
+
+            mockProducer.Verify(p => p.Flush(It.IsAny<TimeSpan>()), Times.Exactly(2));
+        }
+
+        [Fact]
+        public async Task FlushAsyncRetriesUntilMessagesDrain()
+        {
+            var mockProducer = new Mock<IProducer<byte[], byte[]>>();
+            mockProducer.SetupSequence(p => p.Flush(It.IsAny<TimeSpan>()))
+                .Returns(1)
+                .Returns(0);
+            var producer = new {{ class_name }}(mockProducer.Object);
+
+            await producer.FlushAsync(TimeSpan.FromMilliseconds(1), retries: 3, backoffFactor: 1.0);
+
+            mockProducer.Verify(p => p.Flush(It.IsAny<TimeSpan>()), Times.Exactly(2));
+        }
     }
     {%- endfor %}
 }

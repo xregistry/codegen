@@ -1,12 +1,17 @@
 {%- import "util.include.jinja" as util -%}
+{%- import "cloudevents.jinja.include" as cloudEvents -%}
 
 # pylint: disable=unused-import, line-too-long, missing-module-docstring, missing-function-docstring, missing-class-docstring, consider-using-f-string, trailing-whitespace, trailing-newlines
 import json
+import re
 import typing
+from datetime import datetime, timezone
 from azure.servicebus.aio import ServiceBusClient
 from azure.servicebus import ServiceBusMessage
 from cloudevents.conversion import to_binary, to_structured
 from cloudevents.http import CloudEvent
+
+{{ cloudEvents.DeclareRfc3339TimeNormalizer() }}
 
 
 {%- set messagegroups = root.messagegroups %}
@@ -32,7 +37,7 @@ from cloudevents.http import CloudEvent
 {%- set class_name = ( groupname | strip_dots )+"EventProducer" %}
 
 class {{ class_name }}:
-    def __init__(self, servicebus_client: ServiceBusClient, queue_or_topic_name: str, content_mode:typing.Literal['structured','binary']= 'structured'):
+    def __init__(self, servicebus_client: ServiceBusClient, queue_or_topic_name: str, content_mode:typing.Literal['structured','binary']= 'structured', dataschema_overrides: typing.Optional[typing.Mapping[str, str]] = None):
         """
         Initializes the Service Bus producer
 
@@ -44,6 +49,10 @@ class {{ class_name }}:
         self.servicebus_client = servicebus_client
         self.queue_or_topic_name = queue_or_topic_name
         self.content_mode = content_mode
+        self._dataschema_overrides = dict(dataschema_overrides) if dataschema_overrides is not None else {}
+        if any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
+               for key, value in self._dataschema_overrides.items()):
+            raise ValueError("dataschema_overrides must map nonempty URI strings to nonempty URI strings")
 
     @classmethod
     def from_connection_string(cls, connection_string: str, queue_or_topic_name: str, content_mode:typing.Literal['structured','binary']= 'structured') -> '{{ class_name }}':
@@ -67,16 +76,29 @@ class {{ class_name }}:
     {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata -%}
         _{{ attrname }}: str, {{ '' }}
     {%- endfor -%}
-    {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined -%}
+    {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined and attrname != "time" -%}
         _{{ attrname }}: str, {{ '' }}
     {%- endfor -%}
-    {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" -%}
-        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}_{{ placeholder | snake }} : str, {% endfor -%}
+    {%- set _emitted_uri_params = [] -%}
+    {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" -%}
+        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' and (placeholder | snake) not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder | snake) %}_{{ placeholder | snake }} : str, {% endfor -%}
     {%- endfor -%}
-    data: {{ util.DeclareDataType( project_name, root, message ) | strip_namespace -}}, content_type: str = "application/json"
-    {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined -%}
+    {%- set time_placeholder_params = [] -%}
+    {%- if 'time' in message.envelopemetadata and message.envelopemetadata['time'].type == "uritemplate" and message.envelopemetadata['time'].value -%}
+        {%- for placeholder in message.envelopemetadata['time'].value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+            {%- set placeholder_name = placeholder | snake -%}
+            {%- if placeholder_name not in time_placeholder_params and placeholder_name != 'time' -%}
+                {%- set _ = time_placeholder_params.append(placeholder_name) -%}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- endif -%}
+    data: {{ util.DeclareDataType( project_name, root, message ) | strip_namespace -}}, content_type: str = {{ cloudEvents.DefaultContentType(message) }}
+    {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined and attrname != "time" -%}
         , _{{ attrname }}: typing.Optional[str] = None
-    {%- endfor -%} ) -> None:
+    {%- endfor -%}
+    {%- for placeholder_name in time_placeholder_params -%}
+        , _{{ placeholder_name }}: typing.Optional[str] = None
+    {%- endfor -%}, _time: typing.Optional[typing.Union[str, datetime]] = None ) -> None:
         """
         Sends the '{{ messageid }}' event to the EventHub
 
@@ -84,19 +106,23 @@ class {{ class_name }}:
         {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata %}
             _{{ attrname }}(str) : CloudEvents required attribute '{{ attrname }}'
         {%- endfor -%}
-        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined %}
+        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined and attrname != "time" %}
             _{{ attrname }}(str) : {{ attribute.description if attribute.description else "CloudEvents attribute '"+attrname+"'" }}
         {%- endfor -%}
-        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
+        {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != "time" %}
             {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
             _{{ placeholder | snake }}(str):  Value for placeholder {{ placeholder }} in attribute {{ attrname }}
             {%- endfor -%}
         {%- endfor %}
             data: ({{ util.DeclareDataType( project_name, root, message ) | strip_namespace -}}): The event data to be sent
             content_type (str): The content type that the event data shall be sent with
-        {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined %}
+        {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined and attrname != "time" %}
             _{{ attrname }}(typing.Optional[str]): {{ attribute.description if attribute.description else "CloudEvents attribute '"+attrname+"'" }}
         {%- endfor %}
+        {%- for placeholder_name in time_placeholder_params %}
+            _{{ placeholder_name }}(typing.Optional[str]): Legacy compatibility placeholder for CloudEvents time.
+        {%- endfor %}
+            _time(typing.Optional[typing.Union[str, datetime]]): CloudEvents time override. Defaults to current UTC when no catalog time is used.
         """
 
         attributes = {
@@ -105,7 +131,9 @@ class {{ class_name }}:
         {%- endfor -%}
         {%- for attrname, attribute in message.envelopemetadata.items() %}
              "{{ attrname }}":
-            {%- if attribute.value -%}
+            {%- if attrname == "time" -%}
+            {{ cloudEvents.RenderLegacyTimeFallback(attribute, "_") }}
+            {%- elif attribute.value -%}
             "{{ attribute.value }}"
             {%- if attribute.type == "uritemplate" -%}
                 {%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
@@ -125,12 +153,22 @@ class {{ class_name }}:
         {%- endfor %}
         }
         attributes["datacontenttype"] = content_type
-        byte_data = data.to_byte_array(content_type) if data is not None else b''
+        attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))
+        byte_data = data.to_byte_array({{ cloudEvents.SerializerContentType("content_type") }}) if data is not None else b''
+        # to_byte_array returns str for text content types (e.g. JSON); coerce
+        # to bytes so the wire body is the exact serialized representation
+        # (binary AMQP data section) and receivers do not double-decode JSON.
+        if isinstance(byte_data, str):
+            byte_data = byte_data.encode('utf-8')
+        if "dataschema" in attributes:
+            attributes["dataschema"] = self._dataschema_overrides.get(attributes["dataschema"], attributes["dataschema"])
         event = CloudEvent(attributes, byte_data)
         
         async with self.servicebus_client.get_queue_sender(queue_name=self.queue_or_topic_name) as sender:
             if self.content_mode == "structured":
                 headers, body = to_structured(event)
+                if isinstance(body, str):
+                    body = body.encode('utf-8')
                 message = ServiceBusMessage(body=body)
                 if "Content-Type" in headers:
                     message.content_type = headers["Content-Type"]
@@ -139,6 +177,8 @@ class {{ class_name }}:
                     message.application_properties = {}
             else:
                 headers, body = to_binary(event)
+                if isinstance(body, str):
+                    body = body.encode('utf-8')
                 message = ServiceBusMessage(body=body)
                 message.content_type = attributes.get("datacontenttype", "application/octet-stream")
                 # Initialize application_properties dict if not already set

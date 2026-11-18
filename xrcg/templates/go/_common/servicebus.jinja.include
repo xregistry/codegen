@@ -1,0 +1,37 @@
+{#- Azure Service Bus utility macros for Go -#}
+
+{%- macro get_entity_name(root, message, messageid) -%}
+{%- if message.protocolmetadata and message.protocolmetadata.queue and message.protocolmetadata.queue.value -%}
+{{ message.protocolmetadata.queue.value }}
+{%- elif message.protocolmetadata and message.protocolmetadata.topic and message.protocolmetadata.topic.value -%}
+{{ message.protocolmetadata.topic.value }}
+{%- elif message.protocolmetadata and message.protocolmetadata.entity and message.protocolmetadata.entity.value -%}
+{{ message.protocolmetadata.entity.value }}
+{%- elif message.protocolmetadata and message.protocolmetadata.entityName and message.protocolmetadata.entityName.value -%}
+{{ message.protocolmetadata.entityName.value }}
+{%- elif message.protocoloptions and message.protocoloptions.queue -%}
+{{ message.protocoloptions.queue }}
+{%- elif message.protocoloptions and message.protocoloptions.topic -%}
+{{ message.protocoloptions.topic }}
+{%- elif message.protocoloptions and message.protocoloptions.entity -%}
+{{ message.protocoloptions.entity }}
+{%- elif message.protocoloptions and message.protocoloptions.entityName -%}
+{{ message.protocoloptions.entityName }}
+{%- elif root.endpoints -%}
+{%- set entities = [] -%}
+{%- for endpointid, endpoint in root.endpoints.items() -%}
+{%- if endpoint.protocol and ("servicebus" in (endpoint.protocol | lower) or "amqp" in (endpoint.protocol | lower)) and endpoint.channel -%}
+{%- set _ = entities.append(endpoint.channel) -%}
+{%- elif endpoint.protocoloptions and endpoint.protocoloptions.queue -%}
+{%- set _ = entities.append(endpoint.protocoloptions.queue) -%}
+{%- elif endpoint.protocoloptions and endpoint.protocoloptions.topic -%}
+{%- set _ = entities.append(endpoint.protocoloptions.topic) -%}
+{%- elif endpoint.channel -%}
+{%- set _ = entities.append(endpoint.channel) -%}
+{%- endif -%}
+{%- endfor -%}
+{{ entities | first if entities else messageid }}
+{%- else -%}
+{{ messageid }}
+{%- endif -%}
+{%- endmacro -%}

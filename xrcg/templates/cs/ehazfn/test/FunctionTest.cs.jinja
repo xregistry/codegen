@@ -74,6 +74,7 @@ namespace {{ project_name | pascal }}.Tests
         {%- if message.envelope.startswith("CloudEvents") -%}     
         {%- set messagename = messageid | pascal %}
         {%- set message_body_type = util.body_type(data_project_name, root, message) -%}
+        {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
         [Test]
         public async Task Run_With{{ messageid | strip_namespace | pascal }}_ShouldInvoke{{ messagegroupid | strip_namespace | pascal }}DispatcherOn{{ messageid | strip_namespace | pascal }}Async()
         {
@@ -85,7 +86,7 @@ namespace {{ project_name | pascal }}.Tests
             var eventData = new EventData(new BinaryData(""));
             {%- endif %}
             eventData.Properties.Add("cloudEvents:specversion", "1.0");
-            eventData.Properties.Add("cloudEvents_type", "{{ messageid }}");
+            eventData.Properties.Add("cloudEvents_type", "{{ ce_type_value }}");
             eventData.ContentType = "application/json";
             var events = new[] { eventData };
             await {{ function_class_field }}.Run(events, loggerMock.Object);

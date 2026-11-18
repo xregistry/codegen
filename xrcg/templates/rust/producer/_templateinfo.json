@@ -1,0 +1,12 @@
+{
+  "template": "producer",
+  "description": "Rust HTTP CloudEvents Producer",
+  "language": "rust",
+  "protocol": "HTTP",
+  "usage": [
+    "producer"
+  ],
+  "requires": [
+    "messagegroups"
+  ]
+}

@@ -1,0 +1,79 @@
+{%- import "util.jinja.include" as util -%}
+{{ util.CommonFileHeader() }}
+
+{%- set package_name = project_name | lower | replace('-', '_') %}
+{%- set uses_cloudevents_message = (root | exists("envelope","CloudEvents/1.0")) %}
+package {{ package_name }};
+
+{%- if uses_cloudevents_message %}
+import org.junit.jupiter.api.Test;
+import org.apache.qpid.protonj2.client.Message;
+import io.cloudevents.CloudEvent;
+import io.cloudevents.core.builder.CloudEventBuilder;
+
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+{%- endif %}
+
+/**
+ * Broker-free unit tests for the CloudEvents AMQP binary content mode
+ * ({@link AmqpContentMode#BINARY}) message mapping.
+ */
+public class AmqpBinaryContentModeTest {
+{%- if uses_cloudevents_message %}
+
+    @Test
+    public void binaryModeMapsCloudEventAttributesToApplicationProperties() throws Exception {
+        byte[] data = "{\"hello\":\"world\"}".getBytes(StandardCharsets.UTF_8);
+        CloudEvent cloudEvent = CloudEventBuilder.v1()
+            .withId("test-id-1")
+            .withType("com.example.test")
+            .withSource(URI.create("/test/source"))
+            .withSubject("test-subject")
+            .withTime(OffsetDateTime.parse("2024-01-01T00:00:00Z"))
+            .withDataContentType("application/json")
+            .withData(data)
+            .withExtension("traceparent", "00-abc-01")
+            .build();
+
+        Message<byte[]> message = AmqpProducer.buildBinaryCloudEventMessage(cloudEvent, data);
+
+        // Binary mode: the event data is the AMQP body, not a JSON CloudEvent envelope.
+        assertArrayEquals(data, message.body(), "Binary-mode body must be the raw event data");
+        assertEquals(cloudEvent.getDataContentType(), message.contentType(),
+            "Content type must reflect the data content type, not application/cloudevents+json");
+
+        // CloudEvents attributes must be carried as cloudEvents:* application properties.
+        assertEquals(cloudEvent.getSpecVersion().toString(), message.property("cloudEvents:specversion"));
+        assertEquals(cloudEvent.getId(), message.property("cloudEvents:id"));
+        assertEquals(cloudEvent.getType(), message.property("cloudEvents:type"));
+        assertEquals(cloudEvent.getSource().toString(), message.property("cloudEvents:source"));
+        assertEquals(cloudEvent.getSubject(), message.property("cloudEvents:subject"));
+        assertEquals(cloudEvent.getTime().toString(), message.property("cloudEvents:time"));
+        assertEquals("00-abc-01", message.property("cloudEvents:traceparent"));
+    }
+
+    @Test
+    public void binaryModeOmitsOptionalAttributesWhenAbsent() throws Exception {
+        byte[] data = new byte[] { 1, 2, 3 };
+        CloudEvent cloudEvent = CloudEventBuilder.v1()
+            .withId("test-id-2")
+            .withType("com.example.minimal")
+            .withSource(URI.create("/minimal"))
+            .withData(data)
+            .build();
+
+        Message<byte[]> message = AmqpProducer.buildBinaryCloudEventMessage(cloudEvent, data);
+
+        assertArrayEquals(data, message.body());
+        assertEquals("test-id-2", message.property("cloudEvents:id"));
+        assertNull(message.property("cloudEvents:subject"), "Absent subject must not be emitted");
+        assertNull(message.property("cloudEvents:time"), "Absent time must not be emitted");
+    }
+{%- endif %}
+}

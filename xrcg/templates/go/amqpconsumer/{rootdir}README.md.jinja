@@ -1,0 +1,22 @@
+{%- set first_group_id = root.messagegroups.keys() | list | first -%}
+{%- set groupname = first_group_id | pascal | strip_namespace -%}
+{%- set class_name = groupname + "Consumer" -%}
+# {{ project_name | pascal }} - AMQP 1.0 Consumer
+
+Auto-generated Go AMQP 1.0 consumer using `github.com/Azure/go-amqp` with CloudEvents structured and binary content modes.
+
+## Quick start
+
+```go
+consumer, err := {{ project_name | snake }}.New{{ class_name }}("amqp://localhost:5672", "events", handler)
+if err != nil {
+    log.Fatal(err)
+}
+defer consumer.Close(context.Background())
+
+if err := consumer.Start(context.Background()); err != nil {
+    log.Fatal(err)
+}
+```
+
+Use `New{{ class_name }}WithReceiver` to inject a test receiver without a broker.

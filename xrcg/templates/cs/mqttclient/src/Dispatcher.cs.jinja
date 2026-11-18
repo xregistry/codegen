@@ -64,7 +64,16 @@ namespace {{ project_name | pascal }}
                 return new Dictionary<string, string>
                 {
                     {%- for messageid, message in messagegroup.messages.items() %}
-                    { "{{ messageid }}", "{{ mqtt.GetDefaultTopic(message, messageid) }}" },
+                    {#- Prefer flat spec key topic_name, fall back to topic-name, legacy nested, then messageid -#}
+                    {%- set _dft = namespace(val=messageid) %}
+                    {%- if message.protocoloptions and message.protocoloptions.topic_name %}
+                        {%- set _dft.val = message.protocoloptions.topic_name %}
+                    {%- elif message.protocoloptions and message.protocoloptions['topic-name'] %}
+                        {%- set _dft.val = message.protocoloptions['topic-name'] %}
+                    {%- elif message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic %}
+                        {%- set _dft.val = message.protocoloptions.properties.topic.value %}
+                    {%- endif %}
+                    { "{{ messageid }}", "{{ _dft.val }}" },
                     {%- endfor %}
                 };
             }

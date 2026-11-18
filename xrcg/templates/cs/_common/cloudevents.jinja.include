@@ -23,18 +23,27 @@ using CloudNative.CloudEvents.Avro;
 
 {#- Generates a list of arguments for "send" methods that correspond to placeholders in uritemplates -#}
 {%- macro DeclareUriTemplateArguments(message) -%}
+{%- set emitted = namespace(args=[]) -%}
 {%- for attrname in ['source', 'type'] if attrname not in message.envelopemetadata -%}
+{%- if attrname not in emitted.args -%}
 , string {{ attrname }}
+{%- set _ = emitted.args.append(attrname) -%}
+{%- endif -%}
 {%- endfor -%}
 {%- for attrname in message.envelopemetadata if attrname not in ["datacontenttype", "dataschema"] -%}
 {%- set attribute = message.envelopemetadata[attrname] -%}
     {%- if attribute.type == "uritemplate" -%}
         {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+        {%- if placeholder not in emitted.args -%}
         , string {{ placeholder }}
+        {%- set _ = emitted.args.append(placeholder) -%}
+        {%- endif -%}
         {%- endfor -%}    
     {%- elif attribute.value is not defined -%}
-        {%- if not attrname == "time" and not attrname == "id" -%}
-        , string {{ attrname }}{%- if not attribute.required %} = default! {%- endif %}{% endif -%}
+        {%- if not attrname == "time" and not attrname == "id" and attrname not in emitted.args -%}
+        , string {{ attrname }}{%- if not attribute.required %} = default! {%- endif %}
+        {%- set _ = emitted.args.append(attrname) -%}
+        {% endif -%}
     {%- endif -%}
 {%- endfor -%} 
 {%- endmacro -%}
@@ -54,8 +63,10 @@ CloudEvent {{ variable }} = new CloudEvent()
 {%- if attrname in ["datacontenttype"] %}
     DataContentType = contentType,
 {%- endif -%}
-{%- if attrname in ["dataschema"] and message.dataschemauri %}
-    DataSchema = new Uri("xreg:{{message.dataschemauri.lstrip('#/')}}", UriKind.RelativeOrAbsolute),
+{%- if attrname == "dataschema" and attribute.value %}
+    DataSchema = new Uri(
+        dataschemaOverrides != null && dataschemaOverrides.TryGetValue({{ attribute.value | tojson }}, out var mappedDataschema)
+            ? mappedDataschema : {{ attribute.value | tojson }}, UriKind.RelativeOrAbsolute),
 {%- endif -%}
 {%- if attrname in ["subject", "type"] %}
     {%- set attrProp = attrname | pascal %}
@@ -67,13 +78,14 @@ CloudEvent {{ variable }} = new CloudEvent()
 {%- endif -%}
 {%- if attrname in ["time"] %}
     {{ attrname | pascal }} = {% if attribute.value -%}
-        {%- if attribute.value == "0001-01-01T00:00:00+00:00" -%}
-            DateTime.UtcNow
-        {%- else -%}   
-            DateTime.Parse("{{- attribute.value -}}")
+        {%- set placeholders = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+        {%- if placeholders -%}
+            System.DateTime.UtcNow
+        {%- else -%}
+            System.DateTime.TryParse("{{- attribute.value -}}", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsedTime) ? parsedTime : System.DateTime.UtcNow
         {%- endif -%}
         {%- else -%}
-            DateTime.UtcNow
+            System.DateTime.UtcNow
         {%- endif -%},
 {%- endif -%}
 {%- if attrname in ["id"] %}
@@ -91,7 +103,20 @@ cloudEvent.SetAttributeFromString("{{ attrname }}",{%- if attribute.value -%}"{{
 
 {#- get the the datacontenttype attribute value from the message declaration if it exists #}
 {%- macro GetDataContentType(message, default) -%}
-{%- if message.envelope == "CloudEvents/1.0" and "envelopemetadata" in message and "datacontentype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
+{%- set schema_format = message.dataschemaformat | default("", true) | lower -%}
+{%- if schema_format.startswith("avro") -%}
+"avro/binary"
+{%- elif schema_format.startswith("proto") -%}
+"application/protobuf"
+{%- elif schema_format.startswith("xsd") or schema_format.startswith("xmlschema") -%}
+{%- if "envelopemetadata" in message and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] and message.envelopemetadata["datacontenttype"].value -%}
+"{{ message.envelopemetadata["datacontenttype"].value }}"
+{%- else -%}
+"application/xml"
+{%- endif -%}
+{%- elif schema_format.startswith("jsonschema") or schema_format.startswith("jsonstructure") -%}
+"application/json"
+{%- elif message.envelope == "CloudEvents/1.0" and "envelopemetadata" in message and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
 "{{ message.envelopemetadata["datacontenttype"].value }}"
 {%- else -%}
 {{ default }}
@@ -177,7 +202,8 @@ switch (cloudEventType)
 {
     {% for messageid, message in messagegroup.messages.items() -%}
     {% set messagename = messageid | pascal %}
-    case "{{ messageid }}":
+    {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
+    case "{{ ce_type_value }}":
         if ( this.{{ messagegroupid | strip_namespace | camel }}Dispatcher != null )
         {
             await this.{{ messagegroupid | strip_namespace | camel }}Dispatcher.On{{ messagename | strip_namespace }}Async({{ cloudEvent }},
@@ -205,7 +231,8 @@ switch (cloudEventType)
     {% for messagegroupid, messagegroup in messagegroups.items() if (messagegroup | exists("envelope","CloudEvents/1.0")) -%}
     {% for messageid, message in messagegroup.messages.items() if (message | exists("envelope","CloudEvents/1.0")) -%}
     {% set messagename = messageid | pascal %}
-    case "{{ messageid }}":
+    {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
+    case "{{ ce_type_value }}":
         if ( this.{{ messagegroupid  | strip_namespace | camel }}Dispatcher != null )
         {
             await this.{{ messagegroupid  | strip_namespace | camel }}Dispatcher.On{{ messagename | strip_namespace }}Async({{ cloudEvent }},

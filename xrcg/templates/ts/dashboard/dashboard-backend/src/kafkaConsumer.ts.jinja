@@ -39,14 +39,13 @@ export class KafkaConsumer {
       clientId: 'my-app',
       brokers: config.KAFKA_BROKERS.split(','),
       ssl: config.KAFKA_SSL === 'true',
-      sasl:
-        config.KAFKA_USERNAME && config.KAFKA_PASSWORD
-          ? {
-            mechanism: 'plain',
+      ...(config.KAFKA_USERNAME && config.KAFKA_PASSWORD
+          ? { sasl: {
+            mechanism: 'plain' as const,
             username: config.KAFKA_USERNAME,
             password: config.KAFKA_PASSWORD,
-          }
-          : undefined,
+          } }
+          : {}),
     });
 
     this.consumer = kafka.consumer({ groupId: config.CONSUMER_GROUP });

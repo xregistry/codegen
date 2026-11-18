@@ -40,6 +40,27 @@ describe('{{ test_class_name }}', () => {
         expect({{ class_name }}.prototype.send{{ messagename }}Batch).toBeDefined();
         expect({{ class_name }}.prototype.close).toBeDefined();
     });
+    {%- if cloudEvents.isCloudEvent(message) %}
+    {%- set dynamic = namespace(value=("source" not in message.envelopemetadata or "type" not in message.envelopemetadata)) %}
+    {%- for attrname, attribute in message.envelopemetadata.items() %}
+    {%- if attribute.type == "uritemplate" or (attribute.value is not defined and attrname not in ["id", "time", "datacontenttype", "dataschema"]) %}
+    {%- set dynamic.value = true %}
+    {%- endif %}
+    {%- endfor %}
+    {%- if cloudEvents.isCloudEvent(message) and not dynamic.value and not message.protocoloptions and message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value %}
+    test.each(['binary', 'structured'] as const)('{{ messagename }} retains dataschema in %s mode', async mode => {
+        const producer = Object.create({{ class_name }}.prototype);
+        const send = jest.fn();
+        Object.assign(producer, { sender: { send }, mode, format: 'application/cloudevents+json' });
+        await producer.send{{ messagename }}(Buffer.from('{}') as unknown as {{ body_type }});
+        const sent = send.mock.calls[0]![0] as rhea.Message;
+        const schema = mode === 'binary'
+            ? sent.application_properties!['cloudEvents:dataschema']
+            : JSON.parse(Buffer.from(sent.body).toString()).dataschema;
+        expect(schema).toBe({{ message.envelopemetadata.dataschema.value | tojson }});
+    });
+    {%- endif %}
+    {%- endif %}
     {%- endfor %}
 });
 {%- endfor %}

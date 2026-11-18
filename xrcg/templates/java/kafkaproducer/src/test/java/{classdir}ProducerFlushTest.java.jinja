@@ -1,0 +1,74 @@
+{%- import "util.jinja.include" as util -%}
+{{ util.CommonFileHeader() }}
+
+{%- set messagegroups = root.messagegroups %}
+{%- set package_name = project_name | lower | replace('-', '_') %}
+
+package {{ package_name }};
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+import org.apache.kafka.clients.producer.KafkaProducer;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+/**
+ * Broker-free unit tests for the resilient {@code flush()} retry logic.
+ * <p>
+ * These tests use a Mockito-mocked {@link KafkaProducer} and do NOT require a
+ * Kafka broker, Docker, or Testcontainers. They verify that {@code flush(retries,
+ * backoffFactor)} retries transient failures with backoff and raises a
+ * {@link RuntimeException} once the retry budget is exhausted.
+ */
+public class {{ class_name | strip_namespace }} {
+{%- for messagegroupid, messagegroup in messagegroups.items() %}
+{%- set pascal_group_name = messagegroupid | pascal %}
+{%- set producer_class = (pascal_group_name | strip_namespace) + "Producer" %}
+{%- set group_package = (package_name ~ "." ~ messagegroupid) | lower | replace('-', '_') %}
+
+    @Test
+    @DisplayName("flush() returns without retrying when the first attempt succeeds")
+    @SuppressWarnings("unchecked")
+    public void testFlushSucceedsWithoutRetry() {
+        KafkaProducer<byte[], byte[]> mockProducer = mock(KafkaProducer.class);
+        doNothing().when(mockProducer).flush();
+        {{ group_package }}.{{ producer_class }} producer = new {{ group_package }}.{{ producer_class }}(mockProducer);
+
+        producer.flush(3, 1.0);
+
+        verify(mockProducer, times(1)).flush();
+    }
+
+    @Test
+    @DisplayName("flush() retries after a transient failure and then succeeds")
+    @SuppressWarnings("unchecked")
+    public void testFlushRetriesThenSucceeds() {
+        KafkaProducer<byte[], byte[]> mockProducer = mock(KafkaProducer.class);
+        doThrow(new RuntimeException("transient broker error"))
+            .doNothing()
+            .when(mockProducer).flush();
+        {{ group_package }}.{{ producer_class }} producer = new {{ group_package }}.{{ producer_class }}(mockProducer);
+
+        producer.flush(3, 1.0);
+
+        verify(mockProducer, times(2)).flush();
+    }
+
+    @Test
+    @DisplayName("flush() raises RuntimeException after exhausting all retries")
+    @SuppressWarnings("unchecked")
+    public void testFlushThrowsAfterRetriesExhausted() {
+        KafkaProducer<byte[], byte[]> mockProducer = mock(KafkaProducer.class);
+        doThrow(new RuntimeException("persistent broker error"))
+            .when(mockProducer).flush();
+        {{ group_package }}.{{ producer_class }} producer = new {{ group_package }}.{{ producer_class }}(mockProducer);
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> producer.flush(2, 1.0));
+        assertTrue(ex.getMessage().contains("Kafka flush failed"),
+            "Exception message should describe the flush failure");
+
+        verify(mockProducer, times(2)).flush();
+    }
+{%- endfor %}
+}

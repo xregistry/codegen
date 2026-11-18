@@ -1,7 +1,9 @@
+{%- import "util.jinja.include" as util -%}
 {
   "name": "{{project_name|dotdash|lower}}-dashboard-frontend",
   "version": "0.0.0",
   "type": "module",
+  "overrides": {{ util.DependencyOverrides() }},
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -11,31 +13,32 @@
   },
   "private": true,
   "dependencies": {
-    "@angular/animations": "^18.2.5",
-    "@angular/common": "^18.2.5",
-    "@angular/compiler": "^18.2.5",
-    "@angular/core": "^18.2.5",
-    "@angular/forms": "^18.2.5",
-    "@angular/platform-browser": "^18.2.5",
-    "@angular/platform-browser-dynamic": "^18.2.5",
-    "@angular/router": "^18.2.5",
+    "@angular/animations": "^21.2.25",
+    "@angular/common": "^21.2.25",
+    "@angular/compiler": "^21.2.25",
+    "@angular/core": "^21.2.25",
+    "@angular/forms": "^21.2.25",
+    "@angular/platform-browser": "^21.2.25",
+    "@angular/platform-browser-dynamic": "^21.2.25",
+    "@angular/router": "^21.2.25",
+    {{ dependency("ts", "node22", "cloudevents") }},
+    "buffer": "^6.0.3",
+    "util": "^0.12.5",
     "@types/d3": "7.4.3",
     "d3": "7.9.0",
     "dashboard-frontend": "file:",
-    "glob": "^11.0.0",
     "{{project_name|dotunderscore|lower}}_data": "file:../{{project_name|dotunderscore|lower}}_data",
-    "rollup": "^4.22.4",
     "rxjs": "^7.8.1",
     "socket.io-client": "4.8.0",
     "tslib": "^2.7.0",
     "typedjson": "1.8.0",
-    "zone.js": "^0.14.10"
+    "zone.js": "~0.15.1"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "^18.2.5",
-    "@angular/build": "^18.2.5",
-    "@angular/cli": "^18.2.5",
-    "@angular/compiler-cli": "^18.2.5",
+    "@angular-devkit/build-angular": "^21.2.29",
+    "@angular/build": "^21.2.29",
+    "@angular/cli": "^21.2.29",
+    "@angular/compiler-cli": "^21.2.25",
     "@types/jasmine": "^5.1.4",
     "jasmine-core": "5.3.0",
     "karma": "~6.4.0",
@@ -44,9 +47,6 @@
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "2.1.0",
     "rimraf": "^6.0.1",
-    "rollup": "4.22.4",
-    "typescript": "5.4.5",
-    "undici": "6.19.8",
-    "vite": "5.4.8"
+    {{ dependency("ts", "node22", "typescript") }}
   }
 }

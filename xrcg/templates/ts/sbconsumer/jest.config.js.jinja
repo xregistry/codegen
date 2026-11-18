@@ -10,11 +10,12 @@ export default {
       'ts-jest',
       {
         useESM: true,
+        tsconfig: { allowJs: true },
       },
     ],
   },
   transformIgnorePatterns: [
-    '/node_modules/',
+    '/node_modules/(?!(?:https-proxy-agent|http-proxy-agent|agent-base|proxy-agent-negotiate)/)',
   ],
   testMatch: ['**/test/**/*.test.ts'],
   collectCoverageFrom: ['src/**/*.ts'],

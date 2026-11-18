@@ -33,6 +33,29 @@ import io.cloudevents.CloudEvent;
  * Kafka producer for the {{ messagegroupid }} message group.
  */
 public class {{ class_name }} implements AutoCloseable {
+
+    @SafeVarargs
+    private static java.util.Map<String, String> copyDataschemaOverrides(java.util.Map<String, String>... overrides) {
+        if (overrides.length > 1) {
+            throw new IllegalArgumentException("provide at most one dataschema override map");
+        }
+        java.util.Map<String, String> result = overrides.length == 0
+            ? java.util.Collections.emptyMap() : java.util.Map.copyOf(overrides[0]);
+        result.forEach((key, value) -> {
+            if (key.isEmpty() || value.isEmpty()) {
+                throw new IllegalArgumentException("dataschema overrides require nonempty URI strings");
+            }
+        });
+        return result;
+    }
+
+    @SafeVarargs
+    private static String resolveDataschema(String uri, java.util.Map<String, String>... overrides) {
+        return copyDataschemaOverrides(overrides).getOrDefault(uri, uri);
+    }
+
+    private final java.util.Map<String, String> dataschemaOverrides;
+
     private static final Logger log = LogManager.getLogger({{ class_name }}.class);
     private final KafkaProducer<byte[], byte[]> producer;
     {%- if cloudEvents.usesCloudEvents(root) %}
@@ -46,9 +69,9 @@ public class {{ class_name }} implements AutoCloseable {
      * @param bootstrapServers List of Kafka broker URIs
      * @return A new {{ class_name }} instance
      */
-    public static {{ class_name }} create(List<URI> bootstrapServers) {
+    public static {{ class_name }} create(List<URI> bootstrapServers, java.util.Map<String, String>... dataschemaOverrides) {
         {%- if cloudEvents.usesCloudEvents(root) %}
-        return create(bootstrapServers, ContentMode.STRUCTURED, "application/json");
+        return create(bootstrapServers, ContentMode.STRUCTURED, "application/json", dataschemaOverrides);
         {%- else %}
         if (bootstrapServers == null || bootstrapServers.isEmpty()) {
             throw new IllegalArgumentException("bootstrapServers cannot be null or empty");
@@ -65,7 +88,7 @@ public class {{ class_name }} implements AutoCloseable {
         props.put(ProducerConfig.RETRIES_CONFIG, 3);
         
         KafkaProducer<byte[], byte[]> kafkaProducer = new KafkaProducer<>(props);
-        return new {{ class_name }}(kafkaProducer);
+        return new {{ class_name }}(kafkaProducer, dataschemaOverrides);
         {%- endif %}
     }
     
@@ -79,7 +102,7 @@ public class {{ class_name }} implements AutoCloseable {
      * @param format Content type format for structured mode
      * @return A new {{ class_name }} instance
      */
-    public static {{ class_name }} create(List<URI> bootstrapServers, ContentMode contentMode, String format) {
+    public static {{ class_name }} create(List<URI> bootstrapServers, ContentMode contentMode, String format, java.util.Map<String, String>... dataschemaOverrides) {
         if (bootstrapServers == null || bootstrapServers.isEmpty()) {
             throw new IllegalArgumentException("bootstrapServers cannot be null or empty");
         }
@@ -95,7 +118,7 @@ public class {{ class_name }} implements AutoCloseable {
         props.put(ProducerConfig.RETRIES_CONFIG, 3);
         
         KafkaProducer<byte[], byte[]> kafkaProducer = new KafkaProducer<>(props);
-        return new {{ class_name }}(kafkaProducer, contentMode, format);
+        return new {{ class_name }}(kafkaProducer, contentMode, format, dataschemaOverrides);
     }
     {%- endif %}
     
@@ -104,11 +127,12 @@ public class {{ class_name }} implements AutoCloseable {
      * 
      * @param producer The Kafka producer instance
      */
-    public {{ class_name }}(KafkaProducer<byte[], byte[]> producer) {
+    public {{ class_name }}(KafkaProducer<byte[], byte[]> producer, java.util.Map<String, String>... dataschemaOverrides) {
         {%- if cloudEvents.usesCloudEvents(root) %}
-        this(producer, ContentMode.STRUCTURED, "application/json");
+        this(producer, ContentMode.STRUCTURED, "application/json", dataschemaOverrides);
         {%- else %}
         this.producer = producer;
+        this.dataschemaOverrides = copyDataschemaOverrides(dataschemaOverrides);
         {%- endif %}
     }
     
@@ -121,8 +145,9 @@ public class {{ class_name }} implements AutoCloseable {
      * @param contentMode CloudEvents content mode (BINARY or STRUCTURED)
      * @param format Content type format for structured mode
      */
-    public {{ class_name }}(KafkaProducer<byte[], byte[]> producer, ContentMode contentMode, String format) {
+    public {{ class_name }}(KafkaProducer<byte[], byte[]> producer, ContentMode contentMode, String format, java.util.Map<String, String>... dataschemaOverrides) {
         this.producer = producer;
+        this.dataschemaOverrides = copyDataschemaOverrides(dataschemaOverrides);
         this.contentMode = contentMode;
         this.format = format;
     }
@@ -174,7 +199,7 @@ public class {{ class_name }} implements AutoCloseable {
             data,
             key{% if isCloudEvent %},
             this.contentMode,
-            this.format{% endif %}
+            this.format, this.dataschemaOverrides{% endif %}
         );
         
         CompletableFuture<Void> future = new CompletableFuture<>();
@@ -195,10 +220,44 @@ public class {{ class_name }} implements AutoCloseable {
     {% endfor %}
     
     /**
-     * Flush all pending messages.
+     * Flush all pending messages with retry and exponential backoff.
+     * <p>
+     * Resilient against transient broker disconnections (e.g. Azure Event Hubs
+     * dropping idle connections after ~10 minutes). If flush throws due to a
+     * transient error, this method retries with exponential backoff.
+     * </p>
+     *
+     * @param retries Maximum number of flush attempts (default: 3)
+     * @param backoffFactor Exponential backoff multiplier (default: 2.0)
+     * @throws RuntimeException if flush fails after all retry attempts
+     */
+    public void flush(int retries, double backoffFactor) {
+        for (int attempt = 1; attempt <= retries; attempt++) {
+            try {
+                producer.flush();
+                return;
+            } catch (Exception e) {
+                if (attempt >= retries) {
+                    throw new RuntimeException(
+                        "Kafka flush failed after " + retries + " attempts (backoffFactor=" + backoffFactor + ")", e);
+                }
+                long backoffMs = (long) (Math.pow(backoffFactor, attempt) * 1000);
+                log.warn("Kafka flush attempt {} failed, retrying in {}ms: {}", attempt, backoffMs, e.getMessage());
+                try {
+                    Thread.sleep(backoffMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted during flush retry backoff", ie);
+                }
+            }
+        }
+    }
+
+    /**
+     * Flush all pending messages (default: 3 retries, 2.0 backoff factor).
      */
     public void flush() {
-        producer.flush();
+        flush(3, 2.0);
     }
     
     /**

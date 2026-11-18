@@ -47,7 +47,7 @@ from {{main_project_name}}.producer import {{class_name}}
 {%- for messageid, message in messagegroup.messages.items() -%}
 {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
 {%- if type_name != "object" %}
-{%- set import_statement = "from " + (type_name | lower) + " import " + type_name | strip_namespace %}
+{%- set import_statement = "from " + (data_project_name | dotunderscore | lower) + " import " + type_name | strip_namespace %}
 {%- if import_statement not in imports %}
 {%- set _ = imports.append(import_statement) %}
 {{ import_statement }}
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Kafka Producer")
     parser.add_argument('--producer-config', default=os.getenv('KAFKA_PRODUCER_CONFIG'), help='Kafka producer config (JSON)', required=False)
     parser.add_argument('--topics', default=os.getenv('KAFKA_TOPICS'), help='Kafka topics to send events to', required=False)
-    parser.add_argument('-c|--connection-string', dest='connection_string', default=os.getenv('FABRIC_CONNECTION_STRING'), help='Fabric connection string', required=False)
+    parser.add_argument('-c', '--connection-string', dest='connection_string', default=os.getenv('FABRIC_CONNECTION_STRING'), help='Fabric connection string', required=False)
 
     args = parser.parse_args()
 

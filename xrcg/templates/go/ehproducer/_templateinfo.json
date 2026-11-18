@@ -1,0 +1,1 @@
+{"template":"ehproducer","description":"Go Azure Event Hubs Producer","language":"go","protocol":"Azure Event Hubs","usage":["producer"],"requires":["messagegroups"]}

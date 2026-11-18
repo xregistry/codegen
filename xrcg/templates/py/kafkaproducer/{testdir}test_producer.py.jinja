@@ -35,16 +35,7 @@ from {{main_project_name}}.producer import {{class_name}}
 {{ import_statement }}
 {%- endif %}
 {%- set test_class_name = "Test_" + (type_name | pascal | strip_namespace) %}
-{%- if message.dataschemaformat and "JSONStructure" in message.dataschemaformat %}
-{%- set test_module_name = "test_" + (type_name | pascal | strip_namespace | lower) %}
-{%- else %}
-{%- set flat_package = (type_name | dotunderscore | lower) %}
-{%- if flat_package.startswith('test_') %}
-{%- set test_module_name = flat_package %}
-{%- else %}
-{%- set test_module_name = "test_" + flat_package %}
-{%- endif %}
-{%- endif %}
+{%- set test_module_name = util.DeclareDataTestModule(data_project_name, type_name) %}
 {%- set test_import_statement = "from " + test_module_name + " import " + test_class_name %}
 {%- if test_import_statement not in test_imports %}
 {%- set _ = test_imports.append(test_import_statement) %}
@@ -78,10 +69,10 @@ def parse_cloudevent(msg: Message) -> CloudEvent:
             if 'datacontenttype' not in ce:
                 ce['datacontenttype'] = 'application/json'
         else:
-            ce = from_binary(message)
+            ce = from_binary(message, data_unmarshaller=lambda data: data)
             ce['datacontenttype'] = message.headers['content-type'].decode()
     else:
-        ce = from_binary(message)
+        ce = from_binary(message, data_unmarshaller=lambda data: data)
         ce['datacontenttype'] = 'application/json'
     return ce
 {% for messagegroupid, messagegroup in root.messagegroups.items() %}
@@ -109,6 +100,8 @@ def parse_cloudevent(msg: Message) -> CloudEvent:
 {%- set msg_key_holder = [] %}
 {%- if "protocolmetadata" in message and "key" in message.protocolmetadata and "value" in message.protocolmetadata.key %}
 {%- set _ = msg_key_holder.append(message.protocolmetadata.key.value) %}
+{%- elif "protocoloptions" in message and "key" in message.protocoloptions %}
+{%- set _ = msg_key_holder.append(message.protocoloptions.key) %}
 {%- elif endpoint_kafka_key %}
 {%- set _ = msg_key_holder.append(endpoint_kafka_key[-1]) %}
 {%- endif %}
@@ -159,7 +152,7 @@ def {{ test_function_name | dotunderscore }}(kafka_emulator):
             if msg.error():
                 continue
             cloudevent = parse_cloudevent(msg)
-            if cloudevent['type'] == "{{ messageid }}":
+            if cloudevent['type'] == "{{ message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid }}":
                 return msg.key().decode('utf-8') if msg.key() else None
 
     kafka_producer = Producer({'bootstrap.servers': bootstrap_servers})
@@ -175,19 +168,20 @@ def {{ test_function_name | dotunderscore }}(kafka_emulator):
     # Send 5 messages to test message settlement and ordering
     for i in range(5):
         producer_instance.send_{{ messageid | dotunderscore | snake }}(
-            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined -%}
-                _{{ attrname }} = {{ "f'test_{i}'" if not attrname == 'time' else 'datetime.datetime.now().isoformat()' }},
+            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.required and attribute.value is not defined and attrname != 'time' -%}
+                _{{ attrname }} = f'test_{i}',
             {%- endfor -%}
-            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" -%}
-                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}_{{ placeholder | snake }} = f'test_{i}', {% endfor -%}
+            {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" and attrname != 'time' -%}
+                {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if (placeholder | snake) != 'time' %}_{{ placeholder | snake }} = f'test_{i}', {% endfor -%}
             {%- endfor -%}
             {%- if kafka_key_value -%}
                 {%- for placeholder in kafka_key_value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
                     {%- if (placeholder | snake) not in declared_params %}_{{ placeholder | snake }} = f'test_{i}', {% endif -%}
                 {%- endfor -%}
             {%- endif -%}
+            _time = datetime.datetime.now(datetime.timezone.utc).isoformat(),
             data = event_data
-            {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined -%}
+            {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.required and attribute.value is not defined and attrname != 'time' -%}
                 , _{{ attrname }} = ''
             {%- endfor -%}
         )

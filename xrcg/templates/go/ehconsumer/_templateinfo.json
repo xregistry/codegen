@@ -1,0 +1,1 @@
+{"template":"ehconsumer","description":"Go Azure Event Hubs Consumer","language":"go","protocol":"Azure Event Hubs","usage":["consumer"],"requires":["messagegroups"]}

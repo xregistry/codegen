@@ -339,8 +339,9 @@ class {{ class_name }}:
         {%- set messagename = messageid | strip_dots | pascal %}
         {%- set isCloudEvent = (message | exists("envelope","CloudEvents/1.0")) %}
         {%- set message_body_type = util.DeclareDataType( data_project_name, root, message ) | strip_namespace %}
+        {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
         {%- if isCloudEvent %}
-        if cloud_event_type == '{{ messageid }}':
+        if cloud_event_type == '{{ ce_type_value }}':
             if self.{{ messagename | snake }}_handler:
                 {%- if message_body_type == 'object' %}
                 # No data schema defined for this message

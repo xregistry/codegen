@@ -1,18 +1,29 @@
 """Test the TypeScript code generation and integration with the generated code."""
 
+import json
 import platform
 import subprocess
 import sys
 import os
 import tempfile
-import xrcg
 import pytest
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '../..'))
-sys.path.append(os.path.join(project_root))
+sys.path.insert(0, os.path.join(project_root))
+
+import xrcg
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
+
+
+def _typescript_test_environment(style: str) -> dict[str, str]:
+    """Return subprocess environment overrides for generated TypeScript tests."""
+    env = os.environ.copy()
+    if IN_GITHUB_ACTIONS and style in {"sbproducer", "sbconsumer"}:
+        if env.get("ENABLE_SERVICEBUS_TESTS") != "true":
+            env.setdefault("SKIP_SERVICEBUS_TESTS", "true")
+    return env
 
 
 def run_typescript_test(xreg_file: str, output_dir: str, projectname: str, style: str):
@@ -37,6 +48,7 @@ def run_typescript_test(xreg_file: str, output_dir: str, projectname: str, style
                 '--language', "ts"]
     print(f"sys.argv: {sys.argv}")
     assert xrcg.cli() == 0
+    test_env = _typescript_test_environment(style)
     
     # The generated TypeScript project is in a subdirectory based on the style
     # Map style to directory name (e.g., kafkaproducer -> TestProjectKafkaProducer)
@@ -66,16 +78,55 @@ def run_typescript_test(xreg_file: str, output_dir: str, projectname: str, style
     # First, install and build the data project if it exists
     if os.path.exists(data_project_dir):
         print(f"\n=== Installing data project in {data_project_dir} ===")
-        subprocess.check_call(['npm', 'install'], cwd=data_project_dir, shell=use_shell)
+        subprocess.check_call(['npm', 'install'], cwd=data_project_dir, shell=use_shell, env=test_env)
         
         print(f"\n=== Building data project in {data_project_dir} ===")
-        subprocess.check_call(['npm', 'run', 'build'], cwd=data_project_dir, shell=use_shell)
+        subprocess.check_call(['npm', 'run', 'build'], cwd=data_project_dir, shell=use_shell, env=test_env)
     
     # Run npm install in main project
-    subprocess.check_call(['npm', 'install'], cwd=project_dir, shell=use_shell)
+    subprocess.check_call(['npm', 'install'], cwd=project_dir, shell=use_shell, env=test_env)
     
     # Run npm test
-    subprocess.check_call(['npm', 'test'], cwd=project_dir, shell=use_shell)
+    subprocess.check_call(['npm', 'test'], cwd=project_dir, shell=use_shell, env=test_env)
+
+
+def test_generated_typescript_time_placeholder_falls_back_to_now():
+    """TypeScript CloudEvents time placeholders must avoid invalid Date parsing."""
+    import glob
+
+    document = {
+        "messagegroups": {
+            "Example.Group": {
+                "messages": {
+                    "Example.Event": {
+                        "name": "Event",
+                        "envelope": "CloudEvents/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"value": "urn:test"},
+                            "time": {"value": "{event_time}"},
+                            "datacontenttype": {"value": "application/json"},
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {"type": "object", "properties": {"value": {"type": "string"}}},
+                    }
+                }
+            }
+        }
+    }
+    tmpdirname = tempfile.mkdtemp()
+    tmpfile = os.path.join(tmpdirname, "document.json")
+    with open(tmpfile, "w", encoding="utf-8") as handle:
+        json.dump(document, handle)
+
+    sys.argv = ['xrcg', 'generate', '--definitions', tmpfile, '--output', tmpdirname, '--projectname', 'TestProject', '--style', 'producerhttp', '--language', 'ts']
+    assert xrcg.cli() == 0
+
+    candidates = glob.glob(os.path.join(tmpdirname, "**", "producer.ts"), recursive=True)
+    assert candidates, "no producer.ts emitted under " + tmpdirname
+    src = open(candidates[0], encoding="utf-8").read()
+    assert 'new Date().toISOString()' in src
+    assert 'new Date("{event_time}").toUTCString()' not in src
 
 
 def test_kafkaproducer_contoso_erp_ts():
@@ -344,6 +395,13 @@ def test_mqttclient_lightbulb_ts():
                         tmpdirname, "TestProject", "mqttclient")
 
 
+def test_mqttclient_protocoloptions_ts():
+    """ Test the MQTT client for MQTT/5.0 protocoloptions fixture (broker-backed)."""
+    tmpdirname = tempfile.mkdtemp()
+    run_typescript_test(os.path.join(project_root, "test/xreg/mqtt-protocoloptions.xreg.json".replace(
+            '/', os.sep)), tmpdirname, "TestProject", "mqttclient")
+
+
 def test_egproducer_contoso_erp_ts():
     """ Test the Event Grid producer for Contoso ERP."""
     tmpdirname = tempfile.mkdtemp()
@@ -370,3 +428,117 @@ def test_egproducer_lightbulb_ts():
     tmpdirname = tempfile.mkdtemp()
     run_typescript_test(os.path.join(project_root, "test/xreg/lightbulb.xreg.json"),
                         tmpdirname, "TestProject", "egproducer")
+
+
+# ---------------------------------------------------------------------------
+# Wire-format introspection tests (codegen-only, no npm build required).
+#
+# Guard against the CloudEvents AMQP §3.1 prefix violation observed in the
+# TS amqpproducer / ehproducer / sbproducer templates: application-properties
+# carrying CE attributes were being emitted with the non-spec ``ce_*``
+# prefix (Kafka header convention) instead of the spec-mandated
+# ``cloudEvents:*`` prefix. Any compliant CE-AMQP consumer (azure-servicebus
+# ``CloudEvent.from_message``, Knative eventing, NATS adapters, …) will
+# fail to recognize ``ce_*`` keys as CloudEvents attributes.
+# ---------------------------------------------------------------------------
+
+def _generate_ts_producer_src(style, source_filename, xreg_relpath='test/xreg/lightbulb.xreg.json'):
+    """Run xrcg for the given TS style against the requested fixture and return
+    the contents of ``<style-output-dir>/src/<source_filename>`` as a string.
+    """
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    sys.argv = ['xrcg', 'generate',
+                '--definitions', os.path.join(project_root, xreg_relpath.replace('/', os.sep)),
+                '--output', tmpdirname,
+                '--projectname', 'TestProject',
+                '--style', style,
+                '--language', 'ts']
+    assert xrcg.cli() == 0
+    candidates = glob.glob(os.path.join(tmpdirname, '**', source_filename), recursive=True)
+    assert candidates, f'no {source_filename} emitted under {tmpdirname}'
+    return open(candidates[0], encoding='utf-8').read()
+
+
+def test_ts_amqpproducer_emits_cloudevents_prefix_not_ce_underscore():
+    """ts/amqpproducer must emit ``cloudEvents:*`` application-properties
+    keys (CE-AMQP §3.1) rather than the Kafka-style ``ce_*`` prefix that
+    was previously hardcoded in the template.
+    """
+    src = _generate_ts_producer_src('amqpproducer', 'producer.ts')
+    assert "'cloudEvents:specversion'" in src
+    assert "'cloudEvents:id'" in src
+    assert "'cloudEvents:type'" in src
+    assert "'cloudEvents:source'" in src
+    # Regression guards: the buggy spellings must not reappear.
+    for bad in ('ce_specversion', 'ce_id:', 'ce_type:', 'ce_source:',
+                'ce_subject', 'ce_time'):
+        assert bad not in src, (
+            f'ts/amqpproducer must not emit non-spec CE prefix: {bad!r}'
+        )
+
+
+def test_ts_amqpproducer_body_is_buffer_not_object():
+    """ts/amqpproducer must serialize the payload to a ``Buffer`` so rhea
+    emits an AMQP binary section. Passing a raw class instance / string
+    causes rhea to encode an AMQP map / string section, which produces
+    double-encoded wire payloads.
+    """
+    src = _generate_ts_producer_src('amqpproducer', 'producer.ts')
+    assert 'Buffer.from(' in src, (
+        'ts/amqpproducer must coerce payload bodies into Buffer instances'
+    )
+    # The raw-object body bug.
+    assert 'body: data,\n' not in src, (
+        'ts/amqpproducer must not pass raw `data` object as message body '
+        '(rhea would AMQP-encode it as a map)'
+    )
+
+
+def test_ts_amqpproducer_protocoloptions_message_annotations_codegen():
+    """ts/amqpproducer must emit AMQP message_annotations declared in the
+    manifest, including partition-key truncation.
+    """
+    src = _generate_ts_producer_src(
+        'amqpproducer',
+        'producer.ts',
+        'test/xreg/lightbulb-amqp.xreg.json',
+    )
+    assert 'tenantid: string' in src
+    assert 'deviceid: string' in src
+    assert "const message_annotations: Record<string, any> = {};" in src
+    assert "messageAnnotationValue1 = String(messageAnnotationValue1).substring(0, 128);" in src
+    assert "message_annotations['x-opt-partition-key'] = messageAnnotationValue1;" in src
+    assert "message.message_annotations = message_annotations;" in src
+
+
+def test_ts_ehproducer_emits_cloudevents_prefix_not_ce_underscore():
+    """ts/ehproducer must emit ``cloudEvents:*`` keys on EventData.properties
+    (which become AMQP application-properties on the wire).
+    """
+    src = _generate_ts_producer_src('ehproducer', 'producer.ts')
+    assert "'cloudEvents:specversion'" in src
+    assert "'cloudEvents:id'" in src
+    assert "'cloudEvents:type'" in src
+    assert "'cloudEvents:source'" in src
+    for bad in ("'ce_specversion'", "'ce_id'", "'ce_type'", "'ce_source'"):
+        assert bad not in src, (
+            f'ts/ehproducer must not emit non-spec CE prefix: {bad}'
+        )
+
+
+def test_ts_sbproducer_emits_cloudevents_prefix_not_ce_underscore():
+    """ts/sbproducer must emit ``cloudEvents:*`` keys on
+    ServiceBusMessage.applicationProperties.
+    """
+    src = _generate_ts_producer_src('sbproducer', 'producer.ts')
+    assert "'cloudEvents:specversion'" in src
+    assert "'cloudEvents:id'" in src
+    assert "'cloudEvents:type'" in src
+    assert "'cloudEvents:source'" in src
+    for bad in ("'ce_specversion'", "'ce_id'", "'ce_type'", "'ce_source'",
+                'ce_specversion:', 'ce_id:', 'ce_type:', 'ce_source:'):
+        assert bad not in src, (
+            f'ts/sbproducer must not emit non-spec CE prefix: {bad}'
+        )
+

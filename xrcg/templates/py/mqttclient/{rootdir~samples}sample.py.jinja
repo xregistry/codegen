@@ -1,38 +1,34 @@
+{%- import "util.include.jinja" as util -%}
+{%- import "cloudevents.jinja.include" as cloudEvents -%}
 {%- set messagegroups = root.messagegroups %}
 """
-
 {%- filter wordwrap(80) %}
-This is sample code to use the MQTT client{%- if messagegroups|length > 1 -%}s{% endif %} contained in this project.
+Sample usage of {{ main_project_name }}.
 
-The sample demonstrates both publishing and subscribing to MQTT messages with the
-producer and dispatcher functionality.
+This example shows how to consume and publish MQTT messages with the generated
+client{%- if messagegroups|length > 1 -%}s{%- endif %}. Each message group has a
+`<Group>MqttClient` that wraps a paho-mqtt client and both dispatches received
+messages to async handlers you register and exposes `publish_<message>`
+coroutines to send messages.
 
-There is a handler for each defined message type. The handler is an async function that takes the following parameters:
-- mqtt_message: The paho.mqtt.client.MQTTMessage object (message context).
-- cloud_event: The CloudEvent data (if using CloudEvents).
-- message_data: The deserialized message data.
+Message handlers are async functions. CloudEvents message handlers receive
+`(mqtt_message, cloud_event, data, topic_params)`; plain (non-CloudEvents)
+message handlers receive `(mqtt_message, data, topic_params)` where:
+  - mqtt_message: the paho.mqtt.client.MQTTMessage (raw message context),
+  - cloud_event: the CloudEvent envelope (CloudEvents messages only),
+  - data: the deserialized, strongly-typed message data,
+  - topic_params: dict of URI-template placeholders extracted from the topic.
 
-{%- if messagegroups|length == 1 -%}
-The main function creates a client that can both produce and consume messages.
-It starts a dispatcher to handle incoming messages and then publishes sample messages.
-{%- else -%}
-The main function creates clients for each message group that can both produce and consume messages.
-It starts dispatchers to handle incoming messages and then publishes sample messages.
-{%- endif %}
+Configuration is read from the command line or these environment variables:
+  - MQTT_BROKER_HOST: broker hostname (default: localhost),
+  - MQTT_BROKER_PORT: broker port (default: 1883),
+  - MQTT_USERNAME: username (optional),
+  - MQTT_PASSWORD: password (optional).
 
-The script either reads the configuration from the command line or uses the environment variables. The following environment variables are recognized:
+    python sample.py --broker-host <host> --broker-port <port>
 
-- MQTT_BROKER_HOST: The MQTT broker hostname.
-- MQTT_BROKER_PORT: The MQTT broker port (default: 1883).
-- MQTT_TOPIC: The MQTT topic to publish/subscribe to.
-- MQTT_USERNAME: The MQTT username (optional).
-- MQTT_PASSWORD: The MQTT password (optional).
-
-Alternatively, you can pass the configuration as command-line arguments.
-
-python sample.py --broker-host <broker_host> --broker-port <broker_port> --topic <topic>
-
-The main function waits for a signal (Press Ctrl+C) to stop.
+The sample connects, subscribes, publishes one example of each message, then
+waits for incoming messages until interrupted (press Ctrl+C to stop).
 {%- endfilter %}
 """
 
@@ -40,55 +36,166 @@ import argparse
 import asyncio
 import os
 import signal
-from {{data_project_name}} import *
 
+import paho.mqtt.client as mqtt
+
+from {{ data_project_name }} import *
 {%- for messagegroupid, messagegroup in messagegroups.items() %}
-{%- set groupname = messagegroupid | pascal %}
-{%- set producer_class_name = ( groupname | strip_dots ) + "Producer" %}
-{%- set dispatcher_class_name = ( groupname | strip_dots ) + "Dispatcher" %}
-from {{main_project_name}}.client import {{producer_class_name}}, {{dispatcher_class_name}}
+{%- set class_name = (messagegroupid | pascal | strip_dots) + "MqttClient" %}
+from {{ main_project_name }}.client import {{ class_name }}
+{%- endfor %}
+
+{% for messagegroupid, messagegroup in messagegroups.items() %}
 {%- for messageid, message in messagegroup.messages.items() %}
+{%- set handler_attr = messageid | dotunderscore | snake %}
+{%- set isCloudEvent = (message | exists("envelope","CloudEvents/1.0")) %}
+{%- if isCloudEvent %}
+async def handle_{{ handler_attr }}(mqtt_message, cloud_event, data, topic_params):
+    """Handle the CloudEvents '{{ messageid }}' message."""
+    print(f"Received {{ messageid }} on topic {mqtt_message.topic}")
+    print(f"  CloudEvent: id={cloud_event['id']} source={cloud_event['source']} type={cloud_event['type']}")
+    print(f"  Data: {data}")
+    if topic_params:
+        print(f"  Topic params: {topic_params}")
+{%- else %}
+async def handle_{{ handler_attr }}(mqtt_message, data, topic_params):
+    """Handle the plain (non-CloudEvents) '{{ messageid }}' message."""
+    print(f"Received {{ messageid }} on topic {mqtt_message.topic}")
+    print(f"  Data: {data}")
+    if topic_params:
+        print(f"  Topic params: {topic_params}")
+{%- endif %}
 
-async def handle_{{ messageid | dotunderscore | snake }}(mqtt_msg, {%- if message | exists("envelope","CloudEvents/1.0") -%}cloud_event, {% endif %}{{ messageid | dotunderscore | snake }}_data):
-    """ Handles the {{ messageid }} message """
-    print(f"Received {{ messageid }} on topic {mqtt_msg.topic}")
-    {%- if message | exists("envelope","CloudEvents/1.0") %}
-    if cloud_event:
-        print(f"  CloudEvent ID: {cloud_event.id}, Source: {cloud_event.source}")
+{% endfor %}
+{%- endfor %}
+
+def _make_paho_client(client_id):
+    """Create a paho-mqtt client compatible with paho-mqtt 1.x and 2.x.
+
+    The generated client callbacks use the VERSION1 callback signatures, so we
+    request that API version when running on paho-mqtt 2.x.
+    """
+    try:
+        return mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=client_id)
+    except (AttributeError, TypeError):
+        return mqtt.Client(client_id=client_id)
+
+
+async def publish_samples(clients):
+    """Publish one example of each message type using generated test data."""
+    {%- for messagegroupid, messagegroup in messagegroups.items() %}
+    client = clients["{{ messagegroupid }}"]
+    {%- for messageid, message in messagegroup.messages.items() %}
+    {%- set isCloudEvent = (message | exists("envelope","CloudEvents/1.0")) %}
+    {%- set pub_method = "publish_" + (messageid | dotunderscore | snake) %}
+    {%- set data_class = util.DeclareDataType( data_project_name, root, message ) | strip_namespace %}
+    {%- set uri_template_vars = [] %}
+    {%- if isCloudEvent %}
+    {%- for attrname, attribute in message.envelopemetadata.items() %}
+        {%- if attribute.value and attribute.type == "uritemplate" and attrname != "time" %}
+            {%- for placeholder in (attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}')) %}
+                {%- if placeholder not in uri_template_vars %}{%- set _ = uri_template_vars.append(placeholder) %}{%- endif %}
+            {%- endfor %}
+        {%- endif %}
+    {%- endfor %}
     {%- endif %}
-    print(f"  Data: { {{- messageid | dotunderscore | snake -}}_data}")
-{%- endfor %}
-{%- endfor %}
+    {%- set _topic_value = none %}
+    {%- if message.protocoloptions and message.protocoloptions.topic_name %}{%- set _topic_value = message.protocoloptions.topic_name %}
+    {%- elif message.protocoloptions and message.protocoloptions['topic-name'] %}{%- set _topic_value = message.protocoloptions['topic-name'] %}
+    {%- elif message.protocoloptions and message.protocoloptions.topic %}{%- set _topic_value = message.protocoloptions.topic %}{%- endif %}
+    {%- if _topic_value %}
+    {%- for placeholder in (_topic_value | regex_search('\\{([A-Za-z0-9_]+)\\}')) %}
+        {%- if placeholder not in uri_template_vars %}{%- set _ = uri_template_vars.append(placeholder) %}{%- endif %}
+    {%- endfor %}
+    {%- endif %}
+    {%- if data_class != "object" %}
+    try:
+        await client.{{ pub_method }}(
+            {%- if isCloudEvent %}
+            {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.value %}
+            {%- if attribute.type != "uritemplate" and attrname != "time" %}
+            _{{ attrname | snake }}="sample",
+            {%- endif %}
+            {%- endfor %}
+            {%- endif %}
+            {%- for var in uri_template_vars %}
+            {{ var | snake }}="sample",
+            {%- endfor %}
+            data={{ data_class }}.create_instance(),
+        )
+        print("Published {{ messageid }}")
+    except Exception as exc:
+        print(f"Could not publish {{ messageid }}: {exc}")
+    {%- else %}
+    # '{{ messageid }}' has no typed schema (object payload);
+    # build your own payload and call client.{{ pub_method }}(..., data=<payload>).
+    {%- endif %}
+    {%- endfor %}
+    {%- endfor %}
 
-async def main(broker_host, broker_port, topic, username=None, password=None):
-    """ Main function for MQTT client """
-    print(f"Connecting to {broker_host}:{broker_port}...")
-    print(f"Topic: {topic}")
-    print("Press Ctrl+C to stop\n")
-    
-    stop_event = asyncio.Event()
+
+async def main(broker_host, broker_port, username=None, password=None):
+    """Set up the client(s), connect, subscribe, publish samples, then listen."""
     loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGTERM, lambda: stop_event.set())
-    loop.add_signal_handler(signal.SIGINT, lambda: stop_event.set())
-    
-    await stop_event.wait()
+    clients = {}
+
+    {% for messagegroupid, messagegroup in messagegroups.items() %}
+    {%- set class_name = (messagegroupid | pascal | strip_dots) + "MqttClient" %}
+    {%- set groupName = messagegroupid.split('.') | join('_') | lower %}
+    _paho = _make_paho_client("sample-{{ groupName }}")
+    if username:
+        _paho.username_pw_set(username, password)
+    _client = {{ class_name }}(_paho, content_mode='structured', loop=loop)
+    {%- for messageid, message in messagegroup.messages.items() %}
+    _client.{{ messageid | dotunderscore | snake }}_async = handle_{{ messageid | dotunderscore | snake }}
+    {%- endfor %}
+    clients["{{ messagegroupid }}"] = _client
+    {% endfor %}
+
+    print(f"Connecting to {broker_host}:{broker_port} ...")
+    for client in clients.values():
+        await client.connect(broker_host, broker_port)
+        await client.subscribe()
+    print("Connected and subscribed.")
+
+    # Give subscriptions a moment to take effect, then publish a sample of each message.
+    await asyncio.sleep(1)
+    await publish_samples(clients)
+
+    stop_event = asyncio.Event()
+    try:
+        loop.add_signal_handler(signal.SIGINT, stop_event.set)
+        loop.add_signal_handler(signal.SIGTERM, stop_event.set)
+    except NotImplementedError:
+        # Signal handlers are not available on this platform (e.g. Windows).
+        pass
+
+    print("Listening for messages. Press Ctrl+C to stop.")
+    try:
+        await stop_event.wait()
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
+
     print("\nStopping...")
+    for client in clients.values():
+        await client.disconnect()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="MQTT Client")
+    parser = argparse.ArgumentParser(description="MQTT Client sample")
     parser.add_argument('--broker-host', default=os.getenv('MQTT_BROKER_HOST', 'localhost'), help='MQTT broker hostname')
     parser.add_argument('--broker-port', type=int, default=int(os.getenv('MQTT_BROKER_PORT', '1883')), help='MQTT broker port')
-    parser.add_argument('--topic', default=os.getenv('MQTT_TOPIC', 'testtopic'), help='MQTT topic')
     parser.add_argument('--username', default=os.getenv('MQTT_USERNAME'), help='MQTT username (optional)')
     parser.add_argument('--password', default=os.getenv('MQTT_PASSWORD'), help='MQTT password (optional)')
 
     args = parser.parse_args()
 
-    asyncio.run(main(
-        args.broker_host,
-        args.broker_port,
-        args.topic,
-        args.username,
-        args.password
-    ))
+    try:
+        asyncio.run(main(
+            args.broker_host,
+            args.broker_port,
+            args.username,
+            args.password
+        ))
+    except KeyboardInterrupt:
+        print("\nStopped.")

@@ -1,10 +1,11 @@
 {%- import "cloudevents.jinja.include" as cloudEvents -%}
+{%- import "util.jinja.include" as util -%}
 {%- set messagegroups = root.messagegroups %}
 {%- set uses_cloudevents_message = (root | exists("envelope","CloudEvents/1.0")) %}
 {%- if not uses_cloudevents_message %}
 {%- exit -%}
 {%- endif -%}
-import * as types from "./types.js";
+import * as {{ data_project_name | strip_invalid_identifier_characters }} from '../../{{ data_project_name }}/dist/index.js';
 import { httpTransport, emitterFor, CloudEvent } from "cloudevents";
 import { v4 as uuidv4 } from "uuid";
 
@@ -28,8 +29,13 @@ export interface ProducerCredential {
 {% for messagegroupid, messagegroup in messagegroups.items() -%}
 {%- set groupname = messagegroupid  | pascal -%}
 
-export class {{ groupname | strip_dots }}EventProducer
-{
+export class {{ groupname | strip_dots }}EventProducer {
+    private readonly dataschemaOverrides: Readonly<Record<string, string>>;
+
+    private resolveDataschema(uri: string): string {
+        return Object.prototype.hasOwnProperty.call(this.dataschemaOverrides, uri)
+            ? this.dataschemaOverrides[uri] : uri;
+    }
     private credential: ProducerCredential;
     private endpoints: string[];
     private options: ProducerOptions;
@@ -41,8 +47,13 @@ export class {{ groupname | strip_dots }}EventProducer
         endpoints: string[], 
         options: ProducerOptions = {},
         mode: 'binary' | 'structured' = 'structured',
-        format: string = 'application/json'
+        format: string = 'application/json',
+        dataschemaOverrides: Readonly<Record<string, string>> = {}
     ) {
+        this.dataschemaOverrides = { ...dataschemaOverrides };
+        if (Object.entries(this.dataschemaOverrides).some(([key, value]) => !key || typeof value !== 'string' || !value)) {
+            throw new Error('dataschemaOverrides must map nonempty URI strings to nonempty URI strings');
+        }
         this.credential = credential;
         this.endpoints = endpoints;
         this.options = options;
@@ -88,7 +99,7 @@ export class {{ groupname | strip_dots }}EventProducer
    {%- set isMqtt = not isCloudEvent and message.envelope.lower().startswith("mqtt") %}
    async send{{ messagename | strip_namespace }}Async(
    {%- if message.dataschemauri or message.dataschema -%}
-   {% set dataType = "types." + ((message.dataschemauri if message.dataschemauri else message.dataschema) | schema_type( project_name, root, message.dataschemaformat) | strip_namespace | pascal) %}
+   {% set dataType = util.body_type(data_project_name, root, message) %}
    {%- else -%}
    {% set dataType = "Record<string, unknown>" %}
    {%- endif %}    
@@ -115,9 +126,9 @@ export class {{ groupname | strip_dots }}EventProducer
        // Note: CloudEvents library's httpTransport and emitterFor handle
        // binary vs structured mode automatically based on the CloudEvent object.
        // The mode and format fields are available for future enhancements.
-       const transport = httpTransport(this.endpoints[0], { headers });
+       const transport = httpTransport(this.endpoints[0]);
        const emitter = emitterFor(transport);
-       await emitter(cloudEvent);
+       await emitter(cloudEvent, { headers });
    }
 }
 

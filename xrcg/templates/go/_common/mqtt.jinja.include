@@ -1,0 +1,56 @@
+{#- MQTT utility macros for Go -#}
+{%- import "util.jinja.include" as util -%}
+
+{%- macro get_topic(message) -%}
+{%- if message.protocoloptions and message.protocoloptions.topic_name is defined and message.protocoloptions.topic_name -%}
+{{ message.protocoloptions.topic_name }}
+{%- elif message.protocoloptions and message.protocoloptions['topic-name'] is defined and message.protocoloptions['topic-name'] -%}
+{{ message.protocoloptions['topic-name'] }}
+{%- elif message.protocoloptions and message.protocoloptions.topic is defined and message.protocoloptions.topic -%}
+{{ message.protocoloptions.topic }}
+{%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.topic is defined and message.protocoloptions.properties.topic and message.protocoloptions.properties.topic.value is defined and message.protocoloptions.properties.topic.value -%}
+{{ message.protocoloptions.properties.topic.value }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro body_type(data_project_name, root, message) -%}
+{%- if (message.dataschemauri is defined and message.dataschemauri or message.dataschema is defined and message.dataschema) and message.dataschemaformat is defined and message.dataschemaformat -%}
+{{ util.body_type(data_project_name, root, message) }}
+{%- else -%}
+[]byte
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro get_content_type(message) -%}
+{%- if message.envelope is defined and message.envelope == "CloudEvents/1.0" and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype -%}
+"{{ message.envelopemetadata.datacontenttype.value }}"
+{%- elif message.dataschemaformat is defined and message.dataschemaformat -%}
+{{ util.get_content_type(message) }}
+{%- elif message.dataschemauri is defined and message.dataschemauri and "Protobuf" in message.dataschemauri -%}
+"application/protobuf"
+{%- elif message.dataschemauri is defined and message.dataschemauri and ("JSON" in message.dataschemauri or "json" in message.dataschemauri) -%}
+"application/json"
+{%- else -%}
+"application/octet-stream"
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro get_qos(message) -%}
+{%- if message.protocoloptions and message.protocoloptions.qos is defined and message.protocoloptions.qos is not none -%}
+{{ message.protocoloptions.qos }}
+{%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.qos is defined and message.protocoloptions.properties.qos and message.protocoloptions.properties.qos.value is defined and message.protocoloptions.properties.qos.value is not none -%}
+{{ message.protocoloptions.properties.qos.value }}
+{%- else -%}
+1
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro get_retain(message) -%}
+{%- if message.protocoloptions and message.protocoloptions.retain is defined and message.protocoloptions.retain is not none -%}
+{{ "true" if message.protocoloptions.retain else "false" }}
+{%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.retain is defined and message.protocoloptions.properties.retain and message.protocoloptions.properties.retain.value is defined and message.protocoloptions.properties.retain.value is not none -%}
+{{ "true" if message.protocoloptions.properties.retain.value else "false" }}
+{%- else -%}
+false
+{%- endif -%}
+{%- endmacro -%}

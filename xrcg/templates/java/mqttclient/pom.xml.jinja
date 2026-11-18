@@ -1,6 +1,6 @@
 {%- import "cloudevents.jinja.include" as cloudEvents -%}
 {%- import "mqtt.jinja.include" as mqtt -%}
-{%- set uses_cloudevents = cloudEvents.usesCloudEvents(root) -%}
+{%- set uses_cloudevents = true -%}
 {%- set uses_avro = (root | exists("dataschemaformat", "Avro")) -%}
 {%- macro dep(name) -%}{{ dependency('java', 'jdk21', name) }}{%- endmacro -%}
 <project xmlns="http://maven.apache.org/POM/4.0.0" 
@@ -33,7 +33,7 @@
   
   <dependencies>
     <!-- Eclipse Paho MQTT Client -->
-    {{ dep('org.eclipse.paho.client.mqttv3') }}
+    {{ dep('org.eclipse.paho.mqttv5.client') }}
     
     <!-- Logging -->
     {{ dep('log4j-api') }}

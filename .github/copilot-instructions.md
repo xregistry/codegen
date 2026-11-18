@@ -35,7 +35,7 @@ xRegistry documents that we handle here in particular contain three interconnect
 ### 3. Template System Architecture
 
 ```
-xregistry/templates/
+xrcg/templates/
 ├── {language}/           # cs, java, py, ts, asaql, asyncapi, openapi
 │   ├── _templateinfo.json          # Language metadata (priority, description)
 │   ├── _common/                    # Shared Jinja macros
@@ -53,10 +53,10 @@ xregistry/templates/
 
 ### 4. Core Generation Pipeline
 
-1. **XRegistryLoader** (`xregistry/generator/xregistry_loader.py`): Loads and validates xRegistry documents, performs **basemessage resolution** (transitive inheritance via `basemessageurl` attribute—see [`docs/basemessage_resolution.md`](../docs/basemessage_resolution.md))
-2. **ResourceProcessor** (`xregistry/generator/resource_processor.py`): Traverses document, filters by `--messagegroup` or `--endpoint`, resolves JSON Pointer references
-3. **SchemaProcessor** (`xregistry/generator/schema_processor.py`): Collects schemas, queues them for Avrotize conversion (JSON Schema ↔ Avro ↔ Protobuf)
-4. **TemplateRenderer** (`xregistry/generator/template_renderer.py`): Renders Jinja2 templates with custom filters (pascal/camel/snake case, regex ops—see `xregistry/generator/jinja_filters.py`)
+1. **XRegistryLoader** (`xrcg/generator/xregistry_loader.py`): Loads and validates xRegistry documents, performs **basemessage resolution** (transitive inheritance via `basemessageurl` attribute—see [`docs/basemessage_resolution.md`](../docs/basemessage_resolution.md))
+2. **ResourceProcessor** (`xrcg/generator/resource_processor.py`): Traverses document, filters by `--messagegroup` or `--endpoint`, resolves JSON Pointer references
+3. **SchemaProcessor** (`xrcg/generator/schema_processor.py`): Collects schemas, queues them for Avrotize conversion (JSON Schema ↔ Avro ↔ Protobuf)
+4. **TemplateRenderer** (`xrcg/generator/template_renderer.py`): Renders Jinja2 templates with custom filters (pascal/camel/snake case, regex ops—see `xrcg/generator/jinja_filters.py`)
 5. **Avrotize Integration**: Batch-converts schemas to target language using `avrotize` library, generates data classes
 
 ### 5. Command Structure & Configuration
@@ -73,7 +73,7 @@ xrcg catalog endpoint get --id orders-endpoint # Requires registry.base_url conf
 
 **Config precedence:** CLI args → `xrcg config` values → environment (`XREGISTRY_MODEL_PATH`) → defaults
 
-**Config storage:** `%APPDATA%\xregistry\config.json` (Windows) / `~/.config/xregistry/config.json` (Linux/Mac)
+**Config storage:** `%APPDATA%\xrcg\config.json` (Windows) / `~/.config/xrcg/config.json` (Linux/Mac)
 
 ## Testing Best Practices
 
@@ -118,7 +118,7 @@ xrcg catalog endpoint get --id orders-endpoint # Requires registry.base_url conf
 
 ### Adding a New Template Style
 
-1. Create directory: `xregistry/templates/{language}/{new-style}/`
+1. Create directory: `xrcg/templates/{language}/{new-style}/`
 2. Add `_templateinfo.json` with `description`, `priority`, `main_project_name`, `data_project_name`
 3. Add Jinja templates (use existing styles as reference—copy from `producer` or `consumer`)
 4. Add test case in `test/{language}/test_{language}.py` using sample definitions from `samples/message-definitions/`
@@ -126,10 +126,11 @@ xrcg catalog endpoint get --id orders-endpoint # Requires registry.base_url conf
 
 ### Debugging Template Rendering
 
-- Enable debug logging: Set `logging.basicConfig(level=logging.DEBUG)` in `xregistry/cli.py`
+- Enable debug logging: Set `logging.basicConfig(level=logging.DEBUG)` in `xrcg/cli.py`
 - Check context variables: Templates receive `root_document`, `messagegroup`, `endpoint`, `message`, `schema` variables
 - Use `{% do log(variable) %}` in templates to debug (via `JinjaExtensions.log`)
 - Inspect rendered output before compilation—generated code is in `--output` dir
+- **Jinja whitespace:** the env uses default `trim_blocks=False`/`lstrip_blocks=False`, so indentation/newlines are controlled solely by explicit `{%-`/`-%}` markers. Always verify generated Python with `py_compile`. Filename placeholders in templates use `!` modifiers (e.g. `{mainprojectdir!dotunderscore!lower}`) and `~` segments (e.g. `{rootdir~samples}` → `samples/`); `main_project_name`/`data_project_name` come from each style's `_templateinfo.json`.
 
 ### Extending Schema Support
 
@@ -147,12 +148,12 @@ Schema conversion is handled by **Avrotize**—don't reinvent schema translation
 
 | File | Purpose |
 |------|---------|
-| `xregistry/cli.py` | Argument parsing, subcommand registration |
-| `xregistry/commands/generate_code.py` | Entry point for code generation |
-| `xregistry/generator/template_renderer.py` | Core rendering engine (~1100 lines) |
-| `xregistry/generator/xregistry_loader.py` | Document loading, basemessage resolution |
-| `xregistry/generator/jinja_filters.py` | Custom Jinja2 filters (case conversion, regex) |
-| `xregistry/common/model.py` | xRegistry model schema definitions |
+| `xrcg/cli.py` | Argument parsing, subcommand registration |
+| `xrcg/commands/generate_code.py` | Entry point for code generation |
+| `xrcg/generator/template_renderer.py` | Core rendering engine (~1100 lines) |
+| `xrcg/generator/xregistry_loader.py` | Document loading, basemessage resolution |
+| `xrcg/generator/jinja_filters.py` | Custom Jinja2 filters (case conversion, regex) |
+| `xrcg/common/model.py` | xRegistry model schema definitions |
 | `samples/message-definitions/*.xreg.json` | Test fixtures (Contoso ERP, Inkjet, etc.) |
 
 ## Anti-Patterns to Avoid

@@ -1,0 +1,49 @@
+{
+  "messagegroups": {
+    "com.example.grp1": {
+      "envelope": "CloudEvents/1.0",
+      "messages": {
+        "com.example.grp1.personEvent": {
+          "envelope": "CloudEvents/1.0",
+          "envelopemetadata": {
+            "id": {
+              "type": "string",
+              "required": true
+            },
+            "type": {
+              "type": "string",
+              "value": "com.example.grp1.personEvent",
+              "required": true
+            },
+            "source": {
+              "type": "uritemplate",
+              "value": "",
+              "required": true
+            },
+            "datacontenttype": {
+              "type": "string",
+              "value": "application/xml"
+            }
+          },
+          "dataschemaformat": "XSD/1.1",
+          "dataschemauri": "#/schemagroups/com.example.grp1/schemas/Person"
+        }
+      }
+    }
+  },
+  "schemagroups": {
+    "com.example.grp1": {
+      "schemas": {
+        "Person": {
+          "format": "XSD/1.1",
+          "versions": {
+            "1": {
+              "format": "XSD/1.1",
+              "schema": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"http://example.com/grp1\" xmlns=\"http://example.com/grp1\" elementFormDefault=\"qualified\">\n  <xs:element name=\"Person\">\n    <xs:complexType>\n      <xs:sequence>\n        <xs:element name=\"name\" type=\"xs:string\"/>\n        <xs:element name=\"age\" type=\"xs:int\"/>\n      </xs:sequence>\n      <xs:attribute name=\"id\" type=\"xs:string\"/>\n    </xs:complexType>\n  </xs:element>\n</xs:schema>"
+            }
+          }
+        }
+      }
+    }
+  }
+}

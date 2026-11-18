@@ -7,6 +7,107 @@
 {{- (attrname in ['source', 'type'] and attrname not in message.envelopemetadata) -}}
 {%- endmacro -%}
 
+# Emits a quoted Python string literal with the message's declared datacontenttype,
+# or 'application/json' when the message does not declare one. Used as the default
+# value for producer send() content_type parameters so a message whose declared
+# datacontenttype is e.g. application/xml serializes as XML by default.
+{%- macro DefaultContentType(message) -%}
+{%- set schema_format = message.dataschemaformat | default("", true) | lower -%}
+{%- if schema_format.startswith("avro") -%}
+{%- if message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and message.envelopemetadata.datacontenttype.value -%}
+'{{ message.envelopemetadata.datacontenttype.value }}'
+{%- else -%}
+'avro/binary'
+{%- endif -%}
+{%- elif schema_format.startswith("proto") -%}
+'application/protobuf'
+{%- elif schema_format.startswith("xsd") or schema_format.startswith("xmlschema") -%}
+{%- if message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
+'{{ message.envelopemetadata.datacontenttype.value }}'
+{%- else -%}
+'application/xml'
+{%- endif -%}
+{%- elif schema_format.startswith("jsonschema") or schema_format.startswith("jsonstructure") -%}
+'application/json'
+{%- elif message.envelopemetadata is defined and message.envelopemetadata and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata.datacontenttype and message.envelopemetadata.datacontenttype.value -%}
+'{{ message.envelopemetadata.datacontenttype.value }}'
+{%- else -%}
+'application/json'
+{%- endif -%}
+{%- endmacro -%}
+
+{# Normalize the Avro media-type alias for Avrotize, not for wire metadata. #}
+{%- macro SerializerContentType(content_type) -%}
+{{ content_type }}.replace("application/vnd.apache.org.avro+avro", "application/vnd.apache.avro+avro", 1)
+{%- endmacro -%}
+
+{%- macro DeclareRfc3339TimeNormalizer() -%}
+_RFC3339_TIMESTAMP_PATTERN = re.compile(
+    r'^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})?$'
+)
+
+
+def _normalize_cloudevents_time(value: typing.Any) -> typing.Optional[str]:
+    """Validate and normalize CloudEvents ``time`` to RFC 3339."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat().replace('+00:00', 'Z')
+    text = str(value).strip()
+    if not text:
+        raise ValueError("CloudEvents 'time' must be an RFC 3339 timestamp")
+    if not _RFC3339_TIMESTAMP_PATTERN.fullmatch(text):
+        raise ValueError("CloudEvents 'time' must be an RFC 3339 timestamp")
+    normalized = text
+    if normalized[10] == 't':
+        normalized = normalized[:10] + 'T' + normalized[11:]
+    if normalized.endswith('z'):
+        normalized = normalized[:-1] + 'Z'
+    if normalized.endswith('Z'):
+        normalized = normalized[:-1] + '+00:00'
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError("CloudEvents 'time' must be an RFC 3339 timestamp") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.isoformat().replace('+00:00', 'Z')
+
+
+def _resolve_cloudevents_time(
+    override: typing.Any = None,
+    fallback: typing.Any = None,
+) -> str:
+    """Resolve CloudEvents ``time`` from override, fallback, or current UTC."""
+    if override is not None:
+        return _normalize_cloudevents_time(override)
+    if fallback is not None:
+        return _normalize_cloudevents_time(fallback)
+    return _normalize_cloudevents_time(datetime.now(timezone.utc))
+{%- endmacro -%}
+
+{%- macro RenderLegacyTimeFallback(attribute, placeholder_prefix) -%}
+{%- if attribute.value and attribute.type == "uritemplate" -%}
+{%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if phs -%}
+("{{ attribute.value }}".format({% for placeholder in phs %}{{ placeholder }}={{ placeholder_prefix }}{{ placeholder | snake }}{% if not loop.last %}, {% endif %}{% endfor %}) if {% for placeholder in phs %}{{ placeholder_prefix }}{{ placeholder | snake }} is not None{% if not loop.last %} and {% endif %}{% endfor %} else None)
+{%- else -%}
+"{{ attribute.value }}"
+{%- endif -%}
+{%- elif attribute.value and attribute.type != "uritemplate" -%}
+{%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if phs -%}
+None
+{%- else -%}
+"{{ attribute.value }}"
+{%- endif -%}
+{%- else -%}
+None
+{%- endif -%}
+{%- endmacro -%}
+
 # Generates a list of arguments for "send" methods that correspond to placeholders in uritemplates
 {%- macro DeclareUriTemplateArguments(message) -%}
 {%- for attrname in message.envelopemetadata if attrname not in ["datacontenttype", "dataschema"] -%}
@@ -27,7 +128,7 @@
 {%- macro DeclareCloudNativeCloudEvent(variable, message) -%}
 cloud_event = {
     "datacontenttype": content_type,
-    "dataschema": "{{message.dataschemauri.lstrip('#/')}}" if "{{message.dataschemauri}}" else None,
+    "dataschema": {{ message.envelopemetadata.dataschema.value | tojson if message.envelopemetadata.dataschema and message.envelopemetadata.dataschema.value else "None" }},
     "subject": "{{message.envelopemetadata['subject'].value}}" if "{{message.envelopemetadata['subject'].value}}" else subject,
     "type": "{{message.envelopemetadata['type'].value}}" if "{{message.envelopemetadata['type'].value}}" else type,
     "source": "{{message.envelopemetadata['source'].value}}" if "{{message.envelopemetadata['source'].value}}" else source,

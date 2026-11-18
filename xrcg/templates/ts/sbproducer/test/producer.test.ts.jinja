@@ -180,8 +180,9 @@ describeTest('{{ project_name | strip_dots | pascal }} Service Bus Producer Test
                 for (let i = 0; i < 5; i++) {
                     await producer.send{{ messagename }}(
                         testData
+                        {%- set _emitted_uri_params = [] -%}
                         {%- for attrname, attribute in message.envelopemetadata.items() if attribute.type == "uritemplate" %}
-                        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %},
+                        {%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') if placeholder not in _emitted_uri_params %}{% set _ = _emitted_uri_params.append(placeholder) %},
                         `test_{{ placeholder }}_${i}`
                         {%- endfor %}
                         {%- endfor %}

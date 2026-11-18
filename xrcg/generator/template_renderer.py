@@ -127,6 +127,8 @@ class TemplateRenderer:
             raise RuntimeError(
                 f"Definitions file not found or invalid {self.xreg_file_arg}")
 
+        SchemaUtils.project_schema_references(self.ctx, xregistry_document, self.headers)
+
         pt = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
         code_template_dir = os.path.join(
             pt, "templates", self.language, self.style)
@@ -224,6 +226,9 @@ class TemplateRenderer:
                 # Convert Proto to Avro if needed
                 elif schema_info["format_short"] == "proto":
                     self.convert_proto_to_avro_if_needed(schema_info)
+                # Convert XSD to Avro if needed
+                elif schema_info["format_short"] == "xsd":
+                    self.convert_xsd_to_avro_if_needed(schema_info)
                 
                 avrotize_queue.append(schema_info)
             else:
@@ -235,12 +240,14 @@ class TemplateRenderer:
                 )        
         # Process avrotize queue using the refactored approach
         if not self.suppress_schema_output and (avrotize_queue or xsd_models):
+            os.makedirs(project_data_dir, exist_ok=True)
             # Separate JSON Structure schemas from Avro/other schemas
             jstruct_schemas = [s for s in avrotize_queue if s.get("format_short") == "jstruct"]
             avro_schemas = [s for s in avrotize_queue if s.get("format_short") != "jstruct"]
             
             avro_enabled = self.template_args.get("avro-encoding", "false") == "true" or any("avro" in a["format_short"] for a in avro_schemas)
             json_enabled = self.template_args.get("json-encoding", "true") == "true"
+            xml_enabled = self.template_args.get("xml-encoding", "false") == "true" or any(a.get("xml") for a in avrotize_queue)
             
             # Helper to get unique key for a schema
             def get_schema_key(schema_content: JsonNode) -> str:
@@ -265,7 +272,7 @@ class TemplateRenderer:
                 if len(jstruct_merged) == 1:
                     jstruct_merged = jstruct_merged[0]
                 
-                self._process_jstruct_schemas(jstruct_merged, project_data_dir, json_enabled)
+                self._process_jstruct_schemas(jstruct_merged, project_data_dir, json_enabled, avro_enabled, xml_enabled)
             
             # Process Avro/converted schemas
             if avro_schemas or xsd_models:
@@ -275,6 +282,9 @@ class TemplateRenderer:
                     content = schema_info["content"]
                     contents = content if isinstance(content, list) else [content]
                     for c in contents:
+                        if not isinstance(c, dict):
+                            logger.debug("Skipping non-object top-level Avro schema entry from %s", schema_info.get("reference"))
+                            continue
                         key = get_schema_key(c)
                         if key not in seen_keys:
                             seen_keys.add(key)
@@ -290,35 +300,47 @@ class TemplateRenderer:
                 if self.language == "py":
                     avrotize.convert_avro_schema_to_python(
                         merged_schema, project_data_dir, package_name=self.data_project_name,
-                        dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled
+                        dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled,
+                        xml_annotation=xml_enabled
                     )
                 elif self.language == "cs":
                     avrotize.convert_avro_schema_to_csharp(
                         merged_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
                         pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled,
-                        system_xml_annotation=bool(xsd_models)
+                        system_xml_annotation=xml_enabled or bool(xsd_models),
+                        target_framework=self._get_target_framework()
                     )
-                    self._update_csproj_target_framework(project_data_dir)
                 elif self.language == "java":
                     # Java: use lowercase package name to match Maven artifact conventions
                     java_package_name = self.data_project_name.lower().replace('-', '_')
                     avrotize.convert_avro_schema_to_java(
                         merged_schema, project_data_dir, package_name=java_package_name,
-                        jackson_annotation=json_enabled, avro_annotation=avro_enabled
+                        jackson_annotation=json_enabled, avro_annotation=avro_enabled,
+                        xml_annotation=xml_enabled
                     )
                 elif self.language == "js":
                     avrotize.convert_avro_schema_to_javascript(
-                        merged_schema, project_data_dir, package_name=self.data_project_name, avro_annotation=avro_enabled
+                        merged_schema, project_data_dir, package_name=self.data_project_name,
+                        avro_annotation=avro_enabled, xml_annotation=xml_enabled
                     )
                 elif self.language == "ts":
                     avrotize.convert_avro_schema_to_typescript(
                         merged_schema, project_data_dir, package_name=self.data_project_name,
-                        avro_annotation=avro_enabled, typedjson_annotation=json_enabled
+                        avro_annotation=avro_enabled, typedjson_annotation=json_enabled,
+                        xml_annotation=xml_enabled
                     )
                 elif self.language == "go":
                     avrotize.convert_avro_schema_to_go(
                         merged_schema, project_data_dir, package_name=self.data_project_name,
-                        avro_annotation=avro_enabled, json_annotation=json_enabled
+                        avro_annotation=avro_enabled, json_annotation=json_enabled,
+                        xml_annotation=xml_enabled
+                    )
+                elif self.language == "rust":
+                    avrotize.convert_avro_schema_to_rust(
+                        merged_schema, project_data_dir,
+                        package_name=JinjaFilters.rust_package(self.data_project_name),
+                        avro_annotation=avro_enabled, serde_annotation=json_enabled,
+                        xml_annotation=xml_enabled
                     )
         self.render_code_templates(
             self.project_name, self.main_project_name, self.data_project_name, self.style, project_dir, xregistry_document,
@@ -387,19 +409,25 @@ class TemplateRenderer:
             reference = pointer
         return SchemaUtils.schema_type(self.ctx, reference, project, root, schema_format)
 
-    def _process_jstruct_schemas(self, jstruct_schema: JsonNode, project_data_dir: str, json_enabled: bool) -> None:
+    def _process_jstruct_schemas(self, jstruct_schema: JsonNode, project_data_dir: str, json_enabled: bool, avro_enabled: bool = False, xml_enabled: bool = False) -> None:
         """Process JSON Structure schemas using dedicated Avrotize converters.
         
         Args:
             jstruct_schema: The JSON Structure schema(s) to process
             project_data_dir: Directory for generated data classes
             json_enabled: Whether to enable JSON serialization annotations
+            avro_enabled: Whether to enable Avro serialization annotations (only honored
+                where avrotize's structure-to-language wrapper supports it; structuretojava
+                has no Avro emitter, so this flag is ignored for Java).
+            xml_enabled: Whether to enable XML serialization annotations on the emitted
+                data classes.
         """
         from avrotize.structuretocsharp import convert_structure_schema_to_csharp
         from avrotize.structuretojava import convert_structure_schema_to_java
         from avrotize.structuretopython import convert_structure_schema_to_python
         from avrotize.structuretogo import convert_structure_schema_to_go
         from avrotize.structuretots import convert_structure_schema_to_typescript
+        from avrotize.structuretorust import convert_structure_schema_to_rust
         
         logger.debug("Processing JSON Structure schemas with Avrotize")
         
@@ -409,29 +437,43 @@ class TemplateRenderer:
         if self.language == "py":
             convert_structure_schema_to_python(
                 jstruct_schema, project_data_dir, package_name=self.data_project_name,
-                dataclasses_json_annotation=json_enabled
+                dataclasses_json_annotation=json_enabled, avro_annotation=avro_enabled,
+                xml_annotation=xml_enabled
             )
         elif self.language == "cs":
             convert_structure_schema_to_csharp(
                 jstruct_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
-                pascal_properties=True, system_text_json_annotation=json_enabled
+                pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled,
+                system_xml_annotation=xml_enabled,
+                target_framework=self._get_target_framework()
             )
         elif self.language == "java":
-            # Java: use lowercase package name to match Maven artifact conventions
+            # Java: use lowercase package name to match Maven artifact conventions.
+            # avrotize.structuretojava has no Avro emitter, so avro_enabled is intentionally not forwarded here.
             java_package_name = self.data_project_name.lower().replace('-', '_')
             convert_structure_schema_to_java(
                 jstruct_schema, project_data_dir, package_name=java_package_name,
-                jackson_annotation=json_enabled
+                jackson_annotation=json_enabled, xml_annotation=xml_enabled
             )
         elif self.language == "ts":
             convert_structure_schema_to_typescript(
                 jstruct_schema, project_data_dir, package_name=self.data_project_name,
-                typedjson_annotation=json_enabled
+                typedjson_annotation=json_enabled, avro_annotation=avro_enabled,
+                xml_annotation=xml_enabled
             )
         elif self.language == "go":
             convert_structure_schema_to_go(
                 jstruct_schema, project_data_dir, package_name=self.data_project_name,
-                json_annotation=json_enabled
+                json_annotation=json_enabled, avro_annotation=avro_enabled,
+                xml_annotation=xml_enabled
+            )
+        elif self.language == "rust":
+            # avrotize.structuretorust has no Avro emitter, so avro_enabled is
+            # intentionally not forwarded here.
+            convert_structure_schema_to_rust(
+                jstruct_schema, project_data_dir,
+                package_name=JinjaFilters.rust_package(self.data_project_name),
+                serde_annotation=json_enabled
             )
 
     def convert_proto_to_avro(self, schema_reference: str, schema_root: str) -> JsonNode:
@@ -519,22 +561,6 @@ class TemplateRenderer:
             if m:
                 return m.group(1)
         return 'net10.0'
-
-    def _update_csproj_target_framework(self, project_data_dir: str) -> None:
-        """Update Avrotize-generated .csproj files to match our target framework."""
-        target_fw = self._get_target_framework()
-        for csproj_path in glob.glob(os.path.join(project_data_dir, '**', '*.csproj'), recursive=True):
-            with open(csproj_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            updated = re.sub(
-                r'<TargetFramework>net\d+\.\d+</TargetFramework>',
-                f'<TargetFramework>{target_fw}</TargetFramework>',
-                content
-            )
-            if updated != content:
-                with open(csproj_path, 'w', encoding='utf-8') as f:
-                    f.write(updated)
-                logger.debug("Updated TargetFramework to %s in %s", target_fw, csproj_path)
 
     def render_code_templates(
             self, code_project_name: str, main_project_name: str, data_project_name: str,
@@ -1028,6 +1054,9 @@ class TemplateRenderer:
         env.filters['toyaml'] = JinjaFilters.to_yaml
         env.filters['proto'] = JinjaFilters.proto
         env.filters['go_type'] = JinjaFilters.go_type
+        env.filters['go_package'] = JinjaFilters.go_package
+        env.filters['rust_type'] = JinjaFilters.rust_type
+        env.filters['rust_package'] = JinjaFilters.rust_package
         env.filters['exists'] = JinjaFilters.exists
         env.filters['existswithout'] = JinjaFilters.exists_without
         env.filters['push'] = self.ctx.stacks.push
@@ -1065,6 +1094,18 @@ class TemplateRenderer:
     def collect_schema_references_from_document(self, document: JsonNode) -> set[str]:
         """Collect all schema references from the composed document."""
         schema_refs = set()
+
+        def should_collect_inline_schema(current_path: str) -> bool:
+            """Only collect direct inline schema bodies outside schemagroups.
+
+            Schema versions under ``schemagroups/.../versions/.../schema`` are
+            already reachable through ``dataschema*`` references. Collecting the
+            raw inline body again causes the same logical schema set to be
+            processed twice (for example JsonStructure plus Avro variants in the
+            same manifest), which can overwrite generated package exports.
+            """
+            normalized_path = current_path.replace("\\", "/")
+            return "/schemagroups/" not in f"/{normalized_path}"
         
         def scan_for_schemas(obj: JsonNode, path: str = "") -> None:
             if isinstance(obj, dict):
@@ -1072,15 +1113,15 @@ class TemplateRenderer:
                     current_path = f"{path}/{key}" if path else key
                     
                     # Look for schema reference properties
-                    if key in ["dataschemaxid", "dataschema", "schema", "schemaurl", "dataschemaurl", "dataschemauri"] and isinstance(value, str):
-                        if key == "schema" and self.is_xsd_doc(value):
-                            continue
+                    if key in ["dataschemaxid", "dataschema", "schemaurl", "dataschemaurl", "dataschemauri"] and isinstance(value, str):
                         schema_refs.add(self._local_schema_reference(value))
                     
                     # Look for inline schemas
                     elif key == "schema" and isinstance(value, (dict, str)):
-                        schema_pointer = f"#{path}/schema"
-                        schema_refs.add(schema_pointer)
+                        if should_collect_inline_schema(current_path):
+                            schema_pointer = f"#{path}/schema"
+                            schema_refs.add(schema_pointer)
+                        continue
                     
                     # Recursively scan nested objects
                     scan_for_schemas(value, current_path)
@@ -1159,11 +1200,7 @@ class TemplateRenderer:
         
         # Handle schema definitions with versions
         if "versions" in schema_dict and isinstance(schema_dict["versions"], dict):
-            latest_version_id = schema_dict.get("defaultversionid")
-            if not latest_version_id or latest_version_id not in schema_dict["versions"]:
-                latest_version_id = max(schema_dict["versions"].keys())
-            
-            schema_version = schema_dict["versions"][latest_version_id]
+            _, schema_version = SchemaUtils.select_schema_version(schema_dict)
             if isinstance(schema_version, dict):
                 return self._extract_from_schema_version(schema_ref, schema_version, schema_dict)
 
@@ -1262,21 +1299,14 @@ class TemplateRenderer:
             return None
 
         # Extract names
+        schema_group_id = self._extract_namespace_from_ref(schema_ref)
         schema_id = schema_version.get("schemaid") or parent_schema.get("schemaid", "")
-        class_name = schema_id
+        class_name = schema_id or self._extract_class_name_from_ref(schema_ref)
 
-        # Extract group from reference path
-        schema_group_id = ""
-        if schema_ref.startswith("#"):
-            path_parts = schema_ref.split("/")
-            for i, part in enumerate(path_parts):
-                if part == "schemagroups" and i + 1 < len(path_parts):
-                    schema_group_id = path_parts[i + 1]
-                    break
-
-        # Build qualified class name
-        if schema_group_id and class_name and not class_name.startswith(schema_group_id):
+        if schema_group_id and class_name and "." not in class_name:
             class_name = f"{schema_group_id}.{class_name}"
+
+        namespace = JinjaFilters.namespace(class_name) or schema_group_id
 
         format_short = self._get_format_short(schema_format)
 
@@ -1286,6 +1316,7 @@ class TemplateRenderer:
             "format": schema_format,
             "format_short": format_short,
             "class_name": class_name,
+            "namespace": namespace,
             "schema_id": schema_id,
             "schema_group_id": schema_group_id
         }
@@ -1301,7 +1332,7 @@ class TemplateRenderer:
             return "jstruct"
         elif format_lower.startswith("avro"):
             return "avro"
-        elif format_lower.startswith("xsd"):
+        elif format_lower.startswith("xsd") or format_lower.startswith("xmlschema"):
             return "xsd"
         return "unknown"
 
@@ -1314,7 +1345,7 @@ class TemplateRenderer:
 
     def should_use_avrotize(self, schema_info: Dict[str, Any]) -> bool:
         """Check if schema should be processed with avrotize."""
-        return schema_info["format_short"] != "xsd" and self.language in ["py", "cs", "java", "js", "ts", "go"]
+        return self.language in ["py", "cs", "java", "js", "ts", "go", "rust"]
 
     def convert_json_to_avro_if_needed(self, schema_info: Dict[str, Any]) -> None:
         """Convert JSON schema to Avro if needed."""
@@ -1359,6 +1390,54 @@ class TemplateRenderer:
                     os.unlink(temp_proto_path)
                 if os.path.exists(temp_avro_path):
                     os.unlink(temp_avro_path)
+
+    def convert_xsd_to_avro_if_needed(self, schema_info: Dict[str, Any]) -> None:
+        """Convert an XSD (XML Schema) definition to Avro if needed.
+
+        Inline XSD content is written to a temporary file and converted with
+        avrotize's ``xsdtoavro`` converter. The resulting Avro schema carries
+        ``xmlkind`` hints (element/attribute) and an optional ``xmlns`` that the
+        language emitters use to produce XML serialization code. The schema is
+        marked with ``xml=True`` so the dispatch step enables XML annotations.
+        """
+        if schema_info["format_short"] != "xsd":
+            return
+
+        xsd_content = schema_info["content"]
+        if not isinstance(xsd_content, str):
+            # Non-inline / already-parsed content isn't convertible here.
+            logger.warning(
+                "XSD schema %s content is not an inline XML string; skipping XSD->Avro conversion",
+                schema_info.get("reference"))
+            return
+
+        import avrotize.xsdtoavro as xsdtoavro
+        import tempfile
+        import os
+
+        namespace = schema_info.get("namespace", "") or None
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.xsd', delete=False, encoding='utf-8') as xsd_file:
+            xsd_file.write(xsd_content)
+            temp_xsd_path = xsd_file.name
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.avsc', delete=False) as avro_file:
+            temp_avro_path = avro_file.name
+
+        try:
+            xsdtoavro.convert_xsd_to_avro(temp_xsd_path, temp_avro_path, namespace=namespace)
+            with open(temp_avro_path, 'r', encoding='utf-8') as f:
+                avro_schema = json.load(f)
+            schema_info["content"] = avro_schema
+            schema_info["format_short"] = "avro"
+            # Mark the schema as XML-derived so the dispatch step enables XML
+            # serialization annotations on the emitted data classes.
+            schema_info["xml"] = True
+        finally:
+            if os.path.exists(temp_xsd_path):
+                os.unlink(temp_xsd_path)
+            if os.path.exists(temp_avro_path):
+                os.unlink(temp_avro_path)
 
     def _convert_json_to_avro(self, json_schema: JsonNode, class_name: str, namespace: str = "") -> JsonNode:
         """Basic JSON to Avro conversion."""

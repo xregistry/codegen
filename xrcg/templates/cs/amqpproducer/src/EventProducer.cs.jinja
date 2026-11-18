@@ -28,6 +28,22 @@ namespace {{ project_name | pascal }}
     /// </remarks>
      public partial class {{ class_name }} : IDisposable
      {
+        private readonly System.Collections.Generic.IReadOnlyDictionary<string, string> dataschemaOverrides;
+        private static System.Collections.Generic.IReadOnlyDictionary<string, string> CopyDataschemaOverrides(System.Collections.Generic.IReadOnlyDictionary<string, string>? overrides)
+        {
+            var result = new System.Collections.Generic.Dictionary<string, string>();
+            if (overrides != null)
+            {
+                foreach (var entry in overrides)
+                {
+                    if (string.IsNullOrEmpty(entry.Key) || string.IsNullOrEmpty(entry.Value))
+                        throw new System.ArgumentException("Dataschema overrides require nonempty URI strings", nameof(overrides));
+                    result.Add(entry.Key, entry.Value);
+                }
+            }
+            return result;
+        }
+
         
          {%- if uses_cloudevents_message %}
          private readonly ContentMode contentMode;
@@ -41,8 +57,9 @@ namespace {{ project_name | pascal }}
          private readonly AmqpProducer endpoint;
 
  
-         private {{ class_name }}(AmqpProducer endpoint{%- if uses_cloudevents_message -%}, ContentMode contentMode, CloudEventFormatter formatter{%- endif -%})
+         private {{ class_name }}(AmqpProducer endpoint{%- if uses_cloudevents_message -%}, ContentMode contentMode, CloudEventFormatter formatter{%- endif -%}, System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null)
          {
+            this.dataschemaOverrides = CopyDataschemaOverrides(dataschemaOverrides);
             {%- if uses_cloudevents_message %}
              this.contentMode = contentMode;
              this.formatter = formatter;
@@ -66,7 +83,7 @@ namespace {{ project_name | pascal }}
         /// <param name="formatter">CloudEvent formatter (JSON, Protobuf, or Avro).</param>
         {%- endif %}
         /// <returns>Configured producer instance.</returns>
-        public static {{ class_name }} CreateProducerFor{{ endpointid | pascal | strip_namespace }}(ILogger logger, EndpointCredential credential {% if uses_cloudevents_message %}, ContentMode contentMode, CloudEventFormatter formatter {% endif %}) 
+        public static {{ class_name }} CreateProducerFor{{ endpointid | pascal | strip_namespace }}(ILogger logger, EndpointCredential credential {% if uses_cloudevents_message %}, ContentMode contentMode, CloudEventFormatter formatter {% endif %}, System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null)
         {       
             {%- if options %}
             var options = new Dictionary<string, string> {
@@ -82,7 +99,7 @@ namespace {{ project_name | pascal }}
                 {%- if not loop.last -%},{%- endif %}
             {%- endfor %}
             };
-            return new {{ class_name }}(new AmqpProducer(logger, credential, {% if options %}options, {% else %}new Dictionary<string, string>(), {% endif %}endpoints){%- if uses_cloudevents_message %}, contentMode, formatter{%- endif %});
+            return new {{ class_name }}(new AmqpProducer(logger, credential, {% if options %}options, {% else %}new Dictionary<string, string>(), {% endif %}endpoints){%- if uses_cloudevents_message %}, contentMode, formatter{%- endif %}, dataschemaOverrides);
         }
         {%- endif -%}
         {%- endfor -%}
@@ -111,9 +128,9 @@ namespace {{ project_name | pascal }}
         ///     new List&lt;Uri&gt; { new Uri("amqp://localhost:5672") });
         /// </code>
         /// </example>
-        public static {{ class_name }} CreateProducer(ILogger logger, EndpointCredential credential{% if uses_cloudevents_message %}, ContentMode contentMode, CloudEventFormatter formatter{% endif %}, Dictionary<string, string> options, List<Uri> endpoints)
+        public static {{ class_name }} CreateProducer(ILogger logger, EndpointCredential credential{% if uses_cloudevents_message %}, ContentMode contentMode, CloudEventFormatter formatter{% endif %}, Dictionary<string, string> options, List<Uri> endpoints, System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null)
         {
-            return new {{ class_name }}(new AmqpProducer(logger, credential, options, endpoints){%- if uses_cloudevents_message %}, contentMode, formatter{%- endif %});
+            return new {{ class_name }}(new AmqpProducer(logger, credential, options, endpoints){%- if uses_cloudevents_message %}, contentMode, formatter{%- endif %}, dataschemaOverrides);
         }
         
         /// <summary>
@@ -157,11 +174,7 @@ namespace {{ project_name | pascal }}
         {%- elif is_amqp -%}
         {{- amqp.DeclareUriTemplateArguments(message) -}}
         {%- endif -%}
-        {%- if isCloudEvent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
-        , string contentType = "{{ message.envelopemetadata["datacontenttype"]["value"] }}"
-        {%- else -%}
-        , string contentType = System.Net.Mime.MediaTypeNames.Application.Json
-        {%- endif %}
+        , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
         {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %})
         {
             {% if isCloudEvent %}
@@ -207,6 +220,13 @@ namespace {{ project_name | pascal }}
     /// </summary>
     public class {{ class_name }}Builder
     {
+        private System.Collections.Generic.IReadOnlyDictionary<string, string>? _dataschemaOverrides;
+        public {{ class_name }}Builder WithDataschemaOverrides(System.Collections.Generic.IReadOnlyDictionary<string, string> overrides)
+        {
+            _dataschemaOverrides = overrides;
+            return this;
+        }
+
         private ILogger? _logger;
         private EndpointCredential? _credential;
         {%- if uses_cloudevents_message %}
@@ -308,7 +328,7 @@ namespace {{ project_name | pascal }}
                 throw new InvalidOperationException("At least one endpoint is required. Call WithEndpoint().");
             
             var logger = _logger ?? new LoggerFactory().CreateLogger<{{ class_name }}>();
-            return {{ class_name }}.CreateProducer(logger, _credential{% if uses_cloudevents_message %}, _contentMode, _formatter{% endif %}, _options, _endpoints);
+            return {{ class_name }}.CreateProducer(logger, _credential{% if uses_cloudevents_message %}, _contentMode, _formatter{% endif %}, _options, _endpoints, _dataschemaOverrides);
         }
     }
 }

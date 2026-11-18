@@ -1,4 +1,5 @@
 {%- import "util.include.jinja" as util -%}
+{%- import "cloudevents.jinja.include" as cloudEvents -%}
 
 # pylint: disable=unused-import, line-too-long, missing-module-docstring, missing-function-docstring, missing-class-docstring, consider-using-f-string, trailing-whitespace, trailing-newlines
 import json
@@ -6,7 +7,19 @@ import re
 import typing
 from typing import Callable, Awaitable, Optional, Dict, List
 import asyncio
+import weakref
+import time
+from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
+try:
+    # paho-mqtt 2.x exposes MQTT5 Properties for the PUBLISH packet type.
+    from paho.mqtt.properties import Properties as _MqttProperties
+    from paho.mqtt.packettypes import PacketTypes as _MqttPacketTypes
+    _MQTT5_AVAILABLE = True
+except Exception:  # pragma: no cover - paho < 2 fallback
+    _MqttProperties = None  # type: ignore
+    _MqttPacketTypes = None  # type: ignore
+    _MQTT5_AVAILABLE = False
 from cloudevents.conversion import to_binary, to_structured
 from cloudevents.http import CloudEvent
 import {{ data_project_name | dotunderscore | lower }}
@@ -31,6 +44,8 @@ import {{ data_project_name | dotunderscore | lower }}
 
 # URI template regex pattern
 _URI_TEMPLATE_PATTERN = re.compile(r'\{([A-Za-z0-9_]+)\}')
+
+{{ cloudEvents.DeclareRfc3339TimeNormalizer() }}
 
 
 def _topic_to_mqtt_wildcard(topic: str) -> str:
@@ -65,32 +80,182 @@ def _extract_topic_parameters(topic: str, pattern: re.Pattern) -> Dict[str, str]
     return {}
 
 
+def _ce_headers_to_mqtt5_properties(headers: Dict[str, str]):
+    """Map CloudEvents binary-mode HTTP-style headers onto MQTT 5 PUBLISH properties.
+
+    Per the CloudEvents MQTT 5 protocol binding (binary mode):
+      * ``datacontenttype`` becomes the MQTT 5 Content Type property.
+      * Every other CloudEvents attribute becomes a User Property whose name
+        is the bare attribute name (no ``ce-`` prefix).
+
+    Returns ``None`` when paho's MQTT 5 properties API is unavailable so the
+    caller can degrade gracefully without crashing.
+    """
+    if not _MQTT5_AVAILABLE or _MqttProperties is None or _MqttPacketTypes is None:
+        return None
+    props = _MqttProperties(_MqttPacketTypes.PUBLISH)
+    user_properties: List[tuple] = []
+    for raw_key, raw_value in (headers or {}).items():
+        if raw_value is None:
+            continue
+        key = str(raw_key).lower()
+        value = raw_value if isinstance(raw_value, str) else str(raw_value)
+        if key in ("content-type", "datacontenttype"):
+            try:
+                props.ContentType = value
+            except Exception:
+                user_properties.append(("datacontenttype", value))
+            continue
+        if key.startswith("ce-"):
+            key = key[3:]
+        if key in ("data", "data_base64"):
+            continue
+        user_properties.append((key, value))
+    if user_properties:
+        props.UserProperty = user_properties
+    return props
+
+
+def _mqtt5_properties_to_ce_headers(properties) -> Dict[str, str]:
+    """Inverse of :func:`_ce_headers_to_mqtt5_properties` for the receive path."""
+    headers: Dict[str, str] = {}
+    if properties is None:
+        return headers
+    content_type = getattr(properties, "ContentType", None)
+    if content_type:
+        headers["content-type"] = content_type
+    user_props = getattr(properties, "UserProperty", None) or []
+    for entry in user_props:
+        try:
+            k, v = entry
+        except Exception:
+            continue
+        headers["ce-" + str(k).lower()] = str(v)
+    return headers
+
+
+class _MqttCallbackMultiplexer:
+    """Fan paho ``on_connect``/``on_disconnect``/``on_message`` callbacks out to
+    every generated client instance that shares a single paho client.
+
+    Multiple generated ``*MqttClient`` classes are designed to share one
+    ``paho.mqtt.client.Client`` (one connection per multi-messagegroup source).
+    Paho stores only ONE callback per event, so without multiplexing the
+    last-instantiated client would silently steal ``on_connect``/``on_message``
+    from every earlier client -- making their ``connect()`` hang forever because
+    the CONNACK resolves the wrong instance's waiter. See issue #485.
+
+    Instances are held weakly so the multiplexer never keeps a dropped client
+    alive; dead references are pruned on registration and on every dispatch.
+    """
+
+    _ATTR = "_xrcg_callback_multiplexer"
+
+    def __init__(self) -> None:
+        self._instances: List["weakref.ReferenceType"] = []
+
+    @classmethod
+    def attach(cls, client: "mqtt.Client", instance: object) -> None:
+        """Register ``instance`` for shared callbacks on ``client``.
+
+        The first instance to attach installs the multiplexer as the client's
+        callback and stores it on the client object; later instances that share
+        the same client reuse it instead of overwriting the callbacks.
+        """
+        mux = getattr(client, cls._ATTR, None)
+        if not isinstance(mux, _MqttCallbackMultiplexer):
+            mux = cls()
+            setattr(client, cls._ATTR, mux)
+            client.on_connect = mux._dispatch_connect
+            client.on_disconnect = mux._dispatch_disconnect
+            client.on_message = mux._dispatch_message
+        mux._register(instance)
+
+    def _register(self, instance: object) -> None:
+        self._instances = [ref for ref in self._instances if ref() is not None]
+        if all(ref() is not instance for ref in self._instances):
+            self._instances.append(weakref.ref(instance))
+
+    def _live(self) -> List[object]:
+        live: List[object] = []
+        for ref in list(self._instances):
+            inst = ref()
+            if inst is not None:
+                live.append(inst)
+        return live
+
+    def _dispatch_connect(self, client, userdata, flags, reason_code=0, properties=None) -> None:
+        for inst in self._live():
+            inst._on_connect(client, userdata, flags, reason_code, properties)
+
+    def _dispatch_disconnect(self, client, userdata, *args) -> None:
+        for inst in self._live():
+            inst._on_disconnect(client, userdata, *args)
+
+    def _dispatch_message(self, client, userdata, message) -> None:
+        for inst in self._live():
+            inst._on_message(client, userdata, message)
+
+
 class _ClientBase:
     """Base class for MQTT client with CloudEvent detection."""
     
     @staticmethod
     def _is_cloud_event(message: mqtt.MQTTMessage) -> bool:
-        """Check if the MQTT message contains a CloudEvent."""
+        """Check if the MQTT message contains a CloudEvent (structured or binary)."""
+        # Binary mode: MQTT 5 User Properties carry the CE attributes.
+        try:
+            props = getattr(message, "properties", None)
+            user_props = getattr(props, "UserProperty", None) if props is not None else None
+            if user_props:
+                keys = {str(k).lower() for k, _ in user_props}
+                if {"specversion", "type", "source", "id"}.issubset(keys):
+                    return True
+        except Exception:
+            pass
+        # Structured mode: JSON body with CE fields.
         try:
             if message.payload:
-                # Check for structured mode (JSON with CloudEvent fields)
                 if isinstance(message.payload, bytes):
                     payload_str = message.payload.decode('utf-8')
                     data = json.loads(payload_str)
                     return all(k in data for k in ['specversion', 'type', 'source', 'id'])
-                # Check for binary mode would require inspecting user properties (MQTT 5.0)
-                # For now, we focus on structured mode detection
             return False
         except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
             return False
-    
+
     @staticmethod
     def _cloud_event_from_message(message: mqtt.MQTTMessage) -> Optional[CloudEvent]:
-        """Extract CloudEvent from MQTT message (structured mode)."""
+        """Extract CloudEvent from MQTT message (structured or binary mode)."""
+        # Binary mode first - rebuild a CloudEvent from MQTT 5 user properties.
+        try:
+            props = getattr(message, "properties", None)
+            user_props = getattr(props, "UserProperty", None) if props is not None else None
+            if user_props:
+                attributes: Dict[str, str] = {}
+                for entry in user_props:
+                    try:
+                        k, v = entry
+                    except Exception:
+                        continue
+                    attributes[str(k).lower()] = str(v)
+                if {"specversion", "type", "source", "id"}.issubset(attributes.keys()):
+                    content_type = getattr(props, "ContentType", None)
+                    if content_type:
+                        attributes["datacontenttype"] = content_type
+                    payload = message.payload
+                    if isinstance(payload, bytes) and (content_type or "").lower().startswith("application/json"):
+                        try:
+                            payload = json.loads(payload.decode("utf-8"))
+                        except Exception:
+                            pass
+                    return CloudEvent(attributes, payload)
+        except Exception:
+            pass
+        # Fall back to structured mode (CE JSON in payload).
         try:
             if isinstance(message.payload, bytes):
                 payload_str = message.payload.decode('utf-8')
-                # Use CloudEvents library's from_json to properly deserialize
                 from cloudevents.http import from_json
                 event = from_json(payload_str)
                 return event
@@ -106,8 +271,15 @@ class _ClientBase:
 
 {#- Helper macro to get the default topic for a message -#}
 {%- macro get_default_topic(message, messageid) -%}
-{%- if message.protocoloptions and message.protocoloptions.properties and message.protocoloptions.properties.topic -%}
-{{ message.protocoloptions.properties.topic.value }}
+{#- Per xRegistry message-spec MQTT/5.0 binding, protocoloptions exposes scalars directly:
+    {"qos": 1, "retain": false, "topic_name": "mytopic"}. We also accept "topic-name" and "topic"
+    spellings as backward-compatible fallbacks. -#}
+{%- if message.protocoloptions and message.protocoloptions.topic_name -%}
+{{ message.protocoloptions.topic_name }}
+{%- elif message.protocoloptions and message.protocoloptions['topic-name'] -%}
+{{ message.protocoloptions['topic-name'] }}
+{%- elif message.protocoloptions and message.protocoloptions.topic -%}
+{{ message.protocoloptions.topic }}
 {%- else -%}
 {{ messageid }}
 {%- endif -%}
@@ -154,7 +326,8 @@ class {{ class_name }}(_ClientBase):
         client: mqtt.Client, 
         topic_mappings: Optional[Dict[str, str]] = None,
         content_mode: typing.Literal['structured', 'binary'] = 'structured', 
-        loop: Optional[asyncio.AbstractEventLoop] = None
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+        dataschema_overrides: typing.Optional[typing.Mapping[str, str]] = None
     ):
         """
         Initialize the MQTT client.
@@ -170,9 +343,16 @@ class {{ class_name }}(_ClientBase):
         """
         self.client = client
         self.content_mode = content_mode
+        self._dataschema_overrides = dict(dataschema_overrides) if dataschema_overrides is not None else {}
+        if any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
+               for key, value in self._dataschema_overrides.items()):
+            raise ValueError("dataschema_overrides must map nonempty URI strings to nonempty URI strings")
         self.loop = loop
         self._topic_mappings = topic_mappings or get_default_topic_mappings_{{ groupName }}()
         self._topic_patterns = {k: _build_topic_regex(v) for k, v in self._topic_mappings.items()}
+        self._connect_waiter: Optional[asyncio.Future[None]] = None
+        self._connected = False
+        self._inflight: List[mqtt.MQTTMessageInfo] = []
         
         # Message handler callbacks (Dispatcher pattern)
         {% for messageid, message in messagegroup.messages.items() if (message | exists("envelope","CloudEvents/1.0")) -%}
@@ -180,9 +360,80 @@ class {{ class_name }}(_ClientBase):
         {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
         self.{{messagename.split('.')[-1]}}_async: Optional[Callable[[mqtt.MQTTMessage, CloudEvent, {{type_name}}, Dict[str, str]], Awaitable[None]]] = None
         {% endfor %}
+        {% for messageid, message in messagegroup.messages.items() if not (message | exists("envelope","CloudEvents/1.0")) -%}
+        {%- set messagename = messageid | dotunderscore | snake %}
+        {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
+        self.{{messagename.split('.')[-1]}}_async: Optional[Callable[[mqtt.MQTTMessage, {{type_name}}, Dict[str, str]], Awaitable[None]]] = None
+        {% endfor %}
         
-        # Attach message callback
-        self.client.on_message = self._on_message
+        # Multiplex paho callbacks so several generated clients can safely share
+        # one paho client (issue #485) instead of overwriting each other's
+        # on_connect/on_disconnect/on_message registrations.
+        _MqttCallbackMultiplexer.attach(self.client, self)
+
+    @staticmethod
+    def _mqtt_reason_code_value(reason_code) -> Optional[int]:
+        """Best-effort numeric MQTT reason-code extraction across paho callback APIs."""
+        if reason_code is None:
+            return 0
+        value = getattr(reason_code, "value", reason_code)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _mqtt_reason_code_text(reason_code) -> str:
+        """Best-effort textual MQTT reason-code rendering across paho callback APIs."""
+        if reason_code is None:
+            return "unknown"
+        text = str(reason_code).strip()
+        if text:
+            return text
+        code = _ClientBase._mqtt_reason_code_value(reason_code)
+        return str(code) if code is not None else "unknown"
+
+    def _resolve_connect_waiter(self, exc: Optional[BaseException] = None):
+        waiter = self._connect_waiter
+        self._connect_waiter = None
+        if waiter is None or waiter.done():
+            return
+        if exc is None:
+            self._connected = True
+            waiter.set_result(None)
+            return
+        self._connected = False
+        waiter.set_exception(exc)
+
+    def _notify_connect_waiter(self, exc: Optional[BaseException] = None):
+        if self.loop is None:
+            return
+        self.loop.call_soon_threadsafe(self._resolve_connect_waiter, exc)
+
+    def _on_connect(self, client, userdata, flags, reason_code=0, properties=None):
+        """Resolve a pending async connect once the broker replies."""
+        if self._mqtt_reason_code_value(reason_code) == 0:
+            self._notify_connect_waiter()
+            return
+        detail = self._mqtt_reason_code_text(reason_code)
+        self._notify_connect_waiter(ConnectionError(f"MQTT connect failed: {detail}"))
+
+    def _on_disconnect(self, client, userdata, *args):
+        """Fail a pending async connect when the broker disconnects before success."""
+        self._connected = False
+        if self._connect_waiter is None:
+            return
+        reason_code = None
+        if len(args) == 1:
+            reason_code = args[0]
+        elif len(args) == 2:
+            reason_code = args[0]
+        elif len(args) >= 3:
+            reason_code = args[1]
+        detail = self._mqtt_reason_code_text(reason_code)
+        if self._mqtt_reason_code_value(reason_code) in (None, 0):
+            detail = "connection closed before authentication completed"
+        self._notify_connect_waiter(ConnectionError(f"MQTT connect failed: {detail}"))
 
     @property
     def topic_mappings(self) -> Dict[str, str]:
@@ -207,8 +458,7 @@ class {{ class_name }}(_ClientBase):
                 if cloud_event:
                     await self._dispatch_cloud_event(message, cloud_event)
             else:
-                # Handle plain MQTT messages (if needed)
-                pass
+                await self._dispatch_plain_message(message)
         except Exception as e:
             print(f"Error processing message: {e}")
     
@@ -246,6 +496,31 @@ class {{ class_name }}(_ClientBase):
             return
         {% endfor %}
     
+    async def _dispatch_plain_message(self, mqtt_message: mqtt.MQTTMessage):
+        """Dispatch a plain (non-CloudEvents) MQTT message by matching its topic to a known message id."""
+        {% for messageid, message in messagegroup.messages.items() if not (message | exists("envelope","CloudEvents/1.0")) -%}
+        {%- set messagename = messageid | dotunderscore | snake %}
+        {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
+        pattern = self._topic_patterns.get("{{ messageid }}")
+        if pattern is not None and pattern.match(mqtt_message.topic):
+            if self.{{messagename.split('.')[-1]}}_async:
+                try:
+                    content_type = "application/json"
+                    props = getattr(mqtt_message, "properties", None)
+                    if props is not None and getattr(props, "ContentType", None):
+                        content_type = props.ContentType
+                    {%- if type_name == "object" %}
+                    data = mqtt_message.payload
+                    {%- else %}
+                    data = {{type_name}}.from_data(mqtt_message.payload, content_type)
+                    {%- endif %}
+                    topic_params = self._extract_topic_params(mqtt_message.topic, "{{ messageid }}")
+                    await self.{{messagename.split('.')[-1]}}_async(mqtt_message, data, topic_params)
+                except Exception as e:
+                    print(f"Error in {{messagename.split('.')[-1]}} handler: {e}")
+            return
+        {% endfor %}
+    
     async def subscribe(self, topics: Optional[typing.List[str]] = None, qos: int = 0):
         """
         Subscribe to MQTT topics.
@@ -269,23 +544,144 @@ class {{ class_name }}(_ClientBase):
         """
         for topic in topics:
             self.client.unsubscribe(topic)
-    
-    async def connect(self, broker: str, port: int = 1883, keepalive: int = 60):
+
+    @staticmethod
+    def _build_enhanced_auth_properties(token, authentication_method: str = "OAUTH2-JWT", base=None):
+        """Build MQTT v5 CONNECT properties carrying an OAuth2/Entra JWT via
+        MQTT v5 Enhanced Authentication.
+
+        Azure Event Grid Namespaces (and other Entra-secured MQTT v5 brokers)
+        require the bearer token to be presented through the CONNECT
+        ``Authentication Method`` / ``Authentication Data`` properties, NOT the
+        username/password fields. Username/password silently fails CONNACK and
+        ``publish()`` then queues messages locally without ever reaching the
+        broker. See
+        https://learn.microsoft.com/azure/event-grid/mqtt-client-microsoft-entra-token-and-rbac
+
+        The paho client passed to this class MUST be created with
+        ``protocol=mqtt.MQTTv5`` for these properties to be honored.
         """
-        Connect to MQTT broker.
+        if not _MQTT5_AVAILABLE:
+            raise RuntimeError(
+                "MQTT v5 Enhanced Authentication (OAUTH2-JWT) requires "
+                "paho-mqtt >= 2.0; install a newer paho-mqtt to use "
+                "token-based auth."
+            )
+        connect_properties = base if base is not None else _MqttProperties(_MqttPacketTypes.CONNECT)
+        connect_properties.AuthenticationMethod = authentication_method
+        connect_properties.AuthenticationData = (
+            token.encode("utf-8") if isinstance(token, str) else token
+        )
+        return connect_properties
+
+    async def connect(self, broker: str, port: int = 1883, keepalive: int = 60,
+                      token: Optional[str] = None,
+                      authentication_method: str = "OAUTH2-JWT",
+                      properties: Optional["_MqttProperties"] = None):
+        """
+        Connect to MQTT broker and wait for authentication to complete.
 
         Args:
             broker: Broker hostname or IP
             port: Broker port
             keepalive: Keepalive interval in seconds
+            token: Optional OAuth2/Entra bearer token (JWT). When provided, it is
+                presented via MQTT v5 Enhanced Authentication
+                (Authentication Method ``OAUTH2-JWT`` + Authentication Data) as
+                required by Azure Event Grid Namespaces -- NOT as a password.
+                Requires a paho client created with ``protocol=mqtt.MQTTv5``.
+            authentication_method: MQTT v5 Authentication Method to advertise
+                when ``token`` is supplied (default ``OAUTH2-JWT``).
+            properties: Optional MQTT v5 CONNECT ``Properties`` to send. When
+                ``token`` is also supplied, the enhanced-auth fields are set on
+                these properties.
+
+        Raises:
+            ConnectionError: If the broker rejects the connection or disconnects before success
+            TimeoutError: If the broker does not acknowledge the connection in time
         """
-        self.client.connect(broker, port, keepalive)
-        self.client.loop_start()
+        if self._connect_waiter is not None and not self._connect_waiter.done():
+            raise RuntimeError("MQTT connect already in progress")
+        self.loop = asyncio.get_running_loop()
+        waiter = self.loop.create_future()
+        self._connect_waiter = waiter
+        self._connected = False
+        loop_started = False
+        try:
+            connect_properties = properties
+            if token is not None:
+                connect_properties = self._build_enhanced_auth_properties(
+                    token, authentication_method, base=properties
+                )
+            if connect_properties is not None:
+                self.client.connect(broker, port, keepalive, properties=connect_properties)
+            else:
+                self.client.connect(broker, port, keepalive)
+            self.client.loop_start()
+            loop_started = True
+            timeout = float(keepalive) if keepalive and keepalive > 0 else 60.0
+            await asyncio.wait_for(waiter, timeout=timeout)
+        except Exception:
+            if self._connect_waiter is waiter:
+                self._connect_waiter = None
+            self._connected = False
+            if loop_started:
+                await asyncio.to_thread(self.client.loop_stop)
+            raise
     
+    def _track_inflight(self, info: Optional[mqtt.MQTTMessageInfo]) -> None:
+        """Record an outstanding publish so ``disconnect()`` can flush it.
+
+        Already-delivered handles are pruned first so the list stays bounded to
+        genuinely in-flight messages in long-running producers.
+        """
+        if info is None:
+            return
+        self._inflight = [i for i in self._inflight if not self._is_published(i)]
+        self._inflight.append(info)
+
+    @staticmethod
+    def _is_published(info: mqtt.MQTTMessageInfo) -> bool:
+        """Best-effort check whether a publish handle has been delivered."""
+        try:
+            return bool(info.is_published())
+        except (ValueError, RuntimeError):
+            # Treat unknown/torn-down handles as done so they are pruned.
+            return True
+
+    async def _flush_inflight(self, timeout: float = 10.0) -> None:
+        """Bound-wait for outstanding QoS>0 publishes to be acknowledged.
+
+        The blocking paho wait runs off the event-loop thread so the asyncio
+        loop is never stalled.
+        """
+        if not self._inflight:
+            return
+        deadline = time.monotonic() + timeout
+        for info in self._inflight:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                await asyncio.to_thread(info.wait_for_publish, remaining)
+            except (ValueError, RuntimeError):
+                # ValueError: nothing to wait for (already delivered/removed).
+                # RuntimeError: network loop no longer running.
+                pass
+        self._inflight.clear()
+
     async def disconnect(self):
-        """Disconnect from MQTT broker."""
-        self.client.loop_stop()
+        """Disconnect from the MQTT broker after flushing queued publishes.
+
+        QoS>0 PUBLISH packets may still sit in paho's out-queue when a
+        short-lived ('--once') producer disconnects. Stopping the network loop
+        first would silently drop them, so we bound-wait for in-flight delivery
+        (PUBACK) before sending DISCONNECT and stopping the loop off-thread.
+        """
+        self._connected = False
+        await self._flush_inflight()
         self.client.disconnect()
+        await asyncio.to_thread(self.client.loop_stop)
 
     # Producer methods
     {% for messageid, message in messagegroup.messages.items() if (message | exists("envelope","CloudEvents/1.0")) -%}
@@ -293,7 +689,7 @@ class {{ class_name }}(_ClientBase):
     {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
     {%- set uri_template_vars = [] %}
     {%- for attrname, attribute in message.envelopemetadata.items() %}
-        {%- if attribute.value and attribute.type == "uritemplate" %}
+        {%- if attribute.value and attribute.type == "uritemplate" and attrname != "time" %}
             {%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
             {%- if phs %}
                 {%- for placeholder in phs %}
@@ -304,9 +700,61 @@ class {{ class_name }}(_ClientBase):
             {%- endif %}
         {%- endif %}
     {%- endfor %}
+    {#- Also include URI template placeholders that appear in the message-level
+        MQTT topic uritemplate (protocoloptions.topic_name per spec) so the
+        publish method exposes every variable the topic requires. -#}
+    {%- set _topic_value = none -%}
+    {%- if message.protocoloptions and message.protocoloptions.topic_name -%}
+        {%- set _topic_value = message.protocoloptions.topic_name -%}
+    {%- elif message.protocoloptions and message.protocoloptions['topic-name'] -%}
+        {%- set _topic_value = message.protocoloptions['topic-name'] -%}
+    {%- elif message.protocoloptions and message.protocoloptions.topic -%}
+        {%- set _topic_value = message.protocoloptions.topic -%}
+    {%- endif -%}
+    {%- if _topic_value -%}
+        {%- set topic_phs = _topic_value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+        {%- if topic_phs %}
+            {%- for placeholder in topic_phs %}
+                {%- if placeholder not in uri_template_vars %}
+                    {%- set _ = uri_template_vars.append(placeholder) %}
+                {%- endif %}
+            {%- endfor %}
+        {%- endif %}
+    {%- endif %}
+    {%- set time_uri_template_vars = [] %}
+    {%- if 'time' in message.envelopemetadata and message.envelopemetadata['time'].value and message.envelopemetadata['time'].type == "uritemplate" -%}
+        {%- for placeholder in message.envelopemetadata['time'].value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+            {%- if placeholder not in uri_template_vars and placeholder not in time_uri_template_vars -%}
+                {%- set _ = time_uri_template_vars.append(placeholder) -%}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- endif %}
+    {#- Per-message QoS and retain defaults pulled from protocoloptions.
+        Supports both the direct-scalar form (protocoloptions.qos = 1) and the
+        spec's properties-map form (protocoloptions.properties.qos.value = 1). -#}
+    {%- set default_qos = 1 %}
+    {%- if message.protocoloptions and message.protocoloptions.qos is defined and message.protocoloptions.qos is not none -%}
+        {%- set default_qos = message.protocoloptions.qos %}
+    {%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.qos is defined and message.protocoloptions.properties.qos and message.protocoloptions.properties.qos.value is defined and message.protocoloptions.properties.qos.value is not none -%}
+        {%- set default_qos = message.protocoloptions.properties.qos.value %}
+    {%- endif %}
+    {%- set default_retain = "False" %}
+    {%- if message.protocoloptions and message.protocoloptions.retain is defined and message.protocoloptions.retain is not none -%}
+        {%- if message.protocoloptions.retain -%}
+            {%- set default_retain = "True" %}
+        {%- else -%}
+            {%- set default_retain = "False" %}
+        {%- endif %}
+    {%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.retain is defined and message.protocoloptions.properties.retain and message.protocoloptions.properties.retain.value is defined and message.protocoloptions.properties.retain.value is not none -%}
+        {%- if message.protocoloptions.properties.retain.value -%}
+            {%- set default_retain = "True" %}
+        {%- else -%}
+            {%- set default_retain = "False" %}
+        {%- endif %}
+    {%- endif %}
     async def publish_{{messagename.split('.')[-1]}}(self,
         {%- for attrname, attribute in message.envelopemetadata.items() if not attribute.value -%}
-        {%- if attribute.type != "uritemplate" -%}
+        {%- if attribute.type != "uritemplate" and attrname != "time" -%}
         _{{ attrname | snake }}: str,
         {%- endif -%}
         {%- endfor %}
@@ -315,29 +763,51 @@ class {{ class_name }}(_ClientBase):
         {%- endfor %}
         data: {{type_name}},
         topic: Optional[str] = None,
-        content_type: str = "application/json") -> None:
+        qos: Optional[int] = None,
+        retain: Optional[bool] = None,
+        {%- for var in time_uri_template_vars %}
+        {{ var | snake }}: Optional[str] = None,
+        {%- endfor %}
+        _time: typing.Optional[typing.Union[str, datetime]] = None,
+        content_type: str = {{ cloudEvents.DefaultContentType(message) }}) -> None:
         """
         Publish the '{{ messageid }}' event to an MQTT topic.
 
         Args:
         {% for attrname, attribute in message.envelopemetadata.items() if not attribute.value -%}
-        {%- if attribute.type != "uritemplate" -%}
+        {%- if attribute.type != "uritemplate" and attrname != "time" -%}
             _{{ attrname | snake }}: CloudEvents attribute '{{attrname}}'
         {%- endif -%}
         {%- endfor %}
         {%- for var in uri_template_vars %}
             {{ var | snake }}: URI template variable for '{{var}}'
         {%- endfor %}
-            data: The event data to be published
-            topic: Optional topic override. If not provided, uses default topic '{{ get_default_topic(message, messageid) }}'.
-            content_type: The content type for the event data
+            data: The event data to be published.
+            topic: Optional topic override. If not provided, uses default topic '{{ get_default_topic(message, messageid) }}'
+                with URI template placeholders substituted from the keyword arguments.
+            qos: Optional MQTT QoS override. If not provided, uses the message default ({{ default_qos }}).
+            retain: Optional MQTT retain flag override. If not provided, uses the message default ({{ default_retain }}).
+        {%- for var in time_uri_template_vars %}
+            {{ var | snake }}: Legacy compatibility placeholder for CloudEvents time.
+        {%- endfor %}
+            _time: Optional CloudEvents time override. Defaults to current UTC when no catalog time is used.
+            content_type: The content type for the event data.
         """
         target_topic = topic if topic is not None else "{{ get_default_topic(message, messageid) }}"
-        
+        _topic_template_values: Dict[str, str] = {
+        {%- for var in uri_template_vars %}
+            "{{ var }}": str({{ var | snake }}),
+        {%- endfor %}
+        }
+        if _topic_template_values:
+            target_topic = _apply_topic_template(target_topic, _topic_template_values)
+
         attributes = {
         {%- for attrname, attribute in message.envelopemetadata.items() %}
              "{{ attrname }}":
-            {%- if attribute.value -%}
+            {%- if attrname == "time" -%}
+            {{ cloudEvents.RenderLegacyTimeFallback(attribute, "") }}
+            {%- elif attribute.value -%}
             "{{ attribute.value }}"
             {%- if attribute.type == "uritemplate" -%}
                 {%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
@@ -357,19 +827,148 @@ class {{ class_name }}(_ClientBase):
         {%- endfor %}
         }
         attributes["datacontenttype"] = content_type
-        byte_data = data.to_byte_array(content_type) if data is not None else b''
+        attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))
+        byte_data = data.to_byte_array({{ cloudEvents.SerializerContentType("content_type") }}) if data is not None else b''
+        # to_byte_array returns str for text content types (e.g. JSON);
+        # paho-mqtt will UTF-8 encode str payloads, but cloudevents-sdk's
+        # to_binary/to_structured embed the str directly which then becomes
+        # a JSON string literal containing the JSON document. Coerce to
+        # bytes up-front so receivers can json.loads(payload) once.
+        if isinstance(byte_data, str):
+            byte_data = byte_data.encode('utf-8')
+        if "dataschema" in attributes:
+            attributes["dataschema"] = self._dataschema_overrides.get(attributes["dataschema"], attributes["dataschema"])
         event = CloudEvent(attributes, byte_data)
-        
+
+        _effective_qos = {{ default_qos }} if qos is None else qos
+        _effective_retain = {{ default_retain }} if retain is None else retain
+
+        publish_kwargs: Dict[str, typing.Any] = {
+            "qos": _effective_qos,
+            "retain": _effective_retain,
+        }
+
         if self.content_mode == "structured":
-            headers, body = to_structured(event)
+            _headers, body = to_structured(event)
             payload = body
         else:
             headers, body = to_binary(event)
             payload = body
-            # Binary mode headers would go into MQTT 5.0 user properties
-            # For MQTT 3.1.1, we'll use structured mode
-        
-        self.client.publish(target_topic, payload, qos=1)
+            mqtt5_props = _ce_headers_to_mqtt5_properties(dict(headers or {}))
+            if mqtt5_props is not None:
+                publish_kwargs["properties"] = mqtt5_props
+
+        # Ensure the MQTT PUBLISH payload is bytes so it is sent as the
+        # exact serialized representation; paho-mqtt would UTF-8 encode a
+        # str, but a dict (from structured mode) would crash, and any
+        # double-encoding upstream would land on the wire untouched.
+        if isinstance(payload, dict):
+            payload = json.dumps(payload).encode('utf-8')
+        elif isinstance(payload, str):
+            payload = payload.encode('utf-8')
+
+        self._track_inflight(self.client.publish(target_topic, payload, **publish_kwargs))
+
+    {% endfor %}
+    {% for messageid, message in messagegroup.messages.items() if not (message | exists("envelope","CloudEvents/1.0")) -%}
+    {%- set messagename = messageid | dotunderscore | snake %}
+    {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
+    {%- set uri_template_vars = [] %}
+    {#- Plain (non-CloudEvents) messages carry no envelopemetadata, so the only
+        URI template placeholders come from the message-level MQTT topic
+        (protocoloptions.topic_name per spec). -#}
+    {%- set _topic_value = none -%}
+    {%- if message.protocoloptions and message.protocoloptions.topic_name -%}
+        {%- set _topic_value = message.protocoloptions.topic_name -%}
+    {%- elif message.protocoloptions and message.protocoloptions['topic-name'] -%}
+        {%- set _topic_value = message.protocoloptions['topic-name'] -%}
+    {%- elif message.protocoloptions and message.protocoloptions.topic -%}
+        {%- set _topic_value = message.protocoloptions.topic -%}
+    {%- endif -%}
+    {%- if _topic_value -%}
+        {%- set topic_phs = _topic_value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+        {%- if topic_phs %}
+            {%- for placeholder in topic_phs %}
+                {%- if placeholder not in uri_template_vars %}
+                    {%- set _ = uri_template_vars.append(placeholder) %}
+                {%- endif %}
+            {%- endfor %}
+        {%- endif %}
+    {%- endif %}
+    {%- set default_qos = 1 %}
+    {%- if message.protocoloptions and message.protocoloptions.qos is defined and message.protocoloptions.qos is not none -%}
+        {%- set default_qos = message.protocoloptions.qos %}
+    {%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.qos is defined and message.protocoloptions.properties.qos and message.protocoloptions.properties.qos.value is defined and message.protocoloptions.properties.qos.value is not none -%}
+        {%- set default_qos = message.protocoloptions.properties.qos.value %}
+    {%- endif %}
+    {%- set default_retain = "False" %}
+    {%- if message.protocoloptions and message.protocoloptions.retain is defined and message.protocoloptions.retain is not none -%}
+        {%- if message.protocoloptions.retain -%}
+            {%- set default_retain = "True" %}
+        {%- else -%}
+            {%- set default_retain = "False" %}
+        {%- endif %}
+    {%- elif message.protocoloptions and message.protocoloptions.properties is defined and message.protocoloptions.properties and message.protocoloptions.properties.retain is defined and message.protocoloptions.properties.retain and message.protocoloptions.properties.retain.value is defined and message.protocoloptions.properties.retain.value is not none -%}
+        {%- if message.protocoloptions.properties.retain.value -%}
+            {%- set default_retain = "True" %}
+        {%- else -%}
+            {%- set default_retain = "False" %}
+        {%- endif %}
+    {%- endif %}
+    async def publish_{{messagename.split('.')[-1]}}(self,
+        {%- for var in uri_template_vars %}
+        {{ var | snake }}: str,
+        {%- endfor %}
+        data: {{type_name}},
+        topic: Optional[str] = None,
+        qos: Optional[int] = None,
+        retain: Optional[bool] = None,
+        content_type: str = {{ cloudEvents.DefaultContentType(message) }}) -> None:
+        """
+        Publish the plain (non-CloudEvents) '{{ messageid }}' message to an MQTT topic.
+
+        The payload is the raw serialized message data with no CloudEvents envelope,
+        suitable for interoperating with brokers that carry plain JSON on the wire.
+
+        Args:
+        {%- for var in uri_template_vars %}
+            {{ var | snake }}: URI template variable for '{{var}}'
+        {%- endfor %}
+            data: The message data to be published.
+            topic: Optional topic override. If not provided, uses default topic '{{ get_default_topic(message, messageid) }}'
+                with URI template placeholders substituted from the keyword arguments.
+            qos: Optional MQTT QoS override. If not provided, uses the message default ({{ default_qos }}).
+            retain: Optional MQTT retain flag override. If not provided, uses the message default ({{ default_retain }}).
+            content_type: The content type used to serialize the message data.
+        """
+        target_topic = topic if topic is not None else "{{ get_default_topic(message, messageid) }}"
+        _topic_template_values: Dict[str, str] = {
+        {%- for var in uri_template_vars %}
+            "{{ var }}": str({{ var | snake }}),
+        {%- endfor %}
+        }
+        if _topic_template_values:
+            target_topic = _apply_topic_template(target_topic, _topic_template_values)
+
+        {%- if type_name == "object" %}
+        if isinstance(data, (bytes, bytearray)):
+            payload = bytes(data)
+        elif isinstance(data, str):
+            payload = data.encode('utf-8')
+        elif data is None:
+            payload = b''
+        else:
+            payload = json.dumps(data).encode('utf-8')
+        {%- else %}
+        payload = data.to_byte_array({{ cloudEvents.SerializerContentType("content_type") }}) if data is not None else b''
+        if isinstance(payload, str):
+            payload = payload.encode('utf-8')
+        {%- endif %}
+
+        _effective_qos = {{ default_qos }} if qos is None else qos
+        _effective_retain = {{ default_retain }} if retain is None else retain
+
+        self._track_inflight(self.client.publish(target_topic, payload, qos=_effective_qos, retain=_effective_retain))
 
     {% endfor %}
 {% endfor %}

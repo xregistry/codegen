@@ -88,7 +88,7 @@ export class ClientManager {
     });
   }
 
-  private createCloudEventFromRow(row: Record<string, unknown>): CloudEvent {
+  private createCloudEventFromRow(row: Record<string, unknown>): CloudEvent<Record<string, unknown>> {
     const cloudEvent: Record<string, unknown> = {};
     const data: Record<string, unknown> = {};
 

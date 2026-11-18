@@ -1,0 +1,103 @@
+{
+    "$schema": "https://xregistry.io/schema/xregistry_messaging_catalog.json",
+    "messagegroups": {
+        "Fabrikam.LumenMqtt": {
+            "envelope": "CloudEvents/1.0",
+            "protocol": "MQTT/5.0",
+            "description": "MQTT/5.0 protocoloptions coverage fixture for codegen tests",
+            "messages": {
+                "Fabrikam.LumenMqtt.TurnedOn": {
+                    "description": "Bulb turned on (MQTT/5.0)",
+                    "envelope": "CloudEvents/1.0",
+                    "protocol": "MQTT/5.0",
+                    "envelopemetadata": {
+                        "id": { "required": true },
+                        "type": {
+                            "value": "Fabrikam.LumenMqtt.TurnedOn"
+                        },
+                        "source": {
+                            "type": "uritemplate",
+                            "value": "fabrikam/{tenantid}/devices/{deviceid}"
+                        },
+                        "time": { "required": true },
+                        "datacontenttype": { "value": "application/json" }
+                    },
+                    "protocoloptions": {
+                        "qos": 2,
+                        "retain": true,
+                        "topic_name": "fabrikam/{tenantid}/lumen/{deviceid}/turnedon"
+                    },
+                    "dataschemaformat": "Avro/1.11.1",
+                    "dataschemauri": "#/schemagroups/Fabrikam.LumenMqtt/schemas/Fabrikam.LumenMqtt.TurnedOnEventData"
+                },
+                "Fabrikam.LumenMqtt.TurnedOff": {
+                    "description": "Bulb turned off (MQTT/5.0, qos 1 / retain false)",
+                    "envelope": "CloudEvents/1.0",
+                    "protocol": "MQTT/5.0",
+                    "envelopemetadata": {
+                        "id": { "required": true },
+                        "type": {
+                            "value": "Fabrikam.LumenMqtt.TurnedOff"
+                        },
+                        "source": {
+                            "type": "uritemplate",
+                            "value": "fabrikam/{tenantid}/devices/{deviceid}"
+                        },
+                        "time": { "required": true },
+                        "datacontenttype": { "value": "application/json" }
+                    },
+                    "protocoloptions": {
+                        "qos": 1,
+                        "retain": false,
+                        "topic_name": "fabrikam/{tenantid}/lumen/{deviceid}/turnedoff"
+                    },
+                    "dataschemaformat": "Avro/1.11.1",
+                    "dataschemauri": "#/schemagroups/Fabrikam.LumenMqtt/schemas/Fabrikam.LumenMqtt.TurnedOffEventData"
+                }
+            }
+        }
+    },
+    "schemagroups": {
+        "Fabrikam.LumenMqtt": {
+            "schemas": {
+                "Fabrikam.LumenMqtt.TurnedOnEventData": {
+                    "format": "Avro/1.11.1",
+                    "versions": {
+                        "1": {
+                            "format": "Avro/1.11.1",
+                            "schema": {
+                                "type": "record",
+                                "name": "TurnedOnEventData",
+                                "namespace": "Fabrikam.LumenMqtt",
+                                "doc": "Bulb turned-on event payload",
+                                "fields": [
+                                    { "name": "tenantid", "type": "string" },
+                                    { "name": "deviceid", "type": "string" },
+                                    { "name": "brightness", "type": "int" }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "Fabrikam.LumenMqtt.TurnedOffEventData": {
+                    "format": "Avro/1.11.1",
+                    "versions": {
+                        "1": {
+                            "format": "Avro/1.11.1",
+                            "schema": {
+                                "type": "record",
+                                "name": "TurnedOffEventData",
+                                "namespace": "Fabrikam.LumenMqtt",
+                                "doc": "Bulb turned-off event payload",
+                                "fields": [
+                                    { "name": "tenantid", "type": "string" },
+                                    { "name": "deviceid", "type": "string" }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

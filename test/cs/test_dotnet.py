@@ -1,18 +1,28 @@
 """Test the C# code generation and integration with the generated code."""
 
+import json
 import platform
 import subprocess
 import sys
 import os
 import tempfile
-import xrcg
 import pytest
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '../..'))
-sys.path.append(os.path.join(project_root))
+sys.path.insert(0, os.path.join(project_root))
+
+import xrcg
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
+
+
+def _dotnet_test_environment() -> dict[str, str]:
+    """Return subprocess environment overrides for generated C# tests."""
+    env = os.environ.copy()
+    if IN_GITHUB_ACTIONS:
+        env.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
+    return env
 
 
 
@@ -44,7 +54,77 @@ def run_dotnet_test(xreg_file: str, output_dir: str, projectname: str, style: st
     
     # Use shell=True on Windows for .cmd files, direct execution on Linux
     use_shell = platform.system() == 'Windows'
-    subprocess.check_call(['dotnet', 'test', output_dir], cwd=os.path.dirname(__file__), shell=use_shell)
+    subprocess.check_call(
+        ['dotnet', 'test', output_dir],
+        cwd=os.path.dirname(__file__),
+        shell=use_shell,
+        env=_dotnet_test_environment(),
+    )
+
+
+def _generate_dotnet_amqp_producer_src(xreg_relpath="test/xreg/lightbulb-amqp.xreg.json"):
+    """Generate the C# AMQP producer and return EventProducer.cs."""
+    import glob
+    tmpdirname = tempfile.mkdtemp()
+    sys.argv = ['xrcg', 'generate',
+                '--definitions', os.path.join(project_root, xreg_relpath.replace('/', os.sep)),
+                '--output', tmpdirname,
+                '--projectname', "TestProject",
+                '--style', "amqpproducer",
+                '--language', "cs"]
+    assert xrcg.cli() == 0
+    candidates = glob.glob(os.path.join(tmpdirname, "**", "EventProducer.cs"), recursive=True)
+    assert candidates, "no EventProducer.cs emitted under " + tmpdirname
+    return open(candidates[0], encoding="utf-8").read()
+
+
+def test_amqpproducer_protocoloptions_message_annotations_codegen_cs():
+    """C# amqpproducer must emit message annotations with AMQP symbol keys."""
+    src = _generate_dotnet_amqp_producer_src()
+    assert 'new Symbol("x-opt-partition-key")' in src
+    assert 'MessageAnnotations = new MessageAnnotations();' in src
+    assert 'Substring(0, 128)' in src
+    assert 'XOptPartitionKey =' not in src
+
+
+def test_generated_csharp_time_placeholder_falls_back_to_now():
+    """C# CloudEvents time placeholders must avoid invalid DateTime parsing."""
+    import glob
+
+    document = {
+        "messagegroups": {
+            "Example.Group": {
+                "messages": {
+                    "Example.Event": {
+                        "name": "Event",
+                        "envelope": "CloudEvents/1.0",
+                        "envelopemetadata": {
+                            "type": {"value": "Example.Event"},
+                            "source": {"value": "urn:test"},
+                            "time": {"value": "{event_time}"},
+                            "datacontenttype": {"value": "application/json"},
+                        },
+                        "dataschemaformat": "JsonSchema/draft-07",
+                        "dataschema": {"type": "object", "properties": {"value": {"type": "string"}}},
+                    }
+                }
+            }
+        }
+    }
+    tmpdirname = tempfile.mkdtemp()
+    tmpfile = os.path.join(tmpdirname, "document.json")
+    with open(tmpfile, "w", encoding="utf-8") as handle:
+        json.dump(document, handle)
+
+    sys.argv = ['xrcg', 'generate', '--definitions', tmpfile, '--output', tmpdirname, '--projectname', 'TestProject', '--style', 'ehproducer', '--language', 'cs']
+    assert xrcg.cli() == 0
+
+    candidates = glob.glob(os.path.join(tmpdirname, "**", "EventFactory.cs"), recursive=True)
+    assert candidates, "no EventFactory.cs emitted under " + tmpdirname
+    src = open(candidates[0], encoding="utf-8").read()
+    assert 'Time = System.DateTime.UtcNow' in src
+    assert 'DateTime.Parse("{event_time}")' not in src
+
 
 def test_ehproducer_contoso_erp_cs():
     """ Test the EventHub producer for Contoso ERP. """
@@ -212,6 +292,13 @@ def test_mqttclient_lightbulb_cs():
     tmpdirname = tempfile.mkdtemp()
     run_dotnet_test(os.path.join(
             project_root, "test/xreg/lightbulb.xreg.json"), tmpdirname, "TestProject", "mqttclient")
+
+
+def test_mqttclient_protocoloptions_cs():
+    """ Test the MQTT client with MQTT/5.0 protocoloptions (flat topic_name, qos, retain)."""
+    tmpdirname = tempfile.mkdtemp()
+    run_dotnet_test(os.path.join(
+            project_root, "test/xreg/mqtt-protocoloptions.xreg.json"), tmpdirname, "TestProject", "mqttclient")
 
 
 def test_mqttclient_inkjet_protocol_variants_cs():

@@ -81,7 +81,7 @@ against the original XSD when schema conformance is required.
 | **Integration tests** | Docker-based tests using Testcontainers for Kafka, MQTT, AMQP brokers |
 | **Project structure** | Language-idiomatic layout ready for IDE import |
 
-**Supported Languages:** Java 21+, C# (.NET 6+), Python 3.9+, TypeScript/JavaScript
+**Supported Languages:** Java 21+, C# (.NET 6+), Python 3.9+, TypeScript/JavaScript, Go 1.21+, Rust (cargo)
 
 **Supported Protocols:** Apache Kafka, MQTT 5.0, AMQP 1.0, Azure Event Hubs, Azure Service Bus, Azure Event Grid, HTTP/CloudEvents
 

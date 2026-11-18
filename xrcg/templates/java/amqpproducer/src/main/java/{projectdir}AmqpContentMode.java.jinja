@@ -1,0 +1,24 @@
+{%- import "util.jinja.include" as util -%}
+{{ util.CommonFileHeader() }}
+
+package {{ project_name | lower | replace('-', '_') }};
+
+/**
+ * CloudEvents AMQP content mode used when sending events.
+ *
+ * <ul>
+ *   <li>{@link #STRUCTURED} (default) &mdash; the whole CloudEvent (attributes and data) is
+ *       serialized into the AMQP message body as {@code application/cloudevents+json}.</li>
+ *   <li>{@link #BINARY} &mdash; the event data is the AMQP message body and the CloudEvents
+ *       attributes are carried as {@code cloudEvents:*} AMQP application properties
+ *       (CloudEvents AMQP 1.0.2 binary content mode). Use this for brokers that route or
+ *       filter on CloudEvents application properties.</li>
+ * </ul>
+ */
+public enum AmqpContentMode {
+    /** Whole CloudEvent serialized as {@code application/cloudevents+json} in the message body. */
+    STRUCTURED,
+
+    /** Event data in the body; CloudEvents attributes as {@code cloudEvents:*} application properties. */
+    BINARY
+}

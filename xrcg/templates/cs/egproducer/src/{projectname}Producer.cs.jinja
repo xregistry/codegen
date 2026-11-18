@@ -26,14 +26,31 @@ namespace {{ project_name | pascal }}
     {%- set class_name = ( groupname | strip_namespace )+"ProducerClient" %}
     public partial class {{ class_name }}
     {
+        private readonly System.Collections.Generic.IReadOnlyDictionary<string, string> dataschemaOverrides;
+        private static System.Collections.Generic.IReadOnlyDictionary<string, string> CopyDataschemaOverrides(System.Collections.Generic.IReadOnlyDictionary<string, string>? overrides)
+        {
+            var result = new System.Collections.Generic.Dictionary<string, string>();
+            if (overrides != null)
+            {
+                foreach (var entry in overrides)
+                {
+                    if (string.IsNullOrEmpty(entry.Key) || string.IsNullOrEmpty(entry.Value))
+                        throw new System.ArgumentException("Dataschema overrides require nonempty URI strings", nameof(overrides));
+                    result.Add(entry.Key, entry.Value);
+                }
+            }
+            return result;
+        }
+
         private const string cePrefix = "cloudEvents_";
         private const string applicationOctetStream = "application/octet-stream";
         private readonly EventGridPublisherClient eventGridPublisherClient;
         public delegate byte[] Serialize<T>(T data, out ContentType contentType);
         private static CloudEventFormatter defaultFormatter = new JsonEventFormatter();
 
-        public {{ class_name }}(EventGridPublisherClient eventGridPublisherClient)
+        public {{ class_name }}(EventGridPublisherClient eventGridPublisherClient, System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null)
         {
+            this.dataschemaOverrides = CopyDataschemaOverrides(dataschemaOverrides);
             this.eventGridPublisherClient = eventGridPublisherClient;
         }
 
@@ -87,6 +104,7 @@ namespace {{ project_name | pascal }}
         {% for messageid, message in messagegroup.messages.items() -%}
         {%- set messagename = messageid | pascal %}
         {%- set isCloudEvent = not message.envelope or message.envelope.lower().startswith("cloudevents") -%}
+        {%- set schemaformat = message.dataschemaformat | default("", true) | lower -%}
         {%- if isCloudEvent %}
         {%- if message.description %}
         /// <summary>
@@ -96,10 +114,10 @@ namespace {{ project_name | pascal }}
         public async Task Send{{ messagename | strip_namespace }}Async(
         {{ util.body_type(data_project_name, root, message) }} data
         {{- cloudEvents.DeclareUriTemplateArguments(message) -}},
-        string contentType = System.Net.Mime.MediaTypeNames.Application.Json)
+        string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }})
         {
             {{ cloudEvents.DeclareCloudNativeCloudEvent("cloudEvent", message) | indent(12) }}
-            cloudEvent.Data = data;
+            cloudEvent.Data = {% if schemaformat.startswith("proto") %}data.ToByteArray(){% elif schemaformat %}data.ToByteArray(contentType){% else %}data{% endif %};
             await eventGridPublisherClient.SendCloudNativeCloudEventAsync(cloudEvent);
         }
         {%- endif -%}

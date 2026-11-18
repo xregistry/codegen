@@ -87,7 +87,12 @@ describe('{{ project_name }} Kafka Producer Tests', () => {
             try {
                 const producer = new {{ class_name }}(kafkaProducer, topicName);
                 {%- if has_schema %}
+                {%- set schema_format = message.dataschemaformat | default("", true) | lower %}
+                {%- if schema_format.startswith("avro") %}
+                const testData = Object.assign({{ message_body_type }}.createInstance(), {{ message_body_type }}.AvroType.random());
+                {%- else %}
                 const testData = {{ message_body_type }}.createInstance();
+                {%- endif %}
                 {%- else %}
                 const testData = {} as {{ message_body_type }};
                 {%- endif %}

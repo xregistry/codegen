@@ -84,9 +84,31 @@ def run_go_test(xreg_file: str, output_dir: str, projectname: str, style: str):
             pytest.fail(f"go build failed with return code {result.returncode}")
         
         print(f"Go code compiled successfully: {project_dir}")
+
+        # Run the generated tests. Live-broker styles (kafka/mqtt/amqp) use
+        # Testcontainers and require Docker; they skip automatically when Docker
+        # is unavailable (via testcontainers.SkipIfProviderIsNotHealthy). Mock-based
+        # styles (eventhubs/servicebus) and the HTTP producer run without Docker.
+        # A generous -timeout is needed because live-broker tests start a fresh
+        # container per message and can take several minutes for large samples.
+        print(f"Running Go tests in {project_dir}")
+        result = subprocess.run(
+            ['go', 'test', '-timeout', '30m', './...'],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            timeout=2400
+        )
+
+        if result.returncode != 0:
+            print(f"go test stdout: {result.stdout}")
+            print(f"go test stderr: {result.stderr}")
+            pytest.fail(f"go test failed with return code {result.returncode}")
+
+        print(f"Go tests passed: {project_dir}")
         
     except subprocess.TimeoutExpired:
-        pytest.fail("Go build timed out after 300 seconds")
+        pytest.fail("Go test run timed out after 2400 seconds")
     except Exception as e:
         pytest.fail(f"Test failed with exception: {str(e)}")
 
@@ -141,6 +163,110 @@ def test_kafkaconsumer_lightbulb_go():
     with tempfile.TemporaryDirectory() as tmpdirname:
         run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_kafkaconsumer_lightbulb_go", "kafkaconsumer")
+
+
+# AMQP Producer Tests
+
+def test_amqpproducer_contoso_erp_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'contoso-erp.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_amqpproducer_contoso_erp_go", "amqpproducer")
+
+def test_amqpproducer_lightbulb_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_amqpproducer_lightbulb_go", "amqpproducer")
+
+
+# AMQP Consumer Tests
+
+def test_amqpconsumer_contoso_erp_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'contoso-erp.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_amqpconsumer_contoso_erp_go", "amqpconsumer")
+
+def test_amqpconsumer_lightbulb_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_amqpconsumer_lightbulb_go", "amqpconsumer")
+
+
+# Service Bus Producer Tests
+
+def test_sbproducer_contoso_erp_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'contoso-erp.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_sbproducer_contoso_erp_go", "sbproducer")
+
+def test_sbproducer_lightbulb_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_sbproducer_lightbulb_go", "sbproducer")
+
+
+# Service Bus Consumer Tests
+
+def test_sbconsumer_contoso_erp_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'contoso-erp.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_sbconsumer_contoso_erp_go", "sbconsumer")
+
+def test_sbconsumer_lightbulb_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_sbconsumer_lightbulb_go", "sbconsumer")
+
+
+# Event Hubs Producer Tests
+
+def test_ehproducer_contoso_erp_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'contoso-erp.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_ehproducer_contoso_erp_go", "ehproducer")
+
+def test_ehproducer_lightbulb_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_ehproducer_lightbulb_go", "ehproducer")
+
+
+# Event Hubs Consumer Tests
+
+def test_ehconsumer_contoso_erp_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'contoso-erp.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_ehconsumer_contoso_erp_go", "ehconsumer")
+
+def test_ehconsumer_lightbulb_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_ehconsumer_lightbulb_go", "ehconsumer")
+
+
+# MQTT Client Tests
+
+def test_mqttclient_contoso_erp_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'contoso-erp.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_mqttclient_contoso_erp_go", "mqttclient")
+
+def test_mqttclient_lightbulb_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_mqttclient_lightbulb_go", "mqttclient")
+
+
+# Generic HTTP Producer Tests
+
+def test_producer_contoso_erp_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'contoso-erp.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_producer_contoso_erp_go", "producer")
+
+def test_producer_lightbulb_go():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
+            '/', os.sep), tmpdirname, "test_producer_lightbulb_go", "producer")
 
 
 if __name__ == '__main__':

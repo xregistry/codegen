@@ -1,0 +1,12 @@
+{
+  "template": "amqpconsumer",
+  "description": "Go AMQP 1.0 Consumer",
+  "language": "go",
+  "protocol": "AMQP/1.0",
+  "usage": [
+    "consumer"
+  ],
+  "requires": [
+    "messagegroups"
+  ]
+}

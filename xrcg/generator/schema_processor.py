@@ -1,6 +1,5 @@
 """Schema-specific resource processor with avrotize integration."""
 
-import glob
 import json
 import os
 import re
@@ -144,10 +143,12 @@ class SchemaProcessor(ResourceProcessor):
         merged_schema = []
         for schema_info in self.avrotize_queue:
             schema_content = schema_info["schema_content"]
-            if isinstance(schema_content, list):
-                merged_schema.extend(schema_content)
-            else:
-                merged_schema.append(schema_content)
+            contents = schema_content if isinstance(schema_content, list) else [schema_content]
+            for content in contents:
+                if not isinstance(content, dict):
+                    logger.debug("Skipping non-object top-level Avro schema entry from %s", schema_info.get("schema_reference"))
+                    continue
+                merged_schema.append(content)
 
         if len(merged_schema) == 1:
             merged_schema = merged_schema[0]
@@ -162,9 +163,9 @@ class SchemaProcessor(ResourceProcessor):
         elif language == "cs":
             avrotize.convert_avro_schema_to_csharp(
                 merged_schema, project_data_dir, base_namespace=JinjaFilters.pascal(data_project_name),
-                pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled
+                pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled,
+                target_framework=self._get_target_framework()
             )
-            self._update_csproj_target_framework(project_data_dir)
         elif language == "java":
             avrotize.convert_avro_schema_to_java(
                 merged_schema, project_data_dir, package_name=data_project_name,
@@ -184,6 +185,12 @@ class SchemaProcessor(ResourceProcessor):
             avrotize.convert_avro_schema_to_go(
                 merged_schema, project_data_dir, package_name=data_project_name,
                 avro_annotation=avro_enabled, json_annotation=json_enabled
+            )
+        elif language == "rust":
+            avrotize.convert_avro_schema_to_rust(
+                merged_schema, project_data_dir,
+                package_name=JinjaFilters.rust_package(data_project_name),
+                avro_annotation=avro_enabled, serde_annotation=json_enabled
             )
 
         # Clear the queue after processing
@@ -213,22 +220,6 @@ class SchemaProcessor(ResourceProcessor):
             if m:
                 return m.group(1)
         return 'net10.0'
-
-    def _update_csproj_target_framework(self, project_data_dir: str) -> None:
-        """Update Avrotize-generated .csproj files to match our target framework."""
-        target_fw = self._get_target_framework()
-        for csproj_path in glob.glob(os.path.join(project_data_dir, '**', '*.csproj'), recursive=True):
-            with open(csproj_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            updated = re.sub(
-                r'<TargetFramework>net\d+\.\d+</TargetFramework>',
-                f'<TargetFramework>{target_fw}</TargetFramework>',
-                content
-            )
-            if updated != content:
-                with open(csproj_path, 'w', encoding='utf-8') as f:
-                    f.write(updated)
-                logger.debug("Updated TargetFramework to %s in %s", target_fw, csproj_path)
 
     def _extract_schema_format_and_content(self, schema_data: JsonNode, schema_ref: str, 
                                           root_document: JsonNode) -> tuple[str, JsonNode]:
@@ -301,11 +292,13 @@ class SchemaProcessor(ResourceProcessor):
             return "jstruct"
         elif format_lower.startswith("avro"):
             return "avro"
+        elif format_lower.startswith("xsd") or format_lower.startswith("xmlschema"):
+            return "xsd"
         return "unknown"
 
     def _requires_avrotize(self, language: str, schema_format_short: str) -> bool:
         """Check if schema requires avrotize processing."""
-        return language in ["py", "cs", "java", "js", "ts", "go"]
+        return language in ["py", "cs", "java", "js", "ts", "go", "rust"]
 
     def convert_jsons_to_avro(self, schema_reference: str, schema_root: JsonNode,
                              namespace_name: str, class_name: str) -> JsonNode:

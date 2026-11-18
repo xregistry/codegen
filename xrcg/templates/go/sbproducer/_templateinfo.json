@@ -1,0 +1,1 @@
+{"template":"sbproducer","description":"Go Azure Service Bus Producer","language":"go","protocol":"Azure Service Bus","usage":["producer"],"requires":["messagegroups"]}

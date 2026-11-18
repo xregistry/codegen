@@ -26,10 +26,14 @@ from cloudevents.http import CloudEvent
 {%- set groupName = parts | join('_') | lower %}
 
 class {{ (groupName.split('.')[-1] + '_event_producer') | pascal }}:
-    def __init__(self, url, content_mode = 'structured'):
+    def __init__(self, url, content_mode = 'structured', dataschema_overrides=None):
         """ init """
         self.url = url
         self.content_mode = content_mode
+        self._dataschema_overrides = dict(dataschema_overrides) if dataschema_overrides is not None else {}
+        if any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
+               for key, value in self._dataschema_overrides.items()):
+            raise ValueError("dataschema_overrides must map nonempty URI strings to nonempty URI strings")
 
     {% for messageid, message in messagegroup.messages.items() -%}
     {%- set parts = messageid.split('.') -%}
@@ -74,6 +78,8 @@ class {{ (groupName.split('.')[-1] + '_event_producer') | pascal }}:
             {%- if not loop.last -%},{%- endif%}
         {%- endfor %}
         }
+        if "dataschema" in attributes:
+            attributes["dataschema"] = self._dataschema_overrides.get(attributes["dataschema"], attributes["dataschema"])
         event = CloudEvent(attributes, data)
         if self.content_mode == "structured":
             headers, body = to_structured(event)

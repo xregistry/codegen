@@ -49,7 +49,8 @@ export class KqlClient {
                 `strcmp( ___tid, "${fromTime.toISOString()}") >= 0 and strcmp(___tid, "${toTime.toISOString()}") <= 0`
               );
             } else {
-              filterStrings.push(`strcmp(___tid,strcat(datetime("${value.toISOString()}"), ___id)) >= 0`);
+              const fromTime = value instanceof Date ? value : new Date(value);
+              filterStrings.push(`strcmp(___tid,strcat(datetime("${fromTime.toISOString()}"), ___id)) >= 0`);
             }
           } else if (typeof value === 'string') {
             filterStrings.push(`${key} startswith "${value}"`);

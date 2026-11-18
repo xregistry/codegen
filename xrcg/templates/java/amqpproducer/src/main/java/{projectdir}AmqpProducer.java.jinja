@@ -1,6 +1,7 @@
 {%- import "util.jinja.include" as util -%}
 {%- import "cloudevents.jinja.include" as cloudEvents -%}
 {%- import "amqp.jinja.include" as amqp -%}
+{%- set uses_cloudevents_message = (root | exists("envelope","CloudEvents/1.0")) %}
 {{ util.CommonFileHeader() }}
 
 package {{ project_name | lower | replace('-', '_') }};
@@ -81,6 +82,45 @@ class AmqpProducer {
             throw lastException;
         }
     }
+    {%- if uses_cloudevents_message %}
+    
+    /**
+     * Builds a ProtonJ2 message for a CloudEvent using the AMQP binary content mode:
+     * the serialized event data becomes the message body and the CloudEvents attributes
+     * are carried as {@code cloudEvents:*} AMQP application properties
+     * (CloudEvents AMQP 1.0.2 binary content mode).
+     *
+     * @param cloudEvent the CloudEvent whose attributes are mapped to application properties
+     * @param dataBytes  the serialized event data used as the AMQP message body
+     * @return a ProtonJ2 message in CloudEvents binary content mode
+     */
+    static Message<byte[]> buildBinaryCloudEventMessage(io.cloudevents.CloudEvent cloudEvent, byte[] dataBytes) throws org.apache.qpid.protonj2.client.exceptions.ClientException {
+        Message<byte[]> message = Message.create(dataBytes);
+        if (cloudEvent.getDataContentType() != null) {
+            message.contentType(cloudEvent.getDataContentType());
+        }
+        message.property("cloudEvents:specversion", cloudEvent.getSpecVersion().toString());
+        message.property("cloudEvents:id", cloudEvent.getId());
+        message.property("cloudEvents:type", cloudEvent.getType());
+        message.property("cloudEvents:source", cloudEvent.getSource().toString());
+        if (cloudEvent.getSubject() != null) {
+            message.property("cloudEvents:subject", cloudEvent.getSubject());
+        }
+        if (cloudEvent.getTime() != null) {
+            message.property("cloudEvents:time", cloudEvent.getTime().toString());
+        }
+        if (cloudEvent.getDataSchema() != null) {
+            message.property("cloudEvents:dataschema", cloudEvent.getDataSchema().toString());
+        }
+        for (String extensionName : cloudEvent.getExtensionNames()) {
+            Object extensionValue = cloudEvent.getExtension(extensionName);
+            if (extensionValue != null) {
+                message.property("cloudEvents:" + extensionName, extensionValue.toString());
+            }
+        }
+        return message;
+    }
+    {%- endif %}
     
     /**
      * Gets or creates a connection to the specified endpoint

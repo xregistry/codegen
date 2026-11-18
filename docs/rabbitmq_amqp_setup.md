@@ -661,12 +661,12 @@ If you're migrating from AMQP 0.9.1 to AMQP 1.0:
 
 - [RabbitMQ AMQP 1.0 Plugin Documentation](https://www.rabbitmq.com/plugins.html)
 - [AMQP 1.0 Specification](http://docs.oasis-open.org/amqp/core/v1.0/amqp-core-overview-v1.0.html)
-- [xRegistry CLI Documentation](https://github.com/clemensv/xregistry-cli)
+- [xRegistry CLI Documentation](https://github.com/xregistry/codegen)
 - [Apache Qpid Proton](https://qpid.apache.org/proton/) - AMQP 1.0 client library
 
 ## Support
 
 For issues specific to:
 - **RabbitMQ**: Check the [RabbitMQ mailing list](https://groups.google.com/g/rabbitmq-users)
-- **xRegistry CLI**: Open an issue on [GitHub](https://github.com/clemensv/xregistry-cli/issues)
+- **xRegistry CLI**: Open an issue on [GitHub](https://github.com/xregistry/codegen/issues)
 - **AMQP 1.0 Protocol**: Consult the [OASIS AMQP specification](http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-overview-v1.0-os.html)

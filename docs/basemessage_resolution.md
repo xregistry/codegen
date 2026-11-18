@@ -96,6 +96,77 @@ After resolution, `TemperatureSensorEvent` will have:
 - `datacontenttype` inherited from `BaseDeviceEvent`: `application/json`
 - `dataschemaformat` inherited from `BaseDeviceEvent`: `JSONSchema/draft-07`
 
+## CloudEvents Schema References
+
+Generated CloudEvents producers set `dataschema` from the effective
+`dataschemauri`, including inherited references. The URI identifies the schema
+version selected for payload generation. An explicit envelope `dataschema`
+value takes precedence.
+
+File-backed definitions use the `xreg://./` prefix for catalog-local references.
+For example, `#/schemagroups/devices/schemas/Temperature` becomes
+`xreg://./schemagroups/devices/schemas/Temperature/versions/1` when version `1`
+is selected. A document-relative reference such as
+`schemas.json#/schemagroups/devices/schemas/Temperature` retains its document
+path and fragment after the prefix. Generated URIs never contain the generator's
+absolute filesystem path. The `xreg` URI identifies a local catalog resource;
+it does not imply an HTTP endpoint.
+
+API-backed definitions use the actual API host and registry prefix. Explicit
+absolute schema URIs retain their host and path. Unversioned resource references
+gain `/versions/{versionid}`; already pinned references retain their version.
+Selection uses the declared default version, including `meta` and
+`defaultversionurl`, or the existing lexicographic fallback when no default is
+declared. Unresolved references fail generation with the message and reference
+in the error.
+
+### Runtime schema URI overrides
+
+Generated producer constructors accept an optional map from the original emitted
+`dataschema` URI to its deployment-specific replacement. For example:
+
+```python
+producer = ExampleEventProducer(
+    client, "readings",
+    dataschema_overrides={
+        "xreg://./schemagroups/devices/schemas/Temperature/versions/1":
+            "https://catalog.example/schemagroups/registered/schemas/Temperature/versions/2"
+    },
+)
+```
+
+The key is the complete, case-sensitive URI that the producer would otherwise
+emit, including its version. This can be a generated `xreg://./` URI, an
+API-backed URI, or an explicit envelope `dataschema` value. No match preserves
+the original. Replacement is one lookup, never a chain of substitutions.
+An omitted or empty map preserves existing behavior. Producers copy the map at
+construction, so instances do not share mutable overrides.
+
+Overrides apply before binary or structured CloudEvents serialization. They do
+not change payload serialization, schema definitions, or plain protocol messages.
+The deployment must verify that the replacement identifies a compatible schema;
+producers do not fetch or compare schemas. Empty keys or values are rejected.
+
+| Language | Constructor API |
+|---|---|
+| Python | Optional final `dataschema_overrides` mapping |
+| TypeScript | Optional final `dataschemaOverrides` record; the Event Grid credential argument can be `undefined` |
+| Go | Optional final variadic `map[string]string`; supply at most one map |
+| Java | Optional final variadic `Map<String, String>` on constructors; supply at most one map |
+| C# | Optional final `IReadOnlyDictionary<string, string>? dataschemaOverrides` |
+| Rust | `new_with_dataschema_overrides` or `with_client_and_dataschema_overrides`, taking an owned `HashMap<String, String>` |
+
+Factory-backed transports forward the instance map into event construction.
+Java's generic event factory accepts the map in its constructor. The C# Service
+Bus style emits a factory rather than a sender: construct it with the map and
+call `Create<Event>EventWithOverrides`, or pass the optional map to its existing
+static `Create<Event>Event` methods. Other static C#/Java message factories also
+accept a final map. C# AMQP's builder offers `WithDataschemaOverrides`.
+
+Go's pointer-only constructors cannot return configuration errors; invalid
+override maps panic. Other languages report invalid constructor configuration
+through their normal exception or `Result` paths.
+
 ## Endpoint Message Inheritance
 
 The basemessage mechanism also applies to messages embedded in endpoint definitions:

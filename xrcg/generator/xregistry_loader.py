@@ -1,5 +1,6 @@
 """ Core functions for the xregistry commands with dependency resolution """
 
+import copy
 import json
 import os
 from typing import Any, Dict, List, Tuple, Union, Set, Optional
@@ -16,10 +17,20 @@ JsonNode = Union[Dict[str, 'JsonNode'], List['JsonNode'], str, bool, int, float,
 logger = logging.getLogger(__name__)
 
 
+class SchemaReference(str):
+    """A schema reference retaining its authored form and definition origin."""
+
+    def __new__(cls, value: str, origin: str = "", authored: Optional[str] = None):
+        instance = super().__new__(cls, value)
+        instance.origin = origin
+        instance.authored = value if authored is None else authored
+        return instance
+
+
 class XRegistryUrlParser:
     """Parse xRegistry URLs to determine entry point and resource paths."""
     
-    def __init__(self, url: str):
+    def __init__(self, url: str, group_types: Optional[Dict[str, Any]] = None):
         self.url = url
         self.parsed = urllib.parse.urlparse(url)
         self.base_url = f"{self.parsed.scheme}://{self.parsed.netloc}"
@@ -41,6 +52,14 @@ class XRegistryUrlParser:
             else:
                 # /registry/something - strip registry prefix
                 self.path_parts = self.path_parts[1:]
+        if group_types:
+            parts = [p for p in self.parsed.path.strip('/').split('/') if p]
+            group_index = next((i for i, part in enumerate(parts) if part in group_types), None)
+            if group_index is not None:
+                prefix = "/" + "/".join(parts[:group_index]) if group_index else ""
+                self.base_url += prefix
+                self.path_parts = parts[group_index:]
+                self.is_registry_root = False
         
     def get_base_url(self) -> str:
         """Get the base registry URL."""
@@ -205,7 +224,10 @@ class DependencyResolver:
         """
         # Resolve relative references against base URL
         if base_url and ref_url.startswith("/"):
-            ref_url = urllib.parse.urljoin(base_url, ref_url)
+            if any(ref_url.startswith(f"/{group}/") for group in self.model.groups):
+                ref_url = base_url.rstrip("/") + ref_url
+            else:
+                ref_url = urllib.parse.urljoin(base_url, ref_url)
             self.logger.debug(f"Resolved relative reference to: {ref_url}")
         
         if ref_url in self.resolved_resources:
@@ -225,15 +247,14 @@ class DependencyResolver:
                 self.resolved_resources[ref_url] = resource_data
                 
                 # Find and resolve nested dependencies
-                parser = XRegistryUrlParser(ref_url)
+                parser = XRegistryUrlParser(ref_url, self.model.groups)
                 group_type = parser.get_group_type() or "unknown"
                 nested_refs = self.find_xid_references(resource_data, group_type)
                 
                 # Extract base URL from ref_url for resolving nested relative references
                 nested_base_url = None
                 if ref_url.startswith("http"):
-                    parsed = urllib.parse.urlparse(ref_url)
-                    nested_base_url = f"{parsed.scheme}://{parsed.netloc}"
+                    nested_base_url = parser.get_base_url()
                 
                 for nested_ref in nested_refs:
                     self.resolve_reference(nested_ref, headers, nested_base_url)
@@ -276,7 +297,9 @@ class DependencyResolver:
                         schema_uri = msg["dataschemauri"]
                         if isinstance(schema_uri, str) and schema_uri.startswith("/"):
                             # Convert relative URI to JSON pointer
-                            msg["dataschemauri"] = "#" + schema_uri
+                            msg["dataschemauri"] = SchemaReference(
+                                "#" + schema_uri, getattr(schema_uri, "origin", ""),
+                                getattr(schema_uri, "authored", schema_uri))
         
         # Process all endpoints (they may also reference schemas or messages)
         if "endpoints" in doc and isinstance(doc["endpoints"], dict):
@@ -295,7 +318,9 @@ class DependencyResolver:
                             schema_uri = msg["dataschemauri"]
                             if isinstance(schema_uri, str) and schema_uri.startswith("/"):
                                 # Convert relative URI to JSON pointer
-                                msg["dataschemauri"] = "#" + schema_uri
+                                msg["dataschemauri"] = SchemaReference(
+                                    "#" + schema_uri, getattr(schema_uri, "origin", ""),
+                                    getattr(schema_uri, "authored", schema_uri))
     
     def _restructure_single_resource(self, version_obj: Dict[str, Any], group_type: str, resource_id: str) -> Dict[str, Any]:
         """Restructure a single message/schema version object into proper group structure.
@@ -378,7 +403,7 @@ class DependencyResolver:
         Returns:
             Composed document with all dependencies
         """
-        parser = XRegistryUrlParser(entry_url)
+        parser = XRegistryUrlParser(entry_url, self.model.groups)
         entry_type = parser.get_entry_type()
         
         # Start with empty document structure
@@ -449,7 +474,7 @@ class DependencyResolver:
     
     def _add_resource_to_document(self, doc: Dict[str, Any], resource_url: str, resource_data: JsonNode) -> None:
         """Add a resolved resource to the composed document."""
-        parser = XRegistryUrlParser(resource_url)
+        parser = XRegistryUrlParser(resource_url, self.model.groups)
         group_type = parser.get_group_type()
         group_id = parser.get_group_id()
         resource_id = parser.get_resource_id()
@@ -473,7 +498,7 @@ class DependencyResolver:
             if resource_id:
                 # Determine the resource collection name from the URL path
                 # URL format: /grouptype/groupid/resourcecollection/resourceid
-                url_parts = [p for p in urllib.parse.urlparse(resource_url).path.split('/') if p]
+                url_parts = parser.path_parts
                 resource_collection = url_parts[2] if len(url_parts) > 2 else None
                 
                 if not resource_collection:
@@ -716,11 +741,46 @@ class ResourceResolver:
 
 
 class MessageResolver:
-    """Resolves basemessage references in message definitions."""
-    
+    """Resolves basemessage references in message definitions.
+
+    Three attribute names are honored:
+
+    * ``basemessage`` — the current xRegistry message spec (1.0-rc2+) name.
+      An XID pointing to another message definition, e.g.
+      ``/messagegroups/group1/messages/msg1``.
+    * ``basemessageuri`` — the canonical URI form used in xRegistry manifests
+      in the wild (e.g. ``/messagegroups/group1/messages/msg1``).  Treated as
+      a synonym for ``basemessage``.
+    * ``basemessageurl`` — the legacy name used by earlier drafts and still
+      emitted by some tooling. Treated as a synonym for ``basemessage``.
+
+    If a message specifies more than one, priority is given in the order
+    listed above (``basemessage`` > ``basemessageuri`` > ``basemessageurl``).
+    """
+
+    # Attribute names that may carry a base-message reference, in priority order.
+    _BASEMESSAGE_KEYS = ("basemessage", "basemessageuri", "basemessageurl")
+
     def __init__(self, loader: 'XRegistryLoader'):
         self.loader = loader
         self.logger = logging.getLogger(__name__ + ".MessageResolver")
+
+    def _get_basemessage_ref(self, message: Dict[str, Any]) -> Optional[str]:
+        """Return the base-message reference from a message, honoring all spec
+        names (``basemessage``, ``basemessageuri``, and the legacy
+        ``basemessageurl``). Returns the first non-empty value found, or None."""
+        for key in self._BASEMESSAGE_KEYS:
+            value = message.get(key)
+            if value:
+                return value
+        return None
+
+    def _strip_basemessage_keys(self, message: Dict[str, Any]) -> None:
+        """Remove all base-message reference attributes from a message dict
+        in place, so the resolved message no longer carries the marker."""
+        for key in self._BASEMESSAGE_KEYS:
+            if key in message:
+                del message[key]
     
     def _deep_merge(self, base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
         """Deep merge two dictionaries with overlay shadowing base.
@@ -756,8 +816,9 @@ class MessageResolver:
         Returns:
             The fully resolved message with all base messages merged, or None if circular reference detected
         """
-        # Check for basemessageurl reference
-        base_ref = message.get('basemessageurl')
+        # Check for a base-message reference (current spec: ``basemessage``;
+        # legacy alias: ``basemessageurl``).
+        base_ref = self._get_basemessage_ref(message)
         if not base_ref:
             # No base message - return as-is
             return dict(message)
@@ -774,10 +835,9 @@ class MessageResolver:
         if not base_message:
             self.logger.warning(f"Base message not found: {base_ref}")
             # Per spec: "If the referenced message can not be found then an error MUST NOT be generated"
-            # Return current message without base, but remove basemessageurl
+            # Return current message without the base-message marker(s).
             result = dict(message)
-            if 'basemessageurl' in result:
-                del result['basemessageurl']
+            self._strip_basemessage_keys(result)
             return result
         
         # Recursively resolve the base message's chain
@@ -786,12 +846,11 @@ class MessageResolver:
             # Circular reference in base chain
             return None
         
-        # Remove basemessageurl from both before merging
+        # Remove base-message marker(s) from both sides before merging so the
+        # merged result is a clean, fully-resolved message.
         current = dict(message)
-        if 'basemessageurl' in current:
-            del current['basemessageurl']
-        if 'basemessageurl' in resolved_base:
-            del resolved_base['basemessageurl']
+        self._strip_basemessage_keys(current)
+        self._strip_basemessage_keys(resolved_base)
         
         # Merge: base first, then overlay with current message
         merged = self._deep_merge(resolved_base, current)
@@ -892,8 +951,10 @@ class MessageResolver:
             if not isinstance(message, dict):
                 continue
             
-            # Check if this message has a basemessageurl
-            if 'basemessageurl' not in message:
+            # Skip messages that have no base-message reference (under either
+            # the current spec name ``basemessage`` or the legacy alias
+            # ``basemessageurl``).
+            if not self._get_basemessage_ref(message):
                 continue
             
             self.logger.debug(f"Resolving basemessage for message: {message_id}")
@@ -910,6 +971,170 @@ class MessageResolver:
                 self.logger.error(f"Failed to resolve basemessage for: {message_id} (circular reference)")
 
 
+class AliasResolver:
+    """Resolves xRegistry resource aliases so they are transparent to codegen.
+
+    A resource alias is defined by the xRegistry Core specification under
+    *Cross Referencing Resources*. An alias resource carries an ``xref``
+    attribute — either at the resource level or inside the resource's ``meta``
+    sub-object — whose value is an XID naming a *same-typed* resource in the
+    same registry document, e.g. ``/schemagroups/canonical/schemas/EventData``.
+    The alias projects the target's metadata, versions, default version, and
+    document through the alias identity.
+
+    This resolver runs during document loading, before validation, schema
+    processing, and template rendering. Each alias resource is replaced in
+    place by a deep copy of its target's content while retaining the alias
+    resource's own identity (its collection key and ``<singular>id``). As a
+    result, downstream consumers never observe ``xref`` and a document whose
+    only "invalid" content was an alias validates cleanly against the document
+    schema.
+
+    Per the Core specification, aliases are **not** resolved transitively: an
+    alias that targets another alias is reported as an error, as are malformed
+    targets, missing targets, type mismatches, and self-references.
+    """
+
+    def __init__(self, loader: 'XRegistryLoader'):
+        self.loader = loader
+        self.model = loader.model
+        self.logger = logging.getLogger(__name__ + ".AliasResolver")
+
+    @staticmethod
+    def _get_xref(resource: Any) -> Optional[str]:
+        """Return the ``xref`` value of a resource, honoring both the
+        resource-level ``xref`` attribute and the ``meta.xref`` form. Returns
+        the first non-empty value found, or None."""
+        if not isinstance(resource, dict):
+            return None
+        xref = resource.get("xref")
+        if xref:
+            return xref
+        meta = resource.get("meta")
+        if isinstance(meta, dict):
+            meta_xref = meta.get("xref")
+            if meta_xref:
+                return meta_xref
+        return None
+
+    def _resource_plurals_by_group(self) -> Dict[str, Dict[str, Optional[str]]]:
+        """Build a lookup of ``group_plural -> {resource_plural: resource_singular}``
+        from the model so alias resolution works for every resource type
+        (messages, schemas, and any custom resources) without hard-coding."""
+        result: Dict[str, Dict[str, Optional[str]]] = {}
+        for group_plural, gdef in self.model.groups.items():
+            if not isinstance(gdef, dict):
+                continue
+            resources = gdef.get("resources", [])
+            plurals: Dict[str, Optional[str]] = {}
+            if isinstance(resources, list):
+                for r in resources:
+                    if isinstance(r, dict) and r.get("plural"):
+                        plurals[r["plural"]] = r.get("singular")
+            elif isinstance(resources, dict):
+                for rid, r in resources.items():
+                    if isinstance(r, dict):
+                        plurals[r.get("plural", rid)] = r.get("singular")
+            result[group_plural] = plurals
+        return result
+
+    def resolve_all_aliases(self, xreg_doc: Dict[str, Any]) -> None:
+        """Resolve every resource alias in the document in place."""
+        if not isinstance(xreg_doc, dict):
+            return
+
+        group_resource_plurals = self._resource_plurals_by_group()
+
+        for group_plural, groups in xreg_doc.items():
+            resource_plurals = group_resource_plurals.get(group_plural)
+            if not resource_plurals or not isinstance(groups, dict):
+                continue
+            for group_id, group in groups.items():
+                if not isinstance(group, dict):
+                    continue
+                for res_plural, res_singular in resource_plurals.items():
+                    collection = group.get(res_plural)
+                    if not isinstance(collection, dict):
+                        continue
+                    for res_id, resource in list(collection.items()):
+                        xref = self._get_xref(resource)
+                        if not xref:
+                            continue
+                        alias_path = f"/{group_plural}/{group_id}/{res_plural}/{res_id}"
+                        resolved = self._resolve_alias(
+                            xref, alias_path, res_plural, res_singular,
+                            res_id, xreg_doc)
+                        if resolved is not None:
+                            collection[res_id] = resolved
+
+    def _resolve_alias(self, xref: str, alias_path: str, res_plural: str,
+                       res_singular: Optional[str], alias_id: str,
+                       xreg_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Resolve a single alias to a replacement resource, or return None
+        (leaving the alias untouched) and log an actionable error on failure."""
+        target = xref.strip()
+        segments = [s for s in target.split("/") if s != ""]
+        # Expect an XID of the form /<group>/<groupid>/<resource>/<resourceid>.
+        if len(segments) != 4:
+            self.logger.error(
+                f"Alias {alias_path}: malformed xref target '{xref}'. Expected an "
+                f"XID of the form '/<group>/<groupid>/<resource>/<resourceid>'.")
+            return None
+
+        t_group_plural, t_group_id, t_res_plural, t_res_id = segments
+        target_path = f"/{t_group_plural}/{t_group_id}/{t_res_plural}/{t_res_id}"
+
+        # Type check: the target must name a same-typed resource.
+        if t_res_plural != res_plural:
+            self.logger.error(
+                f"Alias {alias_path}: xref target '{target_path}' is a different "
+                f"resource type ('{t_res_plural}' vs '{res_plural}'). Aliases must "
+                f"target a same-typed resource.")
+            return None
+
+        # Self-reference.
+        if target_path == alias_path:
+            self.logger.error(
+                f"Alias {alias_path}: xref target refers to itself.")
+            return None
+
+        # Navigate to the target resource in the same document.
+        groups = xreg_doc.get(t_group_plural)
+        target_group = groups.get(t_group_id) if isinstance(groups, dict) else None
+        target_collection = (
+            target_group.get(t_res_plural) if isinstance(target_group, dict) else None)
+        target_resource = (
+            target_collection.get(t_res_id) if isinstance(target_collection, dict) else None)
+        if not isinstance(target_resource, dict):
+            self.logger.error(
+                f"Alias {alias_path}: xref target '{target_path}' was not found in "
+                f"the registry document.")
+            return None
+
+        # Core does not perform transitive alias resolution.
+        if self._get_xref(target_resource):
+            self.logger.error(
+                f"Alias {alias_path}: xref target '{target_path}' is itself an "
+                f"alias. Core does not perform transitive alias resolution; point "
+                f"the alias at a canonical resource.")
+            return None
+
+        # Project the target through the alias identity.
+        resolved = copy.deepcopy(target_resource)
+        if res_singular:
+            resolved[f"{res_singular}id"] = alias_id
+        for key in ("xref", "self", "xid"):
+            resolved.pop(key, None)
+        meta = resolved.get("meta")
+        if isinstance(meta, dict):
+            meta.pop("xref", None)
+            if not meta:
+                resolved.pop("meta", None)
+
+        self.logger.info(f"Resolved alias {alias_path} -> {target_path}")
+        return resolved
+
+
 class XRegistryLoader:
     """Main loader class for xRegistry documents with dependency resolution."""
     
@@ -918,6 +1143,7 @@ class XRegistryLoader:
         self.dependency_resolver = DependencyResolver(self.model, self)
         self.resource_resolver = ResourceResolver(self)
         self.message_resolver = MessageResolver(self)
+        self.alias_resolver = AliasResolver(self)
         self.logger = logging.getLogger(__name__ + ".XRegistryLoader")
         
         # Schema handling state for template rendering compatibility
@@ -1025,7 +1251,7 @@ class XRegistryLoader:
                 
                 if not is_full_document:
                     # This appears to be a single resource - wrap it
-                    parser = XRegistryUrlParser(resolved_uri)
+                    parser = XRegistryUrlParser(resolved_uri, self.model.groups)
                     entry_type = parser.get_entry_type()
                     
                     if entry_type in ["group_instance", "resource_collection", "resource", "version"]:
@@ -1040,6 +1266,10 @@ class XRegistryLoader:
             
             # Apply basic resource resolution
             self.resource_resolver.resolve_all_resources(document, headers)
+            
+            # Resolve resource aliases (xref) so they are transparent to codegen
+            if isinstance(document, dict):
+                self.alias_resolver.resolve_all_aliases(document)
             
             # Resolve basemessage references
             if isinstance(document, dict):
@@ -1118,6 +1348,10 @@ class XRegistryLoader:
             
             if stacked_document is None:
                 return uris[0], None
+            
+            # Resolve resource aliases (xref) so they are transparent to codegen
+            if isinstance(stacked_document, dict):
+                self.alias_resolver.resolve_all_aliases(stacked_document)
             
             # Resolve basemessage references in the final stacked document
             if isinstance(stacked_document, dict):
@@ -1272,7 +1506,7 @@ class XRegistryLoader:
                     
                     # Check if this is a reference to a resource within a group
                     # If so, we should also fetch the parent group instance
-                    parser = XRegistryUrlParser(full_ref_url)
+                    parser = XRegistryUrlParser(full_ref_url, self.model.groups)
                     entry_type = parser.get_entry_type()
                     
                     if entry_type in ["resource", "version"]:
@@ -1312,6 +1546,10 @@ class XRegistryLoader:
             
             # Resolve all individual resource references (like schemaurl, resourceurl)
             self.resource_resolver.resolve_all_resources(composed_document, headers)
+            
+            # Resolve resource aliases (xref) so they are transparent to codegen
+            if isinstance(composed_document, dict):
+                self.alias_resolver.resolve_all_aliases(composed_document)
             
             # Resolve basemessage references
             if isinstance(composed_document, dict):
@@ -1353,25 +1591,38 @@ class XRegistryLoader:
             
             if uri.startswith(('http://', 'https://')):
                 # Load from HTTP/HTTPS
-                return self._load_from_url(uri, headers)
+                result = self._load_from_url(uri, headers)
             elif uri.startswith('file://'):
                 # Load from file URI
                 file_path = uri[7:]  # Remove 'file://' prefix
-                return self._load_from_file(file_path)
+                result = self._load_from_file(file_path)
             else:
                 # Assume local file path
-                return self._load_from_file(uri)
+                result = self._load_from_file(uri)
+            self._record_schema_origins(result[1], result[0])
+            return result
                 
         except Exception as e:
             self.logger.error(f"Error loading from {uri}: {e}")
             return uri, None
+
+    def _record_schema_origins(self, node: JsonNode, origin: str) -> None:
+        if isinstance(node, dict):
+            reference = node.get("dataschemauri")
+            if isinstance(reference, str) and not isinstance(reference, SchemaReference):
+                node["dataschemauri"] = SchemaReference(reference, origin)
+            for value in node.values():
+                self._record_schema_origins(value, origin)
+        elif isinstance(node, list):
+            for value in node:
+                self._record_schema_origins(value, origin)
     
     def _load_from_url(self, url: str, headers: Dict[str, str]) -> Tuple[str, Optional[JsonNode]]:
         """Load document from HTTP/HTTPS URL."""
         try:
             # Use the ?inline flag to fetch nested collections automatically
             # This avoids the need to make multiple HTTP requests
-            parser = XRegistryUrlParser(url)
+            parser = XRegistryUrlParser(url, self.model.groups)
             entry_type = parser.get_entry_type()
             
             # Add ?inline parameter for group instances and resources to fetch their collections
@@ -1443,15 +1694,83 @@ class XRegistryLoader:
                     filtered_messagegroups[group_id] = group_data
             filtered_doc["messagegroups"] = filtered_messagegroups
         
-        # Also filter schemagroups to match the filtered messagegroups
+        # Also filter schemagroups to keep only those referenced by the
+        # filtered messagegroups via dataschemauri (schemagroup IDs are
+        # independent of messagegroup IDs and must be resolved from refs).
         if isinstance(filtered_doc.get("schemagroups"), dict):
-            filtered_schemagroups = {}
-            for group_id, group_data in filtered_doc["schemagroups"].items():
-                if messagegroup_filter in group_id:
-                    filtered_schemagroups[group_id] = group_data
+            referenced_sg_ids = self._collect_referenced_schemagroup_ids(
+                filtered_doc.get("messagegroups", {}), document)
+            filtered_schemagroups = {
+                sg_id: sg_data
+                for sg_id, sg_data in filtered_doc["schemagroups"].items()
+                if not referenced_sg_ids or sg_id in referenced_sg_ids
+            }
             filtered_doc["schemagroups"] = filtered_schemagroups
         
         return filtered_doc
+
+    @staticmethod
+    def _collect_referenced_schemagroup_ids(
+            messagegroups: Any,
+            full_document: Optional[Dict[str, Any]] = None) -> Set[str]:
+        """Walk messagegroups and collect schemagroup IDs referenced by any
+        message's ``dataschemauri`` (e.g. ``#/schemagroups/<id>/schemas/...``).
+
+        When a message inherits via ``basemessageurl`` from another
+        messagegroup, the base message is followed in ``full_document`` so
+        that schemagroups referenced only by the base are still kept.
+        """
+        ids: Set[str] = set()
+        visited: Set[str] = set()
+        full_mgs = (full_document or {}).get("messagegroups", {}) \
+            if isinstance(full_document, dict) else {}
+
+        def _record_uri(uri: Any) -> None:
+            if isinstance(uri, str) and uri.startswith("#/schemagroups/"):
+                parts = uri.split("/")
+                if len(parts) > 2:
+                    ids.add(parts[2])
+
+        def _resolve_base(base_url: Any) -> Optional[Dict[str, Any]]:
+            if not isinstance(base_url, str) or not isinstance(full_mgs, dict):
+                return None
+            # Accept forms like
+            #   /messagegroups/<mg>/messages/<msg>
+            #   #/messagegroups/<mg>/messages/<msg>
+            tokens = [t for t in base_url.split("/") if t and t != "#"]
+            if len(tokens) >= 4 and tokens[0] == "messagegroups" \
+                    and tokens[2] == "messages":
+                mg = full_mgs.get(tokens[1])
+                if isinstance(mg, dict):
+                    msg = mg.get("messages", {}).get(tokens[3])
+                    if isinstance(msg, dict):
+                        return msg
+            return None
+
+        def _visit(message: Dict[str, Any], depth: int = 0) -> None:
+            if depth > 16:
+                return
+            _record_uri(message.get("dataschemauri"))
+            base = (message.get("basemessage")
+                    or message.get("basemessageuri")
+                    or message.get("basemessageurl"))
+            if isinstance(base, str) and base not in visited:
+                visited.add(base)
+                resolved = _resolve_base(base)
+                if resolved is not None:
+                    _visit(resolved, depth + 1)
+
+        if isinstance(messagegroups, dict):
+            for _, group in messagegroups.items():
+                if not isinstance(group, dict):
+                    continue
+                messages = group.get("messages", {})
+                if not isinstance(messages, dict):
+                    continue
+                for _, message in messages.items():
+                    if isinstance(message, dict):
+                        _visit(message)
+        return ids
     
     def _apply_endpoint_filter(self, document: Dict[str, Any], 
                               endpoint_filter: str) -> Dict[str, Any]:
@@ -1506,13 +1825,18 @@ class XRegistryLoader:
                         filtered_messagegroups[group_id] = group_data
                 filtered_doc["messagegroups"] = filtered_messagegroups
             
-            # Step 4: Filter schemagroups to match the filtered messagegroups
-            if referenced_messagegroups and isinstance(filtered_doc.get("schemagroups"), dict):
-                filtered_schemagroups = {}
-                for group_id, group_data in filtered_doc["schemagroups"].items():
-                    if group_id in referenced_messagegroups:
-                        filtered_schemagroups[group_id] = group_data
-                filtered_doc["schemagroups"] = filtered_schemagroups
+            # Step 4: Filter schemagroups to keep only those referenced by
+            # the filtered messagegroups via dataschemauri. Schemagroup IDs
+            # are independent of messagegroup IDs (e.g. ``foo.jstruct`` vs
+            # ``foo.kafka``) and must be resolved from the actual refs.
+            if isinstance(filtered_doc.get("schemagroups"), dict):
+                referenced_sg_ids = self._collect_referenced_schemagroup_ids(
+                    filtered_doc.get("messagegroups", {}), document)
+                filtered_doc["schemagroups"] = {
+                    sg_id: sg_data
+                    for sg_id, sg_data in filtered_doc["schemagroups"].items()
+                    if not referenced_sg_ids or sg_id in referenced_sg_ids
+                }
         
         return filtered_doc
     

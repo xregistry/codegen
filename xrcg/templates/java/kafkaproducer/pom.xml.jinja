@@ -36,6 +36,8 @@
   <dependencies>
     <!-- Apache Kafka Client -->
     {{ dep('kafka-clients') }}
+    {{ dep('lz4-java') }}
+    {{ dep('snappy-java') }}
     
     <!-- Logging -->
     {{ dep('log4j-api') }}
@@ -85,6 +87,7 @@
     
     <!-- Test dependencies -->
     {{ dep('org.junit.jupiter:junit-jupiter') }}
+    {{ dep('org.mockito:mockito-core') }}
     {{ dep('org.testcontainers:testcontainers') }}
     {{ dep('org.testcontainers:junit-jupiter') }}
     {{ dep('org.testcontainers:kafka') }}

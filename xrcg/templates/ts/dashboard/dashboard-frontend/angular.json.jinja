@@ -25,6 +25,9 @@
             ],
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "less",
+            "optimization": {
+              "fonts": false
+            },
             "assets": [
               "src/favicon.ico",
               "src/assets"
@@ -65,10 +68,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "browserTarget": "dashboard-frontend:build:production"
+              "buildTarget": "dashboard-frontend:build:production"
             },
             "development": {
-              "browserTarget": "dashboard-frontend:build:development"
+              "buildTarget": "dashboard-frontend:build:development"
             }
           },
           "defaultConfiguration": "development"
@@ -76,7 +79,7 @@
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "browserTarget": "dashboard-frontend:build"
+            "buildTarget": "dashboard-frontend:build"
           }
         },
         "test": {

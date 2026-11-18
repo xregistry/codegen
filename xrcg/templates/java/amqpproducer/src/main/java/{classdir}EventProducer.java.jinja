@@ -36,19 +36,60 @@ import java.util.function.Consumer;
  * Event producer for {{ groupname }} message group
  */
 public class {{ class_name }} {
+
+    @SafeVarargs
+    private static java.util.Map<String, String> copyDataschemaOverrides(java.util.Map<String, String>... overrides) {
+        if (overrides.length > 1) {
+            throw new IllegalArgumentException("provide at most one dataschema override map");
+        }
+        java.util.Map<String, String> result = overrides.length == 0
+            ? java.util.Collections.emptyMap() : java.util.Map.copyOf(overrides[0]);
+        result.forEach((key, value) -> {
+            if (key.isEmpty() || value.isEmpty()) {
+                throw new IllegalArgumentException("dataschema overrides require nonempty URI strings");
+            }
+        });
+        return result;
+    }
+
+    @SafeVarargs
+    private static String resolveDataschema(String uri, java.util.Map<String, String>... overrides) {
+        return copyDataschemaOverrides(overrides).getOrDefault(uri, uri);
+    }
+
+    private final java.util.Map<String, String> dataschemaOverrides;
+
     private static final Logger logger = LogManager.getLogger({{ class_name }}.class);
     
     {%- if uses_cloudevents_message %}
     private final Consumer<io.cloudevents.CloudEvent> beforeSend;
     {%- endif %}
     private final AmqpProducer endpoint;
+    {%- if uses_cloudevents_message %}
+    private AmqpContentMode contentMode = AmqpContentMode.STRUCTURED;
+    {%- endif %}
     
-    private {{ class_name }}(AmqpProducer endpoint{%- if uses_cloudevents_message -%}, Consumer<io.cloudevents.CloudEvent> beforeSend{%- endif -%}) {
+    private {{ class_name }}(AmqpProducer endpoint{%- if uses_cloudevents_message -%}, Consumer<io.cloudevents.CloudEvent> beforeSend{%- endif -%}, java.util.Map<String, String>... dataschemaOverrides) {
         this.endpoint = endpoint;
+        this.dataschemaOverrides = copyDataschemaOverrides(dataschemaOverrides);
         {%- if uses_cloudevents_message %}
         this.beforeSend = beforeSend;
         {%- endif %}
     }
+    {%- if uses_cloudevents_message %}
+    
+    /**
+     * Sets the CloudEvents AMQP content mode used for subsequent sends
+     * (default: {@link AmqpContentMode#STRUCTURED}).
+     *
+     * @param contentMode the content mode to use
+     * @return this producer, for fluent chaining
+     */
+    public {{ class_name }} withContentMode(AmqpContentMode contentMode) {
+        this.contentMode = contentMode;
+        return this;
+    }
+    {%- endif %}
     
     {%- if root.endpoints %}
     {%- for endpointid, endpoint in root.endpoints.items() %}
@@ -65,6 +106,7 @@ public class {{ class_name }} {
         {%- if uses_cloudevents_message -%}
         , Consumer<io.cloudevents.CloudEvent> beforeSend
         {%- endif -%}
+        , java.util.Map<String, String>... dataschemaOverrides
     ) {
         {%- if options %}
         Map<String, String> options = new HashMap<>();
@@ -87,6 +129,7 @@ public class {{ class_name }} {
             {%- if uses_cloudevents_message -%}
             , beforeSend
             {%- endif -%}
+            , dataschemaOverrides
         );
     }
     {%- endif %}
@@ -102,13 +145,15 @@ public class {{ class_name }} {
         Consumer<io.cloudevents.CloudEvent> beforeSend,
         {%- endif %}
         Map<String, String> options,
-        List<URI> endpoints
+        List<URI> endpoints,
+        java.util.Map<String, String>... dataschemaOverrides
     ) {
         return new {{ class_name }}(
             new AmqpProducer(credential, options, endpoints)
             {%- if uses_cloudevents_message -%}
             , beforeSend
             {%- endif -%}
+            , dataschemaOverrides
         );
     }
     
@@ -117,7 +162,7 @@ public class {{ class_name }} {
     {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
     {%- set is_amqp = amqp.is_amqp(message) %}
     {%- set data_type = util.get_data_type(data_project_name, root, message) %}
-    {%- set content_type = util.get_content_type(message) %}
+    {%- set content_type = cloudEvents.DefaultContentType(message) %}
     
     /**
      * Send {{ messagename }} message
@@ -132,6 +177,7 @@ public class {{ class_name }} {
     ) throws Exception {
         {%- if isCloudEvent %}
         // Serialize data to bytes
+        String contentType = {{ content_type }};
         byte[] dataBytes;
         {%- set schemaObj = schema_object(root, message.get('dataschemauri') or message.get('dataschema')) %}
         {%- if schemaObj %}
@@ -143,12 +189,10 @@ public class {{ class_name }} {
             {%- else %}
                 {%- set format = message.dataschemaformat if message.dataschemaformat else "" %}
             {%- endif %}
-            {%- if format and format.lower().startswith("avro") %}
-        dataBytes = data.toByteArray("avro/binary");
-            {%- elif format and format.lower().startswith("protobuf") %}
+            {%- if format and format.lower().startswith("protobuf") %}
         dataBytes = data.toByteArray();
             {%- elif format %}
-        dataBytes = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data);
+        dataBytes = data.toByteArray(contentType);
             {%- else %}
         dataBytes = data;  // Already byte[]
             {%- endif %}
@@ -156,21 +200,30 @@ public class {{ class_name }} {
         dataBytes = data;  // Already byte[]
         {%- endif %}
         
-        {{ cloudEvents.BuildCloudEvent(message, "dataBytes") | indent(8) }}
+        {{ cloudEvents.BuildCloudEvent(message, "dataBytes", "contentType") | indent(8) }}
         
         if (beforeSend != null) {
             beforeSend.accept(cloudEvent);
         }
         
-        // Convert CloudEvent to ProtonJ2 message
-        byte[] cloudEventBytes = {{ cloudEvents.SerializeCloudEvent("cloudEvent") }};
-        Message<?> amqpMessage = Message.create(cloudEventBytes);
-        amqpMessage.contentType("application/cloudevents+json");
+        // Convert CloudEvent to ProtonJ2 message using the configured content mode
+        Message<?> amqpMessage;
+        if (this.contentMode == AmqpContentMode.BINARY) {
+            // Binary content mode: data in the body, CE attributes as cloudEvents:* properties
+            amqpMessage = AmqpProducer.buildBinaryCloudEventMessage(cloudEvent, dataBytes);
+        } else {
+            // Structured content mode: whole CloudEvent serialized as application/cloudevents+json
+            byte[] cloudEventBytes = {{ cloudEvents.SerializeCloudEvent("cloudEvent") }};
+            Message<byte[]> structuredMessage = Message.create(cloudEventBytes);
+            structuredMessage.contentType("application/cloudevents+json");
+            amqpMessage = structuredMessage;
+        }
         
         endpoint.send(amqpMessage);
         
         {%- elif is_amqp %}
         // Serialize data to bytes
+        String contentType = {{ content_type }};
         byte[] dataBytes;
         {%- set schemaObj = schema_object(root, message.get('dataschemauri') or message.get('dataschema')) %}
         {%- if schemaObj %}
@@ -182,13 +235,10 @@ public class {{ class_name }} {
             {%- else %}
                 {%- set format = message.dataschemaformat if message.dataschemaformat else "" %}
             {%- endif %}
-            {%- if format and format.lower().startswith("avro") %}
-        // Avro serialization
-        dataBytes = data.toByteArray("avro/binary");
-            {%- elif format and format.lower().startswith("protobuf") %}
+            {%- if format and format.lower().startswith("protobuf") %}
         dataBytes = data.toByteArray();  // Protobuf serialization
             {%- elif format %}
-        dataBytes = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(data);
+        dataBytes = data.toByteArray(contentType);
             {%- else %}
         dataBytes = data;  // Already byte[]
             {%- endif %}

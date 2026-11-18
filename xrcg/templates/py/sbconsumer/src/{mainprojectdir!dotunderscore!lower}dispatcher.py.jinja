@@ -258,8 +258,9 @@ class {{ class_name }}(_DispatcherBase):
         {%- for messageid, message in messagegroup.messages.items() %}
         {%- set is_cloudevent = (message | exists("envelope","CloudEvents/1.0")) %}
         {%- set data_type = util.DeclareDataType(data_project_name, root, message) %}
+        {%- set ce_type_value = message.envelopemetadata["type"]["value"] if ("type" in message.envelopemetadata and "value" in message.envelopemetadata["type"]) else messageid %}
         {%- if is_cloudevent %}
-        if cloud_event_type == "{{ messageid }}":
+        if cloud_event_type == "{{ ce_type_value }}":
             try:
                 {%- if data_type != "object" %}
                 data = {{ data_type | strip_namespace }}.from_data(cloud_event.data, cloud_event["datacontenttype"])
@@ -269,7 +270,7 @@ class {{ class_name }}(_DispatcherBase):
                 await self.{{ messageid | dotunderscore | snake }}_async(message, cloud_event, data)
                 return
             except Exception as e:
-                raise RuntimeError(f"Failed to process CloudEvent type '{{ messageid }}': {e}") from e
+                raise RuntimeError(f"Failed to process CloudEvent type '{{ ce_type_value }}': {e}") from e
         {%- endif %}
         {%- endfor %}
         

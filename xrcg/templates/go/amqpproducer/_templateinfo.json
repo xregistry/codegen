@@ -1,0 +1,12 @@
+{
+  "template": "amqpproducer",
+  "description": "Go AMQP 1.0 Producer",
+  "language": "go",
+  "protocol": "AMQP/1.0",
+  "usage": [
+    "producer"
+  ],
+  "requires": [
+    "messagegroups"
+  ]
+}

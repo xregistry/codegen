@@ -19,6 +19,28 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
     {%- set class_name = ( groupname | strip_namespace )+"EventFactory" %}
     public partial class {{ class_name }}
     {
+
+        private readonly System.Collections.Generic.IReadOnlyDictionary<string, string> dataschemaOverrides;
+        private static System.Collections.Generic.IReadOnlyDictionary<string, string> CopyDataschemaOverrides(System.Collections.Generic.IReadOnlyDictionary<string, string>? overrides)
+        {
+            var result = new System.Collections.Generic.Dictionary<string, string>();
+            if (overrides != null)
+            {
+                foreach (var entry in overrides)
+                {
+                    if (string.IsNullOrEmpty(entry.Key) || string.IsNullOrEmpty(entry.Value))
+                        throw new System.ArgumentException("Dataschema overrides require nonempty URI strings", nameof(overrides));
+                    result.Add(entry.Key, entry.Value);
+                }
+            }
+            return result;
+        }
+
+        public {{ class_name }}(System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null)
+        {
+            this.dataschemaOverrides = CopyDataschemaOverrides(dataschemaOverrides);
+        }
+
         private const string cePrefix = "cloudEvents_";
         private const string applicationOctetStream = "application/octet-stream";
         public delegate byte[] Serialize<T>(T data, string contentType);
@@ -100,7 +122,20 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
                 {
                     throw new ArgumentNullException(nameof(cloudEvent));
                 }
-                cloudEvent.Data = data;
+                if (formatter is CloudNative.CloudEvents.SystemTextJson.JsonEventFormatter &&
+                    new System.Net.Mime.ContentType(contentType).MediaType == System.Net.Mime.MediaTypeNames.Application.Json)
+                {
+                    cloudEvent.Data = data;
+                }
+                else
+                {
+                    bool isRawBytes = typeof(T) == typeof(byte[]);
+                    if (bodySerializer == null && !isRawBytes)
+                    {
+                        throw new ArgumentNullException(nameof(bodySerializer));
+                    }
+                    cloudEvent.Data = bodySerializer == null ? data : bodySerializer(data, contentType);
+                }
                 var eventBody = formatter.EncodeStructuredModeMessage(cloudEvent, out var eventContentType);
                 var message = new ServiceBusMessage(eventBody)
                 {
@@ -127,14 +162,12 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {%- elif is_amqp -%}
         {%- if message.protocoloptions -%}{{- amqp.DeclareUriTemplateArguments(message) -}}{%- endif -%}
         {%- endif -%}
-        {%- if isCloudEvent and "datacontenttype" in message.envelopemetadata and "value" in message.envelopemetadata["datacontenttype"] -%}
-        , string contentType = "{{ message.envelopemetadata["datacontenttype"]["value"] }}"
-        {%- elif is_amqp and not isCloudEvent -%}
+        {%- if is_amqp and not isCloudEvent -%}
         , string contentType = {{ amqp.ServiceBusContentType(message) | tojson }}
         {%- else -%}
-        , string contentType = System.Net.Mime.MediaTypeNames.Application.Json
+        , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
         {%- endif %}
-        {%- if isCloudEvent %}, CloudEventFormatter? formatter = null{% endif %})
+        {%- if isCloudEvent %}, CloudEventFormatter? formatter = null, System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null{% endif %})
         {
             {% if type_name != "byte[]" %}
             Serialize<{{ type_name }}> bodySerializer = ({{ type_name }} data, string contentType) => {
@@ -163,6 +196,21 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
             return message;
             {%- endif %}
         }
+
+        {%- if isCloudEvent %}
+        public ServiceBusMessage Create{{ messagename | strip_namespace }}EventWithOverrides(
+            {{ type_name }} data{{ cloudEvents.DeclareUriTemplateArguments(message) }},
+            string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }},
+            CloudEventFormatter? formatter = null)
+        {
+            return Create{{ messagename | strip_namespace }}Event(data
+            {%- set uriargs = cloudEvents.DeclareUriTemplateArguments(message) %}
+            {%- for arg in uriargs.split(',') if arg.strip() %}
+                , {{ arg.strip().split(' ')[1] }}
+            {%- endfor %}
+                , contentType, formatter, this.dataschemaOverrides);
+        }
+        {%- endif %}
         {% endfor %}
     }
 }
