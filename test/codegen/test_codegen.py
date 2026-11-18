@@ -1,3 +1,4 @@
+import json
 import platform
 import re
 import json
@@ -34,6 +35,89 @@ def pascal(string: str) -> str:
     else:
         words = re.findall(r'[a-z0-9]+\.?|[A-Z][a-z0-9_]*\.?', string)
     return ''.join(word.capitalize() for word in words)
+
+def test_sbproducer_preserves_dotted_amqp_message_ids(tmp_path, monkeypatch):
+    """Raw AMQP message IDs sharing a version must generate distinct factories."""
+    messages = {
+        f"example.{kind}.02": {"protocol": "AMQP/1.0", "protocoloptions": {}}
+        for kind in ("001", "002")
+    }
+    messages["example.status.updated"] = {
+        "protocol": "AMQP/1.0",
+        "envelope": "CloudEvents/1.0",
+        "envelopemetadata": {},
+    }
+    definitions = tmp_path / "catalogue.json"
+    definitions.write_text(json.dumps({
+        "messagegroups": {"example": {"messages": messages}},
+    }), encoding="utf-8")
+    output = tmp_path / "generated"
+    monkeypatch.setattr(sys, "argv", [
+        "xrcg", "generate", "--language", "cs", "--style", "sbproducer",
+        "--projectname", "NamingProbe", "--definitions", str(definitions),
+        "--output", str(output), "--noschema",
+    ])
+    assert xrcg.cli() == 0
+
+    factory = next(output.rglob("EventFactory.cs")).read_text(encoding="utf-8")
+    tests = next(output.rglob("ProducerTest.cs")).read_text(encoding="utf-8")
+    expected = {"CreateExample00102Event", "CreateExample00202Event", "CreateUpdatedEvent"}
+    assert set(re.findall(r"public static ServiceBusMessage (Create\w+Event)\(", factory)) == expected
+    assert set(re.findall(r"EventFactory\.(Create\w+Event)\(", tests)) == expected
+
+
+def test_xsd_model_generation_is_shared_across_csharp_templates(tmp_path, monkeypatch):
+    """The same registry XSD binds to the same generated type across transports."""
+    definitions = tmp_path / "catalogue.json"
+    xsd = """<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+        targetNamespace="urn:example:payments" elementFormDefault="qualified">
+      <xs:element name="Document"><xs:complexType><xs:sequence>
+        <xs:element name="Id" type="xs:string"/>
+      </xs:sequence></xs:complexType></xs:element>
+    </xs:schema>"""
+    definitions.write_text(json.dumps({
+        "messagegroups": {"example": {"messages": {
+            "payment.001.02": {
+                "protocol": "AMQP/1.0", "dataschemaformat": "XSD/1.0",
+                "dataschemaxid": "/schemagroups/example/schemas/payment.001.02",
+                "protocoloptions": {"properties": {
+                    "subject": {"type": "string", "value": "Payment"},
+                    "content-type": {"type": "string", "value": "application/xml"},
+                }},
+            },
+        }}},
+        "schemagroups": {"example": {"schemas": {"payment.001.02": {
+            "defaultversionid": "1", "versions": {"1": {"format": "XSD/1.0", "schema": xsd}},
+        }}}},
+    }), encoding="utf-8")
+    model_names = set()
+    for style, source in (
+        ("sbproducer", "EventFactory.cs"),
+        ("sbazfn", "DispatchInterfaces.cs"),
+        ("amqpproducer", "EventProducer.cs"),
+    ):
+        output = tmp_path / style
+        monkeypatch.setattr(sys, "argv", [
+            "xrcg", "generate", "--language", "cs", "--style", style,
+            "--projectname", "XmlProbe", "--definitions", str(definitions), "--output", str(output),
+        ])
+        assert xrcg.cli() == 0
+        model, = output.rglob("Document.cs")
+        generated = model.read_text(encoding="utf-8")
+        assert '[XmlRoot("Document", Namespace="urn:example:payments")]' in generated
+        namespace = re.search(r"^namespace (\S+)", generated, re.MULTILINE).group(1)
+        code = next(output.rglob(source)).read_text(encoding="utf-8")
+        assert f"global::{namespace}.Document" in code
+        model_names.add(namespace)
+        if style == "sbproducer":
+            assert 'message.Subject = "Payment"' in code
+            assert 'string contentType = "application/xml"' in code
+        elif style == "sbazfn":
+            dispatch = next(output.rglob("Function.cs")).read_text(encoding="utf-8")
+            assert 'case "Payment":' in dispatch
+            assert f"global::{namespace}.Document.FromData(" in dispatch
+    assert len(model_names) == 1
+
 
 def test_codegen_cs():
     """    

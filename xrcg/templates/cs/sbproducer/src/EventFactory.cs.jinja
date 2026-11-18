@@ -8,6 +8,8 @@
 {%- set uses_amqp_endpoint = amqp.uses_amqp_endpoint(root) %}
 using CloudNative.CloudEvents;
 using CloudNative.CloudEvents.SystemTextJson;
+using Azure;
+using Azure.Core;
 using Azure.Messaging.ServiceBus;
 
 {% for messagegroupid, messagegroup in messagegroups.items() -%}
@@ -47,8 +49,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         {%- if root.endpoints -%} 
         {%- for endpointid, endpoint in root.endpoints.items() -%}
                 {%- if endpoint.usage and "producer" in endpoint.usage -%}
-        {%- set protocol = endpoint.protocol | lower -%}
-        {%- if protocol == "amqp" -%}
+        {%- if amqp.is_amqp(endpoint) -%}
         {%- set options = endpoint.protocoloptions -%}
         {%- set endpoints = endpoint.endpoints %}
         {%- macro createforbody(class_name, endpoints, options) -%}
@@ -145,23 +146,27 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
         }
 
         {% for messageid, message in messagegroup.messages.items() -%}
-        {%- set messagename = messageid | pascal %}
         {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
-        {%- set is_amqp = amqp.is_amqp(message) %}
+        {%- set is_amqp = amqp.is_amqp(message) or amqp.IsRawServiceBusMessage(messagegroup, message) %}
+        {%- set messagename = amqp.ServiceBusFactoryMessageName(messageid, is_amqp and not isCloudEvent) %}
         {%- set type_name = util.body_type(data_project_name, root, message) %}
         {%- if message.description %}
         /// <summary>
         /// {{ message.description }}
         /// </summary>
         {%- endif %}
-        public static ServiceBusMessage Create{{ messagename | strip_namespace }}Event(
+        public static ServiceBusMessage Create{{ messagename }}Event(
         {{ type_name }} data
         {%- if isCloudEvent -%}
         {{- cloudEvents.DeclareUriTemplateArguments(message) -}}
         {%- elif is_amqp -%}
-        {{- amqp.DeclareUriTemplateArguments(message) -}}
+        {%- if message.protocoloptions -%}{{- amqp.DeclareUriTemplateArguments(message) -}}{%- endif -%}
         {%- endif -%}
+        {%- if is_amqp and not isCloudEvent -%}
+        , string contentType = {{ amqp.ServiceBusContentType(message) | tojson }}
+        {%- else -%}
         , string contentType = {{ cloudEvents.GetDataContentType(message, '"application/json"') }}
+        {%- endif %}
         {%- if isCloudEvent %}, CloudEventFormatter? formatter = null, System.Collections.Generic.IReadOnlyDictionary<string, string>? dataschemaOverrides = null{% endif %})
         {
             {% if type_name != "byte[]" %}
@@ -176,16 +181,20 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
             {{ cloudEvents.DeclareCloudNativeCloudEvent("cloudEvent", message) | indent(12) }}
             return CreateMessage(cloudEvent, data, contentType, bodySerializer, formatter);
             {%- elif is_amqp %}
-            return CreateMessage(null, data, contentType, bodySerializer, null);
+            var message = CreateMessage(null, data, contentType, bodySerializer, null);
             {%- endif %}
             {% else %}
             {%- if isCloudEvent %}
             {{ cloudEvents.DeclareCloudNativeCloudEvent("cloudEvent", message) | indent(12) }}
             return CreateMessage(cloudEvent, data, contentType, null, formatter);
             {%- elif is_amqp %}
-            return CreateMessage(null, data, contentType, null, null);
+            var message = CreateMessage(null, data, contentType, null, null);
             {%- endif %}
             {% endif %}
+            {%- if is_amqp and not isCloudEvent %}
+            message.Subject = {{ amqp.ServiceBusSubject(messageid, message) | tojson }};
+            return message;
+            {%- endif %}
         }
 
         {%- if isCloudEvent %}

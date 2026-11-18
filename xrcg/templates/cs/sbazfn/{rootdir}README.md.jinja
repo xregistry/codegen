@@ -10,6 +10,11 @@ Auto-generated Azure Function for processing Azure Service Bus messages.
 
 ## Overview
 
+Raw AMQP messages are routed by their declared subject (the catalogue message ID
+when no subject is declared). Implement the generated `ServiceBusDispatcher`
+interface to receive the original broker message and the deserialized body.
+CloudEvents still use their separate type-based dispatcher.
+
 This Azure Function automatically triggers when messages arrive in your Service Bus queue or topic subscription. It deserializes messages and calls your custom handlers - perfect for building event-driven microservices!
 
 ## Quick Start
