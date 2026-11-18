@@ -2,7 +2,10 @@
 {%- set function_name = project_name | pascal | strip_dots -%}
 {%- import "cloudevents.jinja.include" as cloudEvents -%}
 {%- import "servicebus.jinja.include" as servicebus -%}
+{%- import "amqp.jinja.include" as amqp -%}
 {%- import "util.jinja.include" as util -%}
+{%- set raw_servicebus_groups = {} -%}
+{{- amqp.CollectRawServiceBusGroups(messagegroups, raw_servicebus_groups) -}}
 {{ util.CommonFileHeader() }}
 
 using System;
@@ -20,16 +23,57 @@ namespace {{ project_name | pascal }}
     {%- set class_name = (project_name | pascal | strip_namespace)+"Function" %}
     public class {{ class_name }}
     {
-        ILogger<{{class_name}}> _logger;
+        {%- set ce_args = cloudEvents.DeclareDispatchObjectsArgs(project_name, messagegroups, true) %}
         {{ cloudEvents.DeclareDispatchObjectsFields( project_name, messagegroups ) | indent(8) }}
-        {{ cloudEvents.DeclareDispatchObjectsConstructor( project_name, class_name, messagegroups, "ILoggerFactory? loggerFactory", "_logger = loggerFactory?.CreateLogger<"+ class_name +">()??new LoggerFactory().CreateLogger<"+ class_name +">();") | indent(8) }} 
+        {%- for group_id in raw_servicebus_groups %}
+        private readonly global::{{ group_id | concat_namespace(project_name) | pascal }}.I{{ group_id | pascal | strip_namespace }}ServiceBusDispatcher _raw{{ group_id | pascal | strip_dots }};
+        {%- endfor %}
+
+        public {{ class_name }}(ILoggerFactory? loggerFactory{% if ce_args %}, {{ ce_args }}{% endif %}
+            {%- for group_id in raw_servicebus_groups %},
+            global::{{ group_id | concat_namespace(project_name) | pascal }}.I{{ group_id | pascal | strip_namespace }}ServiceBusDispatcher raw{{ group_id | pascal | strip_dots }}
+            {%- endfor %})
+        {
+            {%- for group_id, group in messagegroups.items() if group | exists("envelope","CloudEvents/1.0") %}
+            this.{{ group_id | strip_namespace | camel }}Dispatcher = {{ group_id | strip_namespace | camel }}Dispatcher;
+            {%- endfor %}
+            {%- for group_id in raw_servicebus_groups %}
+            _raw{{ group_id | pascal | strip_dots }} = raw{{ group_id | pascal | strip_dots }};
+            {%- endfor %}
+        }
 
         {{ servicebus.CloudEventsMethods()  | indent(8) }}
 
         public async virtual Task Run(ServiceBusReceivedMessage message, ILogger log)
         {
+            {%- if raw_servicebus_groups %}
+            if (!IsCloudEvent(message))
+            {
+                switch (message.Subject)
+                {
+                    {%- for group_id, messages in raw_servicebus_groups.items() %}
+                    {%- for message_id, definition in messages.items() %}
+                    {%- set body_type = util.body_type(data_project_name, root, definition) %}
+                    case {{ amqp.ServiceBusSubject(message_id, definition) | tojson }}:
+                        await _raw{{ group_id | pascal | strip_dots }}.On{{ amqp.ServiceBusFactoryMessageName(message_id, true) }}Async(message,
+                            {%- if body_type == "byte[]" %} message.Body.ToArray()
+                            {%- else %} {{ body_type }}.FromData(message.Body.ToArray(), message.ContentType ?? {{ amqp.ServiceBusContentType(definition) | tojson }})
+                                ?? throw new System.IO.InvalidDataException("Missing Service Bus message body")
+                            {%- endif %});
+                        return;
+                    {%- endfor %}
+                    {%- endfor %}
+                    default:
+                        throw new System.IO.InvalidDataException($"Unsupported Service Bus subject '{message.Subject}'");
+                }
+            }
+            {%- endif %}
+            {%- if messagegroups | exists("envelope","CloudEvents/1.0") %}
             var cloudEvent = CloudEventFromServiceBusMessage(message);
             {{ cloudEvents.DispatchToDispatchObjects( project_name, data_project_name, root, "cloudEvent", messagegroups, "log" ) | indent(12) }}
+            {%- else %}
+            throw new System.IO.InvalidDataException("This receiver does not accept CloudEvents");
+            {%- endif %}
         }
     }
 }

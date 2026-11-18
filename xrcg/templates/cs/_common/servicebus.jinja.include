@@ -263,6 +263,6 @@ protected CloudEvent CloudEventFromServiceBusMessage(ServiceBusReceivedMessage s
 
 public static bool IsCloudEvent(ServiceBusReceivedMessage serviceBusMessage) =>
    MimeUtilities.IsCloudEventsContentType(serviceBusMessage.ContentType) ||
-   serviceBusMessage.ApplicationProperties.ContainsKey(amqpCloudEventPrefix1) ||
-   serviceBusMessage.ApplicationProperties.ContainsKey(amqpCloudEventPrefix2);
+   serviceBusMessage.ApplicationProperties.ContainsKey(amqpCloudEventPrefix1 + "specversion") ||
+   serviceBusMessage.ApplicationProperties.ContainsKey(amqpCloudEventPrefix2 + "specversion");
 {%- endmacro -%}

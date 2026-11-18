@@ -4,6 +4,7 @@
 
 from ast import main
 import glob
+import hashlib
 import json
 import os
 import re
@@ -194,9 +195,12 @@ class TemplateRenderer:
         
         # Process unhandled schemas using the composed document
         avrotize_queue = []
+        xsd_models = {}
         unhandled_schemas = self.get_unhandled_schema_references(xregistry_document)
         
-        for schema_reference in unhandled_schemas:
+        for schema_reference in sorted(unhandled_schemas):
+            if "#/" + schema_reference.lstrip("#/") in xsd_models:
+                continue
             schema_data = self.resolve_schema_reference_in_document(schema_reference, xregistry_document)
             if not schema_data:
                 logger.warning("Could not resolve schema reference: %s", schema_reference)
@@ -206,6 +210,11 @@ class TemplateRenderer:
             if not schema_info:
                 logger.warning("Could not extract schema info for: %s", schema_reference)
                 continue
+            if schema_info["format_short"] == "xsd":
+                if self.language == "cs":
+                    if not self.suppress_schema_output:
+                        xsd_models[schema_reference] = self._convert_xsd_model(schema_reference, schema_info["content"])
+                    continue
             
             # Check if this schema should be processed with avrotize
             if self.should_use_avrotize(schema_info):
@@ -225,7 +234,7 @@ class TemplateRenderer:
                     schema_template_dirs, schema_env, self.template_args, self.suppress_schema_output
                 )        
         # Process avrotize queue using the refactored approach
-        if len(avrotize_queue) > 0:
+        if not self.suppress_schema_output and (avrotize_queue or xsd_models):
             # Separate JSON Structure schemas from Avro/other schemas
             jstruct_schemas = [s for s in avrotize_queue if s.get("format_short") == "jstruct"]
             avro_schemas = [s for s in avrotize_queue if s.get("format_short") != "jstruct"]
@@ -259,7 +268,7 @@ class TemplateRenderer:
                 self._process_jstruct_schemas(jstruct_merged, project_data_dir, json_enabled)
             
             # Process Avro/converted schemas
-            if avro_schemas:
+            if avro_schemas or xsd_models:
                 merged_schema = []
                 seen_keys: set[str] = set()
                 for schema_info in avro_schemas:
@@ -271,6 +280,10 @@ class TemplateRenderer:
                             seen_keys.add(key)
                             merged_schema.append(c)
                 
+                if xsd_models and avro_enabled:
+                    raise RuntimeError("C# XSD models cannot share a project with Avro encoding enabled")
+                if xsd_models:
+                    merged_schema.extend(xsd_models.values())
                 if len(merged_schema) == 1:
                     merged_schema = merged_schema[0]
 
@@ -282,7 +295,8 @@ class TemplateRenderer:
                 elif self.language == "cs":
                     avrotize.convert_avro_schema_to_csharp(
                         merged_schema, project_data_dir, base_namespace=JinjaFilters.pascal(self.data_project_name),
-                        pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled
+                        pascal_properties=True, system_text_json_annotation=json_enabled, avro_annotation=avro_enabled,
+                        system_xml_annotation=bool(xsd_models)
                     )
                     self._update_csproj_target_framework(project_data_dir)
                 elif self.language == "java":
@@ -320,6 +334,58 @@ class TemplateRenderer:
                 project_dir, xreg_file, xregistry_document, schema_template_dirs, schema_env,
                 self.template_args, self.suppress_schema_output
             )
+
+    def _xsd_namespace(self, pointer: str) -> str:
+        schema_id = self._extract_class_name_from_ref(pointer)
+        name = re.sub(r"[^a-zA-Z0-9]", "_", schema_id)
+        return f"Xsd_{name}_{hashlib.sha256(pointer.encode()).hexdigest()[:12]}"
+
+    @staticmethod
+    def _xsd_root_name(pointer: str, content: str) -> str:
+        schema = ET.fromstring(content)
+        roots = schema.findall("{http://www.w3.org/2001/XMLSchema}element")
+        if len(roots) != 1 or not roots[0].get("name"):
+            raise RuntimeError(f"{pointer}: expected a single named XSD document element")
+        return roots[0].attrib["name"]
+
+    def _convert_xsd_model(self, pointer: str, content: str) -> dict:
+        from avrotize.xsdtoavro import XSDToAvro
+        from pathlib import Path
+
+        name = self._xsd_root_name(pointer, content)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "schema.xsd"
+            path.write_text(content, encoding="utf-8")
+            model = XSDToAvro().xsd_to_avro(str(path), code_namespace=self._xsd_namespace(pointer))
+        candidate = model
+        if model.get("name") != name:
+            candidate = next((f["type"] for f in model.get("fields", []) if f["name"] == name), None)
+        if not isinstance(candidate, dict) or candidate.get("xmlname") != name:
+            raise RuntimeError(
+                f"{pointer}: requires an inline or same-named complex XML root and Avrotize with XSD XML support "
+                "(clemensv/avrotize#584)"
+            )
+        return model
+
+    @staticmethod
+    def _local_schema_reference(reference: str) -> str:
+        if reference.startswith(("/", "#")):
+            return "#/" + reference.lstrip("#/")
+        return reference
+
+    def _schema_type(self, reference: JsonNode, project: str, root: JsonNode, schema_format: str) -> str:
+        if isinstance(reference, str) and reference.startswith(("/", "#")):
+            pointer = self._local_schema_reference(reference)
+            if self.language == "cs" and isinstance(root, dict):
+                resolved = self.resolve_schema_reference_in_document(pointer, root)
+                info = self.extract_schema_info_from_resolved_data(pointer, resolved)
+                if info and info["format_short"] == "xsd":
+                    from avrotize.common import pascal
+
+                    name = self._xsd_root_name(pointer, info["content"])
+                    return f"{project}.{pascal(self._xsd_namespace(pointer))}.{pascal(name)}"
+            reference = pointer
+        return SchemaUtils.schema_type(self.ctx, reference, project, root, schema_format)
 
     def _process_jstruct_schemas(self, jstruct_schema: JsonNode, project_data_dir: str, json_enabled: bool) -> None:
         """Process JSON Structure schemas using dedicated Avrotize converters.
@@ -956,8 +1022,7 @@ class TemplateRenderer:
         env.filters['concat_namespace'] = JinjaFilters.concat_namespace
         env.filters['strip_dots'] = JinjaFilters.strip_dots
         env.filters['lstrip'] = JinjaFilters.lstrip
-        env.filters['schema_type'] = lambda schema_ref, project_name, root, schema_format: SchemaUtils.schema_type(
-            self.ctx, schema_ref, project_name, root, schema_format)
+        env.filters['schema_type'] = self._schema_type
         env.filters['strip_invalid_identifier_characters'] = JinjaFilters.strip_invalid_identifier_characters
         env.filters['pad'] = JinjaFilters.pad
         env.filters['toyaml'] = JinjaFilters.to_yaml
@@ -1007,8 +1072,10 @@ class TemplateRenderer:
                     current_path = f"{path}/{key}" if path else key
                     
                     # Look for schema reference properties
-                    if key in ["dataschema", "schema", "schemaurl", "dataschemaurl", "dataschemauri"] and isinstance(value, str):
-                        schema_refs.add(value)
+                    if key in ["dataschemaxid", "dataschema", "schema", "schemaurl", "dataschemaurl", "dataschemauri"] and isinstance(value, str):
+                        if key == "schema" and self.is_xsd_doc(value):
+                            continue
+                        schema_refs.add(self._local_schema_reference(value))
                     
                     # Look for inline schemas
                     elif key == "schema" and isinstance(value, (dict, str)):
@@ -1023,6 +1090,10 @@ class TemplateRenderer:
         
         scan_for_schemas(document)
         return schema_refs
+
+    @staticmethod
+    def is_xsd_doc(value: str) -> bool:
+        return "http://www.w3.org/2001/XMLSchema" in value and value.lstrip().startswith("<")
 
     def get_unhandled_schema_references(self, document: JsonNode) -> set[str]:
         """Get schema references that haven't been marked as handled."""
@@ -1230,6 +1301,8 @@ class TemplateRenderer:
             return "jstruct"
         elif format_lower.startswith("avro"):
             return "avro"
+        elif format_lower.startswith("xsd"):
+            return "xsd"
         return "unknown"
 
     def _extract_proto_class_name(self, proto_content: str, class_hint: str) -> str:
@@ -1241,7 +1314,7 @@ class TemplateRenderer:
 
     def should_use_avrotize(self, schema_info: Dict[str, Any]) -> bool:
         """Check if schema should be processed with avrotize."""
-        return self.language in ["py", "cs", "java", "js", "ts", "go"]
+        return schema_info["format_short"] != "xsd" and self.language in ["py", "cs", "java", "js", "ts", "go"]
 
     def convert_json_to_avro_if_needed(self, schema_info: Dict[str, Any]) -> None:
         """Convert JSON schema to Avro if needed."""

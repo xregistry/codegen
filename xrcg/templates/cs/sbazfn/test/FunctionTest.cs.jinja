@@ -3,7 +3,10 @@
 {%- set function_class_name = (project_name | pascal)+"."+(project_name | pascal | strip_namespace) + "Function" -%}
 {%- import "cloudevents.jinja.include" as cloudEvents -%}
 {%- import "servicebus.jinja.include" as servicebus -%}
+{%- import "amqp.jinja.include" as amqp -%}
 {%- import "util.jinja.include" as util -%}
+{%- set raw_servicebus_groups = {} -%}
+{{- amqp.CollectRawServiceBusGroups(messagegroups, raw_servicebus_groups) -}}
 {{ util.CommonFileHeader() }}
 
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
@@ -29,6 +32,9 @@ namespace {{ project_name | pascal }}.Tests
         private Mock<ILoggerFactory> loggerFactoryMock;
         private Mock<ILogger<{{ function_class_ref }}>> loggerMock;
         {{ cloudEvents.DeclareDispatchObjectMocks( project_name, messagegroups ) | indent(8) }}
+        {%- for group_id in raw_servicebus_groups %}
+        private Mock<global::{{ group_id | concat_namespace(project_name) | pascal }}.I{{ group_id | pascal | strip_namespace }}ServiceBusDispatcher> _raw{{ group_id | pascal | strip_dots }};
+        {%- endfor %}
 
         [SetUp]
         public void Setup()
@@ -37,15 +43,21 @@ namespace {{ project_name | pascal }}.Tests
             loggerMock = new Mock<ILogger<{{ function_class_ref }}>>();
             loggerFactoryMock.Setup(x => x.CreateLogger(typeof({{ function_class_ref }}).FullName!)).Returns(loggerMock.Object);
             {{ cloudEvents.SetupDispatchObjectMocks( project_name, messagegroups ) | indent(12) }}
+            {%- for group_id in raw_servicebus_groups %}
+            _raw{{ group_id | pascal | strip_dots }} = new();
+            {%- endfor %}
             
             {{ function_class_field }} = new {{ function_class_ref }}(
-                loggerFactoryMock.Object,
+                loggerFactoryMock.Object
                 {%- for messagegroupid, messagegroup in messagegroups.items() if (messagegroup | exists("envelope","CloudEvents/1.0")) -%}
-                _{{ messagegroupid | strip_namespace | camel }}DispatcherMock.Object{% if not loop.last %},
-                {% endif -%}
+                , _{{ messagegroupid | strip_namespace | camel }}DispatcherMock.Object
+                {%- endfor -%}
+                {%- for group_id in raw_servicebus_groups -%}
+                , _raw{{ group_id | pascal | strip_dots }}.Object
                 {%- endfor -%});
         }
 
+        {%- if messagegroups | exists("envelope","CloudEvents/1.0") %}
         [Test]
         public async Task Run_WithNoMessages_ShouldNotInvokeAnyDispatcherMethods()
         {
@@ -64,7 +76,7 @@ namespace {{ project_name | pascal }}.Tests
             // Assert
             {%- for messagegroupid, messagegroup in messagegroups.items() if (messagegroup | exists("envelope","CloudEvents/1.0")) -%}
             {%- for messageid, message in messagegroup.messages.items() -%}
-            {%- if message.envelope.startswith("CloudEvents") -%}  
+            {%- if (message.envelope or "").startswith("CloudEvents") -%}
             {%- set messagename = messageid | pascal %}
             {%- set message_body_type = util.body_type(data_project_name, root, message) %}
             _{{ messagegroupid | strip_namespace | camel }}DispatcherMock.Verify(
@@ -79,10 +91,34 @@ namespace {{ project_name | pascal }}.Tests
             {%- endfor -%}
             {%- endfor -%}
         }
+        {%- endif %}
+
+        {%- for group_id, messages in raw_servicebus_groups.items() %}
+        {%- for message_id, definition in messages.items() %}
+        {%- set body_type = util.body_type(data_project_name, root, definition) %}
+        {%- set method = "On" ~ amqp.ServiceBusFactoryMessageName(message_id, true) ~ "Async" %}
+        [Test]
+        public async Task Run_{{ group_id | pascal | strip_dots }}_{{ method }}()
+        {
+            const string contentType = {{ amqp.ServiceBusContentType(definition) | tojson }};
+            {%- if body_type == "byte[]" %}
+            var bytes = new byte[] { 1, 2, 3 };
+            {%- else %}
+            var bytes = new {{ body_type }}().ToByteArray(contentType);
+            {%- endif %}
+            var message = ServiceBusModelFactory.ServiceBusReceivedMessage(
+                body: new BinaryData(bytes), subject: {{ amqp.ServiceBusSubject(message_id, definition) | tojson }},
+                contentType: contentType);
+            await {{ function_class_field }}.Run(message, loggerMock.Object);
+            _raw{{ group_id | pascal | strip_dots }}.Verify(
+                x => x.{{ method }}(message, It.IsAny<{{ body_type }}>()), Times.Once);
+        }
+        {%- endfor %}
+        {%- endfor %}
 
         {%- for messagegroupid, messagegroup in messagegroups.items() if (messagegroup | exists("envelope","CloudEvents/1.0")) -%}
         {%- for messageid, message in messagegroup.messages.items() -%}
-        {%- if message.envelope.startswith("CloudEvents") -%}     
+        {%- if (message.envelope or "").startswith("CloudEvents") -%}
         {%- set messagename = messageid | pascal %}
         [Test]
         public async Task Run_With{{ messageid | strip_namespace | pascal }}_ShouldInvoke{{ messagegroupid | strip_namespace | pascal }}DispatcherOn{{ messageid | strip_namespace | pascal }}Async()
@@ -106,14 +142,14 @@ namespace {{ project_name | pascal }}.Tests
                 contentType: "application/json",
                 properties: new Dictionary<string, object>
                 {
-                    {"cloudEvents:specversion", "1.0"},
+                    {"cloudEvents_specversion", "1.0"},
                     {"cloudEvents_type", "{{ messageid }}"}
                 }
             );
             {%- endif %}
             await {{ function_class_field }}.Run(message, loggerMock.Object);
             _{{ messagegroupid | strip_namespace | camel }}DispatcherMock.Verify(
-                x => x.On{{ messageid | strip_namespace | pascal }}Async(It.IsAny<CloudNative.CloudEvents.CloudEvent>(), It.IsAny<{{ message_body_type if message_body_type != "byte[]" else "BinaryData" }}>()),
+                x => x.On{{ messageid | strip_namespace | pascal }}Async(It.IsAny<CloudNative.CloudEvents.CloudEvent>(), It.IsAny<{{ message_body_type if message_body_type != "byte[]" else "object" }}>()),
                 Times.Once
             );
         }

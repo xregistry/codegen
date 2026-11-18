@@ -2,6 +2,63 @@
 
 {%- import "util.jinja.include" as util -%}
 
+{%- macro IsRawServiceBusMessage(group, message) -%}
+{%- set protocol = message.protocol or group.protocol or "" -%}
+{%- if protocol.lower().startswith("amqp") and not (message.envelope or "").lower().startswith("cloudevents") -%}
+true
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro CollectRawServiceBusGroups(messagegroups, groups) -%}
+{%- set subjects = {} -%}
+{%- for group_id, group in messagegroups.items() -%}
+  {%- for message_id, message in group.messages.items() if IsRawServiceBusMessage(group, message) -%}
+    {%- set subject = ServiceBusSubject(message_id, message) -%}
+    {%- if subject in subjects -%}
+      {%- error "Duplicate Service Bus subject: " ~ subject -%}
+    {%- endif -%}
+    {%- set _ = subjects.update({subject: true}) -%}
+    {%- set _ = groups.setdefault(group_id, {}).update({message_id: message}) -%}
+  {%- endfor -%}
+{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro ServiceBusFactoryMessageName(messageid, raw_amqp) -%}
+{%- if raw_amqp -%}
+{{- messageid | replace('.', '_') | pascal -}}
+{%- else -%}
+{{- messageid | pascal | strip_namespace -}}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro ServiceBusSubject(messageid, message) -%}
+{%- if message.protocoloptions and message.protocoloptions.properties and "subject" in message.protocoloptions.properties -%}
+  {%- set subject = message.protocoloptions.properties.subject -%}
+  {%- if subject.value is not string or subject.type == "uritemplate" -%}
+    {%- error "Service Bus subject must be a literal string" -%}
+  {%- endif -%}
+{{- subject.value -}}
+{%- else -%}
+{{- messageid -}}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro ServiceBusContentType(message) -%}
+{%- if message.protocoloptions and message.protocoloptions.properties and "content-type" in message.protocoloptions.properties -%}
+  {%- set content_type = message.protocoloptions.properties["content-type"] -%}
+  {%- if content_type.value is not string or content_type.type == "uritemplate" -%}
+    {%- error "Service Bus content type must be a literal string" -%}
+  {%- endif -%}
+{{- content_type.value -}}
+{%- elif message.datacontenttype -%}
+{{- message.datacontenttype -}}
+{%- elif message.dataschemaformat and message.dataschemaformat.lower().startswith("xsd/") -%}
+application/xml
+{%- else -%}
+application/json
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro is_amqp(message) -%}
 {%- if message.protocol and message.protocol.lower().startswith("amqp") -%}
 true

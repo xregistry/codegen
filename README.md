@@ -69,7 +69,14 @@ Unlike snippet generators, this tool produces **complete SDK-like projects**:
 | Feature | What's Generated |
 |---------|------------------|
 | **Type-safe clients** | Producer/consumer classes with strongly-typed methods per message |
-| **Data classes** | Schema-derived classes via [Avrotize](https://github.com/clemensv/avrotize) (JSON Schema, Avro, Protobuf) |
+| **Data classes** | Schema-derived classes via [Avrotize](https://github.com/clemensv/avrotize) (JSON Schema, Avro, Protobuf, and XSD for C#) |
+
+C# XSD model generation uses local registry schema references such as `dataschemaxid`.
+It supports a single document element with an inline or same-named complex type
+and requires Avrotize with the XML generation fixes in
+[clemensv/avrotize#584](https://github.com/clemensv/avrotize/pull/584).
+The template's wire protocol is independent of model generation. Validate XML
+against the original XSD when schema conformance is required.
 | **Build files** | `pom.xml`, `.csproj`, `package.json`, `pyproject.toml` with correct dependencies |
 | **Integration tests** | Docker-based tests using Testcontainers for Kafka, MQTT, AMQP brokers |
 | **Project structure** | Language-idiomatic layout ready for IDE import |

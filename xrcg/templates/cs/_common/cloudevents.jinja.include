@@ -203,7 +203,7 @@ var cloudEventType = {{ cloudEvent }}.Type;
 switch (cloudEventType)
 {
     {% for messagegroupid, messagegroup in messagegroups.items() if (messagegroup | exists("envelope","CloudEvents/1.0")) -%}
-    {% for messageid, message in messagegroup.messages.items() -%}
+    {% for messageid, message in messagegroup.messages.items() if (message | exists("envelope","CloudEvents/1.0")) -%}
     {% set messagename = messageid | pascal %}
     case "{{ messageid }}":
         if ( this.{{ messagegroupid  | strip_namespace | camel }}Dispatcher != null )

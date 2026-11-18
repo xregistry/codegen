@@ -1,5 +1,23 @@
 {%- import "cloudevents.jinja.include" as cloudEvents -%}
+{%- import "amqp.jinja.include" as amqp -%}
 {%- import "util.jinja.include" as util -%}
+{%- set raw_servicebus_groups = {} -%}
+{{- amqp.CollectRawServiceBusGroups(root.messagegroups, raw_servicebus_groups) -}}
 {{ util.CommonFileHeader() }}
 
+using System.Threading.Tasks;
+
 {{ cloudEvents.DeclareDispatchInterfaces(project_name, data_project_name, root) }}
+
+{% for group_id, messages in raw_servicebus_groups.items() -%}
+namespace {{ group_id | concat_namespace(project_name) | pascal }}
+{
+    public interface I{{ group_id | pascal | strip_namespace }}ServiceBusDispatcher
+    {
+        {%- for message_id, message in messages.items() %}
+        Task On{{ amqp.ServiceBusFactoryMessageName(message_id, true) }}Async(
+            global::Azure.Messaging.ServiceBus.ServiceBusReceivedMessage message, {{ util.body_type(data_project_name, root, message) }} data);
+        {%- endfor %}
+    }
+}
+{% endfor %}
