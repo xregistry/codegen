@@ -183,18 +183,16 @@ async def test_{{groupName}}_{{messagename.split('.')[-1]}}_py(mosquitto_broker)
     await asyncio.sleep(1)
     
     # Publish 5 messages to test message settlement and ordering
+    {%- set uri_template_vars = [] %}
+    {%- set _ = util.CollectMqttUriTemplateVariables(message, uri_template_vars) %}
     for i in range(5):
         await publisher_client.publish_{{messagename.split('.')[-1]}}(
             topic=test_topic,
-            {%- for attrname, attribute in message.envelopemetadata.items() %}
-            {%- if attribute.type == "uritemplate" and attribute.value and attrname != "time" %}
-            {%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
-            {%- if phs %}
-            {%- for placeholder in phs %}
+            {%- for placeholder in uri_template_vars %}
             {{ placeholder | snake }}=f"test_{{placeholder}}_{i}",
             {%- endfor %}
-            {%- endif %}
-            {%- elif not attribute.value and attrname != "time" %}
+            {%- for attrname, attribute in message.envelopemetadata.items() %}
+            {%- if not attribute.value and attribute.type != "uritemplate" and attrname != "time" %}
             _{{ attrname | snake }}=f"test_{{attrname}}_{i}",
             {%- endif %}
             {%- endfor %}

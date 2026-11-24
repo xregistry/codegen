@@ -13,6 +13,33 @@
 {{ dataType }}
 {%- endmacro -%}
 
+{%- macro CollectMqttUriTemplateVariables(message, variables) -%}
+{%- for attrname, attribute in message.envelopemetadata.items() -%}
+{%- if attribute.value and attribute.type == "uritemplate" and attrname != "time" -%}
+{%- for placeholder in attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if placeholder not in variables -%}
+{%- set _ = variables.append(placeholder) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endif -%}
+{%- endfor -%}
+{%- set topic = none -%}
+{%- if message.protocoloptions and message.protocoloptions.topic_name -%}
+{%- set topic = message.protocoloptions.topic_name -%}
+{%- elif message.protocoloptions and message.protocoloptions['topic-name'] -%}
+{%- set topic = message.protocoloptions['topic-name'] -%}
+{%- elif message.protocoloptions and message.protocoloptions.topic -%}
+{%- set topic = message.protocoloptions.topic -%}
+{%- endif -%}
+{%- if topic -%}
+{%- for placeholder in topic | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
+{%- if placeholder not in variables -%}
+{%- set _ = variables.append(placeholder) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro DeclareDataTestModule(data_project_name, type_name) -%}
 {%- set root_package = data_project_name | dotunderscore | lower -%}
 {%- set relative_type_name = type_name | replace(root_package + ".", "", 1) -%}

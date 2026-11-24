@@ -336,7 +336,7 @@ def test_{{ groupname | lower | replace(" ", "_") | dotunderscore }}_cross_event
         if msg is None or msg.error():
             continue
         cloudevent = parse_cloudevent(msg)
-        if cloudevent['type'] in ["{{ first_msg_id }}", "{{ second_msg_id }}"]:
+        if cloudevent['type'] in ["{{ first_msg.envelopemetadata['type']['value'] if ('type' in first_msg.envelopemetadata and 'value' in first_msg.envelopemetadata['type']) else first_msg_id }}", "{{ second_msg.envelopemetadata['type']['value'] if ('type' in second_msg.envelopemetadata and 'value' in second_msg.envelopemetadata['type']) else second_msg_id }}"]:
             key = msg.key().decode('utf-8') if msg.key() else None
             collected_keys.append(key)
 
