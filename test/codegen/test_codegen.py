@@ -919,6 +919,9 @@ def test_generated_dataschema_overrides(content_mode, mapping_kind, tmp_path, mo
     overrides = mappings[mapping_kind]
     document = _versioned_schema_document()
     messages = document["messagegroups"]["Example"]["messages"]
+    messages["Reading"]["envelopemetadata"]["datacontenttype"] = {
+        "type": "string", "value": "application/json",
+    }
     for name in ("Shared", "Explicit"):
         messages[name] = copy.deepcopy(messages["Reading"])
         messages[name]["messageid"] = name
@@ -960,6 +963,20 @@ def test_generated_dataschema_overrides(content_mode, mapping_kind, tmp_path, mo
     expected = registered if mapping_kind in ("match", "chain") else original
     expected_explicit = registered if mapping_kind in ("match", "chain") else explicit
     assert list(map(schema, sender.messages)) == [expected, expected, expected_explicit]
+    if content_mode == "structured":
+        import base64
+
+        for message in sender.messages:
+            envelope = json.loads(message["value"])
+            assert envelope["data"] == json.loads(data.to_json())
+            assert "data_base64" not in envelope
+        binary_payload = CaptureProducer()
+        producer_class(binary_payload, "readings", content_mode).send_reading(
+            data, content_type="application/vnd.apache.avro+avro", flush_producer=False)
+        envelope = json.loads(binary_payload.messages[0]["value"])
+        assert "data" not in envelope
+        assert base64.b64decode(envelope["data_base64"], validate=True) == data.to_byte_array(
+            "application/vnd.apache.avro+avro")
     untouched = CaptureProducer()
     producer_class(untouched, "readings", content_mode).send_reading(data, flush_producer=False)
     assert schema(untouched.messages[0]) == original

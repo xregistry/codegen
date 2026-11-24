@@ -243,9 +243,12 @@ class {{ class_name }}:
             attributes["dataschema"] = self._dataschema_overrides.get(attributes["dataschema"], attributes["dataschema"])
         event = CloudEvent.create(attributes, byte_data)
         if self.content_mode == "structured":
+            media_type = content_type.split(";", 1)[0].strip().lower()
+            if byte_data is not None and (media_type == "application/json" or media_type.endswith("+json")):
+                event = CloudEvent.create(attributes, json.loads(byte_data))
             message = to_structured(
                 event,
-                data_marshaller=lambda x: self.__binary_data_marshaller(x),
+                data_marshaller=lambda x: x,
                 envelope_marshaller=lambda envelope: json.dumps({**envelope, "datacontenttype": content_type}),
                 key_mapper=lambda x: self.__key_mapper(x, data, key_mapper, kafka_key),
             )
