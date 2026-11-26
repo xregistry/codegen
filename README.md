@@ -99,6 +99,31 @@ xrcg generate --projectname <name> --language <lang> --style <style> \
 | `--templates` | Custom template directory (optional) |
 | `--template-args` | Extra args as `key=value` (optional) |
 
+#### Python URI-template encoding
+
+Python `mqttclient`, `kafkaproducer`, and `amqpproducer` support
+`--template-args uri_template_encoding=percent`. This opt-in applies RFC 6570
+simple-expansion percent encoding to scalar `{placeholder}` values in MQTT
+topics, CloudEvents URI-template metadata, Kafka keys, and AMQP URI-template
+properties and annotations. Pass original identifiers, not pre-encoded values.
+Payload fields are unchanged; CloudEvents timestamps retain their RFC 3339 format.
+
+For example, `TEST_SITE_A2/A10` expands to `TEST_SITE_A2%2FA10` within one MQTT
+topic level. MQTT consumers generated with the same option decode extracted
+parameters once. Literal `%2F` in an identifier expands to `%252F` and is returned
+as `%2F`, not `/`.
+
+The default, `uri_template_encoding=legacy`, retains existing literal
+interpolation and consumer extraction. Enable percent mode consistently for
+producers and consumers that share a routing contract. Regeneration changes
+routing values containing reserved characters, whitespace, or non-ASCII text;
+unreserved identifiers keep their existing values. This option covers the
+existing simple `{placeholder}` syntax, not other RFC 6570 operators.
+
+Percent mode preserves the complete AMQP partition-key value rather than
+truncating it. A broker with a partition-key size limit can reject an oversized
+key; the generator does not shorten identifiers to fit that limit.
+
 ### Available Templates
 
 Run `xrcg list` to see all available language/style combinations:

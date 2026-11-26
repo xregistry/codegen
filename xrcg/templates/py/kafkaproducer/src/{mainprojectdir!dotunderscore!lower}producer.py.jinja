@@ -1,5 +1,6 @@
 {%- import "util.include.jinja" as util -%}
 {%- import "cloudevents.jinja.include" as cloudEvents -%}
+{%- set _uri_template_encoding = uri_template_encoding | default("legacy") -%}
 
 # pylint: disable=unused-import, line-too-long, missing-module-docstring, missing-function-docstring, missing-class-docstring, consider-using-f-string, trailing-whitespace, trailing-newlines
 import sys
@@ -8,6 +9,7 @@ import json
 import re
 import uuid
 import typing
+{{ cloudEvents.DeclareUriTemplateEncodingImports(_uri_template_encoding) }}
 from datetime import datetime, timezone
 from confluent_kafka import Producer, KafkaException, Message
 from cloudevents.kafka import to_binary, to_structured, KafkaMessage
@@ -196,7 +198,7 @@ class {{ class_name }}:
         {%- if kafka_key_value %}
         {%- set kphs = kafka_key_value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
         {%- if kphs %}
-        kafka_key = "{{ kafka_key_value }}".format({% for ph in kphs %}{{ ph }}=_{{ ph | snake }}{% if not loop.last %}, {% endif %}{% endfor %})
+        kafka_key = "{{ kafka_key_value }}".format({% for ph in kphs %}{{ ph }}={{ cloudEvents.EncodeUriTemplateValue("_" + (ph | snake), _uri_template_encoding) }}{% if not loop.last %}, {% endif %}{% endfor %})
         {%- else %}
         kafka_key = "{{ kafka_key_value }}"
         {%- endif %}
@@ -218,7 +220,7 @@ class {{ class_name }}:
                 {%- if phs -%}
                 .format(
                 {%- for placeholder in phs -%}
-                    {{ placeholder }} = _{{ placeholder | snake }}
+                    {{ placeholder }} = {{ cloudEvents.EncodeUriTemplateValue("_" + (placeholder | snake), _uri_template_encoding) }}
                 {%- if not loop.last -%},{%- endif%}
                 {%- endfor -%}
                 )
