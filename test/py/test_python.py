@@ -1363,6 +1363,110 @@ def test_amqpproducer_versioned_dataschema_on_wire():
                 assert json.loads(bytes(received.body))["dataschema"] == expected
 
 
+@pytest.mark.parametrize("encoding", ["legacy", "percent"])
+@pytest.mark.parametrize("mode", ["binary", "structured"])
+@pytest.mark.parametrize("id_kind", ["template", "prefixed-template", "literal", "generated", "omitted"])
+def test_amqpproducer_honors_inherited_id_on_encoded_message(encoding, mode, id_kind):
+    import base64
+    import glob
+    import py_compile
+    from urllib.parse import quote
+    from uuid import UUID
+    from unittest.mock import Mock, patch
+    from proton import Message
+
+    document = _build_kafka_time_document()
+    message = document["messagegroups"]["Example.Kafka"]["messages"]["Example.Event"]
+    message["envelopemetadata"].pop("time")
+    message["dataschema"]["properties"]["ce_id"] = {"type": "string"}
+    schema = message.pop("dataschema")
+    message["dataschemauri"] = "#/schemagroups/Example/schemas/Event"
+    document["schemagroups"] = {"Example": {"schemas": {"Event": {
+        "defaultversionid": "1",
+        "versions": {"1": {"format": "JsonSchema/draft-07", "schema": schema}},
+    }}}}
+    ce_id = "counter/observations%2F/123"
+    literal_id = 'constant/id%2F{ce_id}\\path/"quoted"/\U0001f6b2'
+    if id_kind in ("template", "prefixed-template"):
+        message["envelopemetadata"]["id"] = {
+            "type": "uritemplate",
+            "value": "{ce_id}" if id_kind == "template" else "events/{ce_id}",
+        }
+    elif id_kind == "literal":
+        message["envelopemetadata"]["id"] = {"type": "string", "value": literal_id}
+    elif id_kind == "generated":
+        message["envelopemetadata"]["id"] = {"type": "string"}
+    document["messagegroups"]["Derived"] = {"messages": {"Example.Event": {
+        "basemessageuri": "#/messagegroups/Example.Kafka/messages/Example.Event",
+    }}}
+    directory, entrypoint = _generate_python_entrypoint_from_document(
+        document, "amqpproducer", "*producer.py",
+        template_args=[f"uri_template_encoding={encoding}"],
+    )
+    for path in glob.glob(os.path.join(directory, "**", "*.py"), recursive=True):
+        py_compile.compile(path, doraise=True)
+    module = _load_generated_python_module_from_path(
+        entrypoint, extra_paths=glob.glob(os.path.join(directory, "**", "src"), recursive=True),
+    )
+    classes = [
+        value for value in vars(module).values()
+        if isinstance(value, type) and hasattr(value, "send_event")
+    ]
+    assert len(classes) == 2
+    for producer_class in classes:
+        with patch.object(producer_class, "_init_blocking_sender"):
+            producer = producer_class(
+                "localhost", "events", content_mode=mode,
+                format_type="application/cloudevents+json",
+            )
+        producer._send_via_blocking_sender = Mock()
+        data_type = producer_class.send_event.__annotations__["data"]
+        data = data_type(value="hello", ce_id=ce_id)
+        kwargs = {"_ce_id": data.ce_id} if id_kind in ("template", "prefixed-template") else {}
+        producer.send_event(data=data, **kwargs)
+        producer.send_event_batch(data_array=[data], **kwargs)
+        assert producer._send_via_blocking_sender.call_count == 2
+        for call in producer._send_via_blocking_sender.call_args_list:
+            received = Message()
+            received.decode(call.args[0].encode())
+            if mode == "binary":
+                actual_id = received.properties["cloudEvents:id"]
+                payload = json.loads(bytes(received.body))
+            else:
+                envelope = json.loads(bytes(received.body))
+                actual_id = envelope["id"]
+                payload = json.loads(base64.b64decode(envelope["data_base64"]))
+            assert payload["ce_id"] == ce_id
+            if id_kind in ("template", "prefixed-template"):
+                expected_id = quote(payload["ce_id"], safe="") if encoding == "percent" else payload["ce_id"]
+                if id_kind == "prefixed-template":
+                    expected_id = f"events/{expected_id}"
+                assert actual_id == expected_id
+            elif id_kind == "literal":
+                assert actual_id == literal_id
+            else:
+                assert UUID(actual_id).version == 4
+        if id_kind == "template":
+            with pytest.raises(ValueError, match="CloudEvents 'id' must be a non-empty string"):
+                producer.send_event(data=data, _ce_id="")
+            assert producer._send_via_blocking_sender.call_count == 2
+
+
+@pytest.mark.parametrize("id_type", ["string", "uritemplate"])
+def test_amqpproducer_rejects_explicit_empty_id(id_type, tmp_path, capsys, caplog):
+    document = _build_kafka_time_document()
+    message = document["messagegroups"]["Example.Kafka"]["messages"]["Example.Event"]
+    message["envelopemetadata"]["id"] = {"type": id_type, "value": ""}
+    manifest = tmp_path / "catalog.xreg.json"
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(AssertionError):
+        _generate_with_template_args(
+            str(manifest), str(tmp_path / "out"), "test_invalid_amqp_id", "amqpproducer", [],
+        )
+    captured = capsys.readouterr()
+    assert "CloudEvents 'id' value must be a non-empty string" in captured.out + captured.err + caplog.text
+
+
 def test_kafkaproducer_exposes_resilient_flush_helper():
     """Regression for #430: the generated Kafka producer must expose a
     ``flush(timeout, retries, backoff_factor)`` helper that retries with

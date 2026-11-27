@@ -107,6 +107,17 @@ PEP 440 local version `0.40.0+xrcgN`); Linux and macOS continue to install
 the stock release from PyPI. The patched wheel will be retired as soon as
 upstream proton ships a Windows wheel with TLS 1.3 support.
 
+## CloudEvents IDs
+
+Binary and structured modes honor `envelopemetadata.id.value`, including values inherited through `basemessageuri`.
+A URI-template value `{ce_id}` requires `_ce_id=...` when sending. Literal IDs are sent unchanged.
+A UUID is generated only when no ID value is declared.
+
+URI-template substitutions retain raw values by default. Generate with `--template-args uri_template_encoding=percent`
+to percent-encode each placeholder value; literal IDs remain unchanged.
+
+An explicitly empty catalog ID fails generation. A template that resolves to an empty ID raises `ValueError` before sending.
+
 ## Generated Producers
 
 {% for messagegroupid, messagegroup in messagegroups.items() %}
