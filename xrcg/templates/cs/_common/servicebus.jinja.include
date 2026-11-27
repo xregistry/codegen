@@ -196,7 +196,7 @@ using AvroEventFormatter = CloudNative.CloudEvents.Avro.AvroEventFormatter;
 {%- endmacro -%}
 
 {%- macro CloudEventsMethods() -%}
-private static string[] ceAttribs = ["specversion", "dataschema", "time", "source", "subject", "type", "id"];
+private static string[] ceAttribs = ["specversion", "datacontenttype", "dataschema", "time", "source", "subject", "type", "id"];
 protected const string amqpCloudEventPrefix1 = "cloudEvents_";
 protected const string amqpCloudEventPrefix2 = "cloudEvents:";
 protected static readonly CloudEventFormatter jsonFormatter = new JsonEventFormatter();
@@ -208,7 +208,12 @@ protected string? GetCloudEventAttribute(ServiceBusReceivedMessage serviceBusMes
    if (serviceBusMessage.ApplicationProperties.TryGetValue(amqpCloudEventPrefix1+key, out var value) ||
          serviceBusMessage.ApplicationProperties.TryGetValue(amqpCloudEventPrefix2+key, out value))
    {
-         return value as string;
+         return value switch
+         {
+            DateTime timestamp => CloudEventAttributeType.Timestamp.Format(new DateTimeOffset(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc))),
+            DateTimeOffset timestamp => CloudEventAttributeType.Timestamp.Format(timestamp),
+            _ => value as string,
+         };
    }
    return null;
 } 
@@ -232,18 +237,12 @@ protected CloudEvent CloudEventFromServiceBusMessage(ServiceBusReceivedMessage s
          };
          string? specVersion = GetCloudEventAttribute(serviceBusMessage, "specversion");
          if (specVersion != "1.0") throw new Exception("Unsupported CloudEvent specversion: " + specVersion);
-         string? dataSchema = GetCloudEventAttribute(serviceBusMessage, "dataschema");
-         string? time = GetCloudEventAttribute(serviceBusMessage, "time");
-         string? source = GetCloudEventAttribute(serviceBusMessage, "source");
-         string? subject = GetCloudEventAttribute(serviceBusMessage, "subject");
-         string? type = GetCloudEventAttribute(serviceBusMessage, "type");
-         string? id = GetCloudEventAttribute(serviceBusMessage, "id");
-         if (dataSchema != null) cloudEvent.DataSchema = new Uri(dataSchema);
-         if (time != null) cloudEvent.Time = DateTime.Parse(time);
-         if (source != null) cloudEvent.Source = new Uri(source);
-         if (subject != null) cloudEvent.Subject = subject;
-         if (type != null) cloudEvent.Type = type;
-         if (id != null) cloudEvent.Id = id;
+         foreach (var attributeName in ceAttribs)
+         {
+            if (attributeName == "specversion" || attributeName == "datacontenttype") continue;
+            var value = GetCloudEventAttribute(serviceBusMessage, attributeName);
+            if (value != null) cloudEvent.SetAttributeFromString(attributeName, value);
+         }
          foreach (var key in serviceBusMessage.ApplicationProperties.Keys)
          {
             if (key.StartsWith(amqpCloudEventPrefix1) || key.StartsWith(amqpCloudEventPrefix2))
@@ -253,16 +252,30 @@ protected CloudEvent CloudEventFromServiceBusMessage(ServiceBusReceivedMessage s
                {
                   continue;
                }
-               cloudEvent[attributeName] = serviceBusMessage.ApplicationProperties[key] as string;
+               var value = serviceBusMessage.ApplicationProperties[key];
+               if (value is DateTime timestamp)
+                  value = new DateTimeOffset(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc));
+               if (value is long integer)
+                  value = checked((int)integer);
+               var attributeType = value switch
+               {
+                  bool => CloudEventAttributeType.Boolean,
+                  int => CloudEventAttributeType.Integer,
+                  byte[] => CloudEventAttributeType.Binary,
+                  DateTimeOffset => CloudEventAttributeType.Timestamp,
+                  string => CloudEventAttributeType.String,
+                  _ => throw new ArgumentException($"Unsupported CloudEvent attribute type for '{attributeName}'"),
+               };
+               cloudEvent[CloudEventAttribute.CreateExtension(attributeName, attributeType)] = value;
             }
          }
-         return cloudEvent;
+         return cloudEvent.Validate();
    }
    
 }
 
 public static bool IsCloudEvent(ServiceBusReceivedMessage serviceBusMessage) =>
    MimeUtilities.IsCloudEventsContentType(serviceBusMessage.ContentType) ||
-   serviceBusMessage.ApplicationProperties.ContainsKey(amqpCloudEventPrefix1) ||
-   serviceBusMessage.ApplicationProperties.ContainsKey(amqpCloudEventPrefix2);
+   serviceBusMessage.ApplicationProperties.ContainsKey(amqpCloudEventPrefix1 + "specversion") ||
+   serviceBusMessage.ApplicationProperties.ContainsKey(amqpCloudEventPrefix2 + "specversion");
 {%- endmacro -%}

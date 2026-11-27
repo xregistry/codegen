@@ -11,6 +11,8 @@ Auto-generated Azure Service Bus producer for {{ groupname }} message group.
 
 This producer makes it simple to send strongly-typed messages to Azure Service Bus queues and topics. It handles CloudEvents formatting, serialization, and connection management automatically.
 
+For CloudEvents, the generated `EventFactory` uses binary mode by default. It writes `cloudEvents:specversion` and canonical attribute strings to AMQP application properties; `datacontenttype` uses the message content type instead. Pass a `CloudEventFormatter` to the factory to request structured mode.
+
 ## Quick Start
 
 ### 1. Get Connection String

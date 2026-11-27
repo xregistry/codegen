@@ -29,7 +29,7 @@ def _dotnet_test_environment() -> dict[str, str]:
 # this test invokes the xregistry command line tool to generate a C# proxy and a consumer
 # and then builds the proxy and the consumer and runs a prepared test that integrates both
 
-def run_dotnet_test(xreg_file: str, output_dir: str, projectname: str, style: str):
+def run_dotnet_test(xreg_file: str, output_dir: str, projectname: str, style: str, test_filter: str | None = None):
     """
     Run dotnet test on the csproj that references the generated files.
 
@@ -38,6 +38,7 @@ def run_dotnet_test(xreg_file: str, output_dir: str, projectname: str, style: st
         output_dir (str): The output directory for the generated files.
         projectname (str): The name of the project.
         style (str): The style of the generated code.
+        test_filter (str | None): An optional filter for the generated tests.
 
     Returns:
         None
@@ -54,11 +55,24 @@ def run_dotnet_test(xreg_file: str, output_dir: str, projectname: str, style: st
     
     # Use shell=True on Windows for .cmd files, direct execution on Linux
     use_shell = platform.system() == 'Windows'
+    command = ['dotnet', 'test', output_dir]
+    if test_filter is not None:
+        command.extend(['--filter', test_filter])
     subprocess.check_call(
-        ['dotnet', 'test', output_dir],
+        command,
         cwd=os.path.dirname(__file__),
         shell=use_shell,
         env=_dotnet_test_environment(),
+    )
+
+
+@pytest.mark.parametrize("style", ["sbproducer", "sbconsumer"])
+def test_servicebus_binary_cloudevents_binding_cs(style):
+    tmpdirname = tempfile.mkdtemp()
+    run_dotnet_test(
+        os.path.join(project_root, "test", "xreg", "lightbulb.xreg.json"),
+        tmpdirname, "TestProject", style,
+        test_filter="FullyQualifiedName~BindingTests",
     )
 
 

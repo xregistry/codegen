@@ -293,5 +293,33 @@ namespace {{ project_name | pascal }}.Test
         }
         {%- endfor %}
     }
+    {%- if messagegroup | exists("envelope", "CloudEvents/1.0") %}
+    public class {{ test_class_name }}BindingTests
+    {
+        {%- for messageid, message in messagegroup.messages.items() if cloudEvents.isCloudEvent(message) %}
+        {%- set messagename = messageid | strip_namespace | pascal %}
+        {%- set message_body_type = util.body_type(data_project_name, root, message) %}
+        {%- set uriargs = cloudEvents.DeclareUriTemplateArguments(message) %}
+        [Fact]
+        public void Test{{ messagename }}BinaryAttributes()
+        {
+            {%- if message_body_type != "byte[]" %}
+            var data = new {{ message_body_type }}Tests().CreateInstance();
+            {%- else %}
+            var data = new byte[0];
+            {%- endif %}
+            var message = {{ pascal_group_name | strip_namespace }}EventFactory.Create{{ messagename }}Event(
+                data
+                {%- for arg in uriargs.split(',') if arg.strip() %}
+                , "test-{{ arg.strip().split(' ')[1] }}"
+                {%- endfor %});
+
+            Assert.Equal("1.0", message.ApplicationProperties["cloudEvents:specversion"]);
+            Assert.DoesNotContain("cloudEvents:datacontenttype", message.ApplicationProperties.Keys);
+            Assert.All(message.ApplicationProperties.Values, value => Assert.IsType<string>(value));
+        }
+        {%- endfor %}
+    }
+    {%- endif %}
     {%- endfor %}
 }

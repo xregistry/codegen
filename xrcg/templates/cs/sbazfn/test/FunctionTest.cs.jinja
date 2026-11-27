@@ -54,6 +54,8 @@ namespace {{ project_name | pascal }}.Tests
                 properties: new Dictionary<string, object>
                 {
                     {"cloudEvents_specversion", "1.0"},
+                    {"cloudEvents_id", "synthetic-event"},
+                    {"cloudEvents_source", "/test/source"},
                     {"cloudEvents_type", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
                 }
             );
@@ -98,6 +100,8 @@ namespace {{ project_name | pascal }}.Tests
                 properties: new Dictionary<string, object>
                 {
                     {"cloudEvents_specversion", "1.0"},
+                    {"cloudEvents_id", "synthetic-event"},
+                    {"cloudEvents_source", "/test/source"},
                     {"cloudEvents_type", "{{ ce_type_value }}"}
                 }
             );
@@ -108,6 +112,8 @@ namespace {{ project_name | pascal }}.Tests
                 properties: new Dictionary<string, object>
                 {
                     {"cloudEvents:specversion", "1.0"},
+                    {"cloudEvents:id", "synthetic-event"},
+                    {"cloudEvents:source", "/test/source"},
                     {"cloudEvents_type", "{{ ce_type_value }}"}
                 }
             );

@@ -39,7 +39,7 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
             this.dataschemaOverrides = CopyDataschemaOverrides(dataschemaOverrides);
         }
 
-        private const string cePrefix = "cloudEvents_";
+        private const string cePrefix = "cloudEvents:";
         private const string applicationOctetStream = "application/octet-stream";
         public delegate byte[] Serialize<T>(T data, string contentType);
         private static CloudEventFormatter defaultFormatter = new JsonEventFormatter();
@@ -104,12 +104,12 @@ namespace {{ groupname | concat_namespace(project_name) | pascal }}
                 message.ContentType = contentType;
                 if (cloudEvent != null)
                 {
+                    message.ApplicationProperties.Add(cePrefix + "specversion", cloudEvent.SpecVersion.VersionId);
                     foreach (var attr in cloudEvent.GetPopulatedAttributes())
                     {
-                        var attrValue = (attr.Value is Uri) ? attr.Value.ToString() : attr.Value;
-                        if (attrValue != null)
+                        if (attr.Key.Name != "datacontenttype" && attr.Value != null)
                         {
-                            message.ApplicationProperties.Add(cePrefix + attr.Key.Name, attr.Value);
+                            message.ApplicationProperties.Add(cePrefix + attr.Key.Name, attr.Key.Type.Format(attr.Value));
                         }
                     }
                 }
