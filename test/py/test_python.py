@@ -551,7 +551,7 @@ def _generate_amqp_producer_src_from_document(document):
         os.unlink(manifest_path)
 
 
-def _generate_python_entrypoint_from_document(document, style, entrypoint_name):
+def _generate_python_entrypoint_from_document(document, style, entrypoint_name, template_args=None):
     """Generate a Python entrypoint file from an inline xRegistry document."""
     import glob
 
@@ -559,6 +559,7 @@ def _generate_python_entrypoint_from_document(document, style, entrypoint_name):
         document,
         style,
         f"test_{style}",
+        template_args=template_args,
     )
     entrypoint_files = glob.glob(os.path.join(tmpdirname, "**", entrypoint_name), recursive=True)
     assert entrypoint_files, f"no {entrypoint_name} emitted under {tmpdirname}"
@@ -577,13 +578,15 @@ def _generate_mqtt_client_src_from_document(document):
     return open(client_file, encoding="utf-8").read()
 
 
-def _load_generated_mqtt_client_module_from_document(document):
+def _load_generated_mqtt_client_module_from_document(document, template_args=None):
     """Load a generated MQTT client module and return the first concrete client class."""
     import glob
     import types
     import uuid
 
-    tmpdirname, client_file = _generate_python_entrypoint_from_document(document, "mqttclient", "client.py")
+    tmpdirname, client_file = _generate_python_entrypoint_from_document(
+        document, "mqttclient", "client.py", template_args=template_args,
+    )
     import_paths = sorted(
         path
         for path in glob.glob(os.path.join(tmpdirname, "**", "src"), recursive=True)
@@ -1360,6 +1363,110 @@ def test_amqpproducer_versioned_dataschema_on_wire():
                 assert json.loads(bytes(received.body))["dataschema"] == expected
 
 
+@pytest.mark.parametrize("encoding", ["legacy", "percent"])
+@pytest.mark.parametrize("mode", ["binary", "structured"])
+@pytest.mark.parametrize("id_kind", ["template", "prefixed-template", "literal", "generated", "omitted"])
+def test_amqpproducer_honors_inherited_id_on_encoded_message(encoding, mode, id_kind):
+    import base64
+    import glob
+    import py_compile
+    from urllib.parse import quote
+    from uuid import UUID
+    from unittest.mock import Mock, patch
+    from proton import Message
+
+    document = _build_kafka_time_document()
+    message = document["messagegroups"]["Example.Kafka"]["messages"]["Example.Event"]
+    message["envelopemetadata"].pop("time")
+    message["dataschema"]["properties"]["ce_id"] = {"type": "string"}
+    schema = message.pop("dataschema")
+    message["dataschemauri"] = "#/schemagroups/Example/schemas/Event"
+    document["schemagroups"] = {"Example": {"schemas": {"Event": {
+        "defaultversionid": "1",
+        "versions": {"1": {"format": "JsonSchema/draft-07", "schema": schema}},
+    }}}}
+    ce_id = "counter/observations%2F/123"
+    literal_id = 'constant/id%2F{ce_id}\\path/"quoted"/\U0001f6b2'
+    if id_kind in ("template", "prefixed-template"):
+        message["envelopemetadata"]["id"] = {
+            "type": "uritemplate",
+            "value": "{ce_id}" if id_kind == "template" else "events/{ce_id}",
+        }
+    elif id_kind == "literal":
+        message["envelopemetadata"]["id"] = {"type": "string", "value": literal_id}
+    elif id_kind == "generated":
+        message["envelopemetadata"]["id"] = {"type": "string"}
+    document["messagegroups"]["Derived"] = {"messages": {"Example.Event": {
+        "basemessageuri": "#/messagegroups/Example.Kafka/messages/Example.Event",
+    }}}
+    directory, entrypoint = _generate_python_entrypoint_from_document(
+        document, "amqpproducer", "*producer.py",
+        template_args=[f"uri_template_encoding={encoding}"],
+    )
+    for path in glob.glob(os.path.join(directory, "**", "*.py"), recursive=True):
+        py_compile.compile(path, doraise=True)
+    module = _load_generated_python_module_from_path(
+        entrypoint, extra_paths=glob.glob(os.path.join(directory, "**", "src"), recursive=True),
+    )
+    classes = [
+        value for value in vars(module).values()
+        if isinstance(value, type) and hasattr(value, "send_event")
+    ]
+    assert len(classes) == 2
+    for producer_class in classes:
+        with patch.object(producer_class, "_init_blocking_sender"):
+            producer = producer_class(
+                "localhost", "events", content_mode=mode,
+                format_type="application/cloudevents+json",
+            )
+        producer._send_via_blocking_sender = Mock()
+        data_type = producer_class.send_event.__annotations__["data"]
+        data = data_type(value="hello", ce_id=ce_id)
+        kwargs = {"_ce_id": data.ce_id} if id_kind in ("template", "prefixed-template") else {}
+        producer.send_event(data=data, **kwargs)
+        producer.send_event_batch(data_array=[data], **kwargs)
+        assert producer._send_via_blocking_sender.call_count == 2
+        for call in producer._send_via_blocking_sender.call_args_list:
+            received = Message()
+            received.decode(call.args[0].encode())
+            if mode == "binary":
+                actual_id = received.properties["cloudEvents:id"]
+                payload = json.loads(bytes(received.body))
+            else:
+                envelope = json.loads(bytes(received.body))
+                actual_id = envelope["id"]
+                payload = json.loads(base64.b64decode(envelope["data_base64"]))
+            assert payload["ce_id"] == ce_id
+            if id_kind in ("template", "prefixed-template"):
+                expected_id = quote(payload["ce_id"], safe="") if encoding == "percent" else payload["ce_id"]
+                if id_kind == "prefixed-template":
+                    expected_id = f"events/{expected_id}"
+                assert actual_id == expected_id
+            elif id_kind == "literal":
+                assert actual_id == literal_id
+            else:
+                assert UUID(actual_id).version == 4
+        if id_kind == "template":
+            with pytest.raises(ValueError, match="CloudEvents 'id' must be a non-empty string"):
+                producer.send_event(data=data, _ce_id="")
+            assert producer._send_via_blocking_sender.call_count == 2
+
+
+@pytest.mark.parametrize("id_type", ["string", "uritemplate"])
+def test_amqpproducer_rejects_explicit_empty_id(id_type, tmp_path, capsys, caplog):
+    document = _build_kafka_time_document()
+    message = document["messagegroups"]["Example.Kafka"]["messages"]["Example.Event"]
+    message["envelopemetadata"]["id"] = {"type": id_type, "value": ""}
+    manifest = tmp_path / "catalog.xreg.json"
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(AssertionError):
+        _generate_with_template_args(
+            str(manifest), str(tmp_path / "out"), "test_invalid_amqp_id", "amqpproducer", [],
+        )
+    captured = capsys.readouterr()
+    assert "CloudEvents 'id' value must be a non-empty string" in captured.out + captured.err + caplog.text
+
+
 def test_kafkaproducer_exposes_resilient_flush_helper():
     """Regression for #430: the generated Kafka producer must expose a
     ``flush(timeout, retries, backoff_factor)`` helper that retries with
@@ -1771,6 +1878,154 @@ def test_mqttclient_time_uritemplate_is_normalized_before_cloudevent_creation():
     assert "event_time: Optional[str] = None" in src
     assert '"{event_time}".format(event_time=event_time)' in src
     assert 'attributes["time"] = _resolve_cloudevents_time(_time, attributes.get("time"))' in src
+
+
+def _build_identity_template_document(protocol):
+    document = _build_mqtt_time_document()
+    messagegroup = document["messagegroups"]["Example.Mqtt"]
+    messagegroup["protocol"] = protocol
+    message = messagegroup["messages"]["Example.Event"]
+    message["protocol"] = protocol
+    message["envelopemetadata"]["subject"] = {
+        "type": "uritemplate", "value": "items/{identity}",
+    }
+    message["dataschema"]["properties"] = {"identity": {"type": "string"}}
+    message["protocoloptions"] = {
+        "topic_name": "example/items/{identity}/latest",
+        "properties": {
+            "subject": {"type": "uritemplate", "value": "items/{identity}"},
+        },
+        "message_annotations": {
+            "x-opt-partition-key": {"type": "uritemplate", "value": "items/{identity}"},
+        },
+    }
+    document["endpoints"] = {
+        "Example.Kafka": {
+            "protocol": "Kafka",
+            "messagegroups": ["#/messagegroups/Example.Mqtt"],
+            "protocoloptions": {"options": {"key": "items/{identity}"}},
+        },
+    }
+    return document
+
+
+@pytest.mark.parametrize("identity,encoded", [
+    ("TEST_SITE_A2/A10", "TEST_SITE_A2%2FA10"),
+    ("site+#%", "site%2B%23%25"),
+    ("site with space", "site%20with%20space"),
+    ("site-\u00fc", "site-%C3%BC"),
+    ("site{road}", "site%7Broad%7D"),
+    ("site%2FA", "site%252FA"),
+    ("site-_.~123", "site-_.~123"),
+])
+def test_mqttclient_percent_encoded_identity_roundtrip(identity, encoded):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    async def exercise():
+        module, client_class = _load_generated_mqtt_client_module_from_document(
+            _build_identity_template_document("MQTT/5.0"),
+            template_args=["uri_template_encoding=percent"],
+        )
+        fake_client = Mock()
+        generated_client = client_class(
+            fake_client, content_mode="binary", loop=asyncio.get_running_loop(),
+        )
+        payload = json.dumps({"identity": identity}).encode("utf-8")
+        data = SimpleNamespace(to_byte_array=lambda content_type: payload)
+        await generated_client.publish_example_event(
+            identity=identity, data=data, _time="2026-01-02T03:04:05Z",
+        )
+        published = fake_client.publish.call_args
+        topic = published.args[0] if published.args else published.kwargs["topic"]
+        body = published.args[1] if len(published.args) > 1 else published.kwargs["payload"]
+        assert topic == f"example/items/{encoded}/latest"
+        assert json.loads(body) == {"identity": identity}
+        properties = dict(published.kwargs["properties"].UserProperty)
+        assert properties["subject"] == f"items/{encoded}"
+        pattern = module._build_topic_regex("example/items/{identity}/latest")
+        assert pattern.fullmatch(topic)
+        assert module._extract_topic_parameters(topic, pattern) == {"identity": identity}
+        assert module._topic_to_mqtt_wildcard("example/items/{identity}/latest") == "example/items/+/latest"
+        assert module._apply_topic_template(
+            "example/{identity}/{road}", {"identity": "site{road}", "road": "A2/A10"},
+        ) == "example/site%7Broad%7D/A2%2FA10"
+
+    asyncio.run(exercise())
+
+
+def test_mqttclient_legacy_template_routing_remains_default():
+    module, _ = _load_generated_mqtt_client_module_from_document(
+        _build_identity_template_document("MQTT/5.0"),
+    )
+    topic = module._apply_topic_template("example/{identity}/latest", {"identity": "site%2FA"})
+    assert topic == "example/site%2FA/latest"
+    assert module._extract_topic_parameters(
+        topic, module._build_topic_regex("example/{identity}/latest"),
+    ) == {"identity": "site%2FA"}
+    assert module._apply_topic_template(
+        "example/{identity}/latest", {"identity": "A2/A10"},
+    ) == "example/A2/A10/latest"
+
+
+@pytest.mark.parametrize("style,protocol", [
+    ("kafkaproducer", "Kafka"),
+    ("amqpproducer", "AMQP/1.0"),
+])
+@pytest.mark.parametrize("encoding", ["legacy", "percent"])
+@pytest.mark.parametrize("identity,legacy_expected,percent_expected", [
+    ("TEST_SITE_A2/A10%2F", "items/TEST_SITE_A2/A10%2F", "items/TEST_SITE_A2%2FA10%252F"),
+    ("SITE/" + "A" * 140, "items/SITE/" + "A" * 140, "items/SITE%2F" + "A" * 140),
+])
+def test_producer_identity_subject_and_key_encoding(style, protocol, encoding, identity, legacy_expected, percent_expected):
+    import ast
+    from types import SimpleNamespace
+    from urllib.parse import quote
+
+    _, entrypoint = _generate_python_entrypoint_from_document(
+        _build_identity_template_document(protocol), style, "producer.py",
+        template_args=[f"uri_template_encoding={encoding}"],
+    )
+    parsed = ast.parse(open(entrypoint, encoding="utf-8").read(), filename=entrypoint)
+    producer = next(
+        node for node in parsed.body if isinstance(node, ast.ClassDef)
+        and any(isinstance(method, ast.FunctionDef) and method.name.startswith("send_") for method in node.body)
+    )
+    method = next(node for node in producer.body if isinstance(node, ast.FunctionDef) and node.name.startswith("send_"))
+    assignments = [
+        node for node in ast.walk(method)
+        if isinstance(node, ast.Assign) and (
+            any(isinstance(target, ast.Name) and target.id in {"attributes", "kafka_key", "annotation_value"} for target in node.targets)
+            or any(isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)
+                   and target.value.id == "amqp_msg" and target.attr == "subject" for target in node.targets)
+        )
+    ]
+    assert assignments
+    namespace = {
+        "_identity": identity,
+        "_event_time": "2026-01-02T03:04:05Z",
+        "content_type": "application/json",
+        "quote": quote,
+        "amqp_msg": SimpleNamespace(),
+    }
+    exec(compile(ast.Module(body=assignments, type_ignores=[]), entrypoint, "exec"), namespace)
+    expected = percent_expected if encoding == "percent" else legacy_expected
+    assert namespace["attributes"]["subject"] == expected
+    if style == "kafkaproducer":
+        assert namespace["kafka_key"] == expected
+    else:
+        assert namespace["amqp_msg"].subject == expected
+        assert namespace["annotation_value"] == (expected if encoding == "percent" else expected[:128])
+
+
+def test_uri_template_encoding_rejects_unknown_mode(capsys, caplog):
+    with pytest.raises(AssertionError):
+        _generate_python_project_from_document(
+            _build_identity_template_document("MQTT/5.0"), "mqttclient", "test_invalid_encoding",
+            template_args=["uri_template_encoding=unknown"],
+        )
+    captured = capsys.readouterr()
+    assert "uri_template_encoding must be 'legacy' or 'percent'" in captured.out + captured.err + caplog.text
 
 
 @pytest.mark.parametrize("callback_style", ["v1", "v2"])

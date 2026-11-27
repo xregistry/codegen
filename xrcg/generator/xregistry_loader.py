@@ -1219,7 +1219,8 @@ class XRegistryLoader:
     
     def load(self, uri: str, headers: Optional[Dict[str, str]] = None, 
              is_schema_style: bool = False, expand_refs: bool = False,
-             messagegroup_filter: str = "", endpoint_filter: str = "") -> Tuple[str, Optional[JsonNode]]:
+             messagegroup_filter: str = "", endpoint_filter: str = "",
+             resolve_references: bool = True) -> Tuple[str, Optional[JsonNode]]:
         """Load an xRegistry document with basic preprocessing.
         
         Args:
@@ -1229,6 +1230,8 @@ class XRegistryLoader:
             expand_refs: Whether to expand references (legacy parameter)
             messagegroup_filter: Filter for message groups
             endpoint_filter: Filter for endpoints
+            resolve_references: Whether to materialize linked resources and base messages.
+                Same-document resource aliases are always projected.
             
         Returns:
             Tuple of (resolved_uri, document) or (uri, None) on error
@@ -1264,19 +1267,21 @@ class XRegistryLoader:
                             self.logger.debug(f"Wrapped single resource into document structure: {group_type}/{group_id}")
                             document = wrapped_doc
             
-            # Apply basic resource resolution
-            self.resource_resolver.resolve_all_resources(document, headers)
-            
-            # Resolve resource aliases (xref) so they are transparent to codegen
+            if resolve_references:
+                # Apply basic resource resolution
+                self.resource_resolver.resolve_all_resources(document, headers)
+
+            # Project local aliases without fetching linked schema content.
             if isinstance(document, dict):
                 self.alias_resolver.resolve_all_aliases(document)
-            
-            # Resolve basemessage references
-            if isinstance(document, dict):
-                self.message_resolver.resolve_all_basemessages(document)
-            
-            # Normalize schema references from relative URIs to JSON pointers
-            self.dependency_resolver._normalize_schema_references(document)
+
+            if resolve_references:
+                # Resolve basemessage references
+                if isinstance(document, dict):
+                    self.message_resolver.resolve_all_basemessages(document)
+
+                # Normalize schema references from relative URIs to JSON pointers
+                self.dependency_resolver._normalize_schema_references(document)
             
             # Apply message group filtering if needed
             if messagegroup_filter and isinstance(document, dict):
@@ -1294,7 +1299,8 @@ class XRegistryLoader:
     
     def load_stacked(self, uris: List[str], headers: Optional[Dict[str, str]] = None,
                      is_schema_style: bool = False, expand_refs: bool = False,
-                     messagegroup_filter: str = "", endpoint_filter: str = "") -> Tuple[str, Optional[JsonNode]]:
+                     messagegroup_filter: str = "", endpoint_filter: str = "",
+                     resolve_references: bool = True) -> Tuple[str, Optional[JsonNode]]:
         """Load multiple xRegistry documents and stack them with later documents shadowing earlier ones.
         
         Documents are loaded in the order provided. When documents are stacked:
@@ -1309,6 +1315,8 @@ class XRegistryLoader:
             expand_refs: Whether to expand references (legacy parameter)
             messagegroup_filter: Filter for message groups
             endpoint_filter: Filter for endpoints
+            resolve_references: Whether to materialize linked resources and base messages.
+                Same-document resource aliases are always projected.
             
         Returns:
             Tuple of (last_resolved_uri, stacked_document) or (first_uri, None) on error
@@ -1338,7 +1346,8 @@ class XRegistryLoader:
                     return uri, None
                 
                 # Apply basic resource resolution to this document
-                self.resource_resolver.resolve_all_resources(document, headers)
+                if resolve_references:
+                    self.resource_resolver.resolve_all_resources(document, headers)
                 
                 # Stack/merge this document
                 if stacked_document is None:
@@ -1349,16 +1358,17 @@ class XRegistryLoader:
             if stacked_document is None:
                 return uris[0], None
             
-            # Resolve resource aliases (xref) so they are transparent to codegen
+            # Project local aliases against the final stack.
             if isinstance(stacked_document, dict):
                 self.alias_resolver.resolve_all_aliases(stacked_document)
-            
-            # Resolve basemessage references in the final stacked document
-            if isinstance(stacked_document, dict):
-                self.message_resolver.resolve_all_basemessages(stacked_document)
-            
-            # Normalize schema references from relative URIs to JSON pointers
-            self.dependency_resolver._normalize_schema_references(stacked_document)
+
+            if resolve_references:
+                # Resolve basemessage references in the final stacked document
+                if isinstance(stacked_document, dict):
+                    self.message_resolver.resolve_all_basemessages(stacked_document)
+
+                # Normalize schema references from relative URIs to JSON pointers
+                self.dependency_resolver._normalize_schema_references(stacked_document)
             
             # Apply filters to the final stacked document
             if messagegroup_filter and isinstance(stacked_document, dict):

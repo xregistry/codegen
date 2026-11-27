@@ -41,6 +41,22 @@
 {{ content_type }}.replace("application/vnd.apache.org.avro+avro", "application/vnd.apache.avro+avro", 1)
 {%- endmacro -%}
 
+{%- macro DeclareUriTemplateEncodingImports(encoding, consumer=false) -%}
+{%- if encoding == "percent" -%}
+from urllib.parse import quote{% if consumer %}, unquote{% endif %}
+{%- elif encoding != "legacy" -%}
+{%- error "uri_template_encoding must be 'legacy' or 'percent' (got: " ~ encoding ~ ")" -%}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro EncodeUriTemplateValue(value, encoding) -%}
+{%- if encoding == "percent" -%}
+quote(str({{ value }}), safe="")
+{%- else -%}
+{{ value }}
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro DeclareRfc3339TimeNormalizer() -%}
 _RFC3339_TIMESTAMP_PATTERN = re.compile(
     r'^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})?$'

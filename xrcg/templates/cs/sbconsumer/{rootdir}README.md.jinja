@@ -12,6 +12,8 @@ Auto-generated Azure Service Bus consumer for {{ groupname }} message group.
 
 This library makes it simple to receive messages from Azure Service Bus queues and topics. Service Bus is an enterprise messaging service that provides reliable, ordered message delivery with advanced features like sessions, transactions, and dead-lettering.
 
+The dispatcher accepts structured CloudEvents and binary messages identified by `cloudEvents:specversion`. Legacy `cloudEvents_` application-property prefixes remain readable. Binary decoding accepts canonical strings and native AMQP timestamps, preserves typed native extension values, and uses the declared content type to decode the payload.
+
 ## What is Azure Service Bus?
 
 Azure Service Bus is a fully managed enterprise message broker with message queues and publish-subscribe topics. It's ideal for:

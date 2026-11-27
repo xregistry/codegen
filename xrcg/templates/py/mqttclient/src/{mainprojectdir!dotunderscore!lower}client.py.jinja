@@ -1,10 +1,12 @@
 {%- import "util.include.jinja" as util -%}
 {%- import "cloudevents.jinja.include" as cloudEvents -%}
+{%- set _uri_template_encoding = uri_template_encoding | default("legacy") -%}
 
 # pylint: disable=unused-import, line-too-long, missing-module-docstring, missing-function-docstring, missing-class-docstring, consider-using-f-string, trailing-whitespace, trailing-newlines
 import json
 import re
 import typing
+{{ cloudEvents.DeclareUriTemplateEncodingImports(_uri_template_encoding, consumer=true) }}
 from typing import Callable, Awaitable, Optional, Dict, List
 import asyncio
 import weakref
@@ -57,10 +59,17 @@ def _apply_topic_template(topic_pattern: str, template_values: Optional[Dict[str
     """Apply template values to a topic pattern."""
     if not template_values:
         return topic_pattern
+    {%- if _uri_template_encoding == "percent" %}
+    return _URI_TEMPLATE_PATTERN.sub(
+        lambda match: quote(str(template_values[match.group(1)]), safe=""),
+        topic_pattern,
+    )
+    {%- else %}
     result = topic_pattern
     for key, value in template_values.items():
         result = result.replace('{' + key + '}', value)
     return result
+    {%- endif %}
 
 
 def _build_topic_regex(topic_pattern: str) -> re.Pattern:
@@ -76,7 +85,14 @@ def _extract_topic_parameters(topic: str, pattern: re.Pattern) -> Dict[str, str]
     """Extract URI template placeholder values from a topic."""
     match = pattern.match(topic)
     if match:
+        {%- if _uri_template_encoding == "percent" %}
+        return {
+            k: unquote(v, encoding="utf-8", errors="strict")
+            for k, v in match.groupdict().items() if v is not None
+        }
+        {%- else %}
         return {k: v for k, v in match.groupdict().items() if v is not None}
+        {%- endif %}
     return {}
 
 
@@ -814,7 +830,7 @@ class {{ class_name }}(_ClientBase):
                 {%- if phs -%}
                 .format(
                 {%- for placeholder in phs -%}
-                    {{ placeholder }} = {{ placeholder | snake }}
+                    {{ placeholder }} = {{ cloudEvents.EncodeUriTemplateValue(placeholder | snake, _uri_template_encoding) }}
                 {%- if not loop.last -%},{%- endif%}
                 {%- endfor -%}
                 )

@@ -204,8 +204,15 @@ namespace {{ project_name | pascal }}.Test
 
         {%- for messageid, message in messagegroup.messages.items() %}
         {%- set messagename = messageid | strip_namespace | pascal %}
+        {%- if cloudEvents.isCloudEvent(message) %}
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task Test{{ messagename }}Message(bool binaryMode)
+        {%- else %}
         [Fact]
         public async Task Test{{ messagename }}Message()
+        {%- endif %}
         {
             var dispatcher = new global::{{project_name | pascal}}.{{ pascal_group_name }}.{{ pascal_group_name | strip_namespace}}EventDispatcher();
             var messageHandled = new TaskCompletionSource<bool>();
@@ -238,13 +245,13 @@ namespace {{ project_name | pascal }}.Test
                     Interlocked.Increment(ref receivedCount);
                     if (receivedCount >= 5)
                     {
-                        messageHandled.SetResult(true);
+                        messageHandled.TrySetResult(true);
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error during {{ messagename }} event processing.");
-                    messageHandled.SetException(ex);
+                    messageHandled.TrySetException(ex);
                 }
 
                 await Task.CompletedTask;
@@ -259,6 +266,7 @@ namespace {{ project_name | pascal }}.Test
             processor.ProcessErrorAsync += args =>
             {
                 _logger.LogError(args.Exception, "Error occurred during processing.");
+                messageHandled.TrySetException(args.Exception);
                 return Task.CompletedTask;
             };
             await processor.StartProcessingAsync();
@@ -267,11 +275,12 @@ namespace {{ project_name | pascal }}.Test
             // Send 5 test messages
             var sender = _client.CreateSender("myqueue");
             {%- set message_body_type = util.body_type(data_project_name, root, message) -%}
+            var dataContentType = {{ cloudEvents.GetDataContentType(message, '"application/json"' if message_body_type != "byte[]" else '"application/octet-stream"') }};
             {%- if message_body_type != "byte[]" %}
             var eventDataTest = new {{ message_body_type }}Tests();
-            var eventData = eventDataTest.CreateInstance().ToByteArray("application/json");
+            var eventData = eventDataTest.CreateInstance().ToByteArray(dataContentType);
             {%- else %}
-            byte[] eventData = null;
+            byte[] eventData = new byte[0];
             {%- endif %}
             
             JsonEventFormatter fm = new JsonEventFormatter();
@@ -288,17 +297,32 @@ namespace {{ project_name | pascal }}.Test
                     Type = "{{ type_value }}",
                     Source = new Uri("/test/source", UriKind.RelativeOrAbsolute),
                     Data = eventData,
-                    DataContentType = {{ cloudEvents.GetDataContentType(message, '"application/json"' if message_body_type != "byte[]" else "null") }}
+                    DataContentType = dataContentType
                 };
 
-                var message = new ServiceBusMessage(fm.EncodeStructuredModeMessage(cloudEvent, out var ct));
-                message.ContentType = ct.ToString();
+                ServiceBusMessage message;
+                {%- if cloudEvents.isCloudEvent(message) %}
+                if (binaryMode)
+                {
+                    message = new ServiceBusMessage(eventData) { ContentType = dataContentType };
+                    message.ApplicationProperties.Add("cloudEvents:specversion", cloudEvent.SpecVersion.VersionId);
+                    foreach (var attribute in cloudEvent.GetPopulatedAttributes())
+                    {
+                        if (attribute.Key.Name != "datacontenttype")
+                            message.ApplicationProperties.Add("cloudEvents:" + attribute.Key.Name, attribute.Key.Type.Format(attribute.Value));
+                    }
+                }
+                else
+                {%- endif %}
+                {
+                    message = new ServiceBusMessage(fm.EncodeStructuredModeMessage(cloudEvent, out var ct));
+                    message.ContentType = ct.ToString();
+                }
                 await sender.SendMessageAsync(message);
             }
 
             // Wait for all 5 messages to be processed
-            var completedTask = await Task.WhenAny(messageHandled.Task, Task.Delay(15000));
-            Assert.True(messageHandled.Task.IsCompletedSuccessfully, "Not all messages were handled within the timeout.");
+            await messageHandled.Task.WaitAsync(TimeSpan.FromSeconds(15));
             Assert.Equal(5, receivedCount);
             Assert.Equal(5, receivedMessages.Count);
 
@@ -308,5 +332,60 @@ namespace {{ project_name | pascal }}.Test
         }
         {%- endfor %}
     }
+    {%- if messagegroup | exists("envelope", "CloudEvents/1.0") %}
+    public class {{ test_class_name }}BindingTests
+    {
+        private sealed class Decoder : global::{{project_name | pascal}}.{{ pascal_group_name }}.{{ pascal_group_name | strip_namespace}}EventDispatcher
+        {
+            public CloudEvent Decode(ServiceBusReceivedMessage message) => CloudEventFromServiceBusMessage(message);
+        }
+
+        [Fact]
+        public void TestIncompleteBinaryEventIsRejected()
+        {
+            var message = ServiceBusModelFactory.ServiceBusReceivedMessage(
+                properties: new System.Collections.Generic.Dictionary<string, object>
+                {
+                    ["cloudEvents:specversion"] = "1.0",
+                    ["cloudEvents:type"] = "synthetic.test",
+                });
+
+            Assert.Throws<InvalidOperationException>(() => new Decoder().Decode(message));
+        }
+
+        [Theory]
+        [InlineData("cloudEvents:", false)]
+        [InlineData("cloudEvents:", true)]
+        [InlineData("cloudEvents_", false)]
+        [InlineData("cloudEvents_", true)]
+        public void TestBinaryAttributes(string prefix, bool nativeTime)
+        {
+            var time = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+            object timeValue = nativeTime ? time : CloudEventAttributeType.Timestamp.Format(new DateTimeOffset(time));
+            var properties = new System.Collections.Generic.Dictionary<string, object>
+            {
+                [prefix + "specversion"] = "1.0",
+                [prefix + "id"] = "synthetic-event",
+                [prefix + "source"] = "/test/source",
+                [prefix + "type"] = "synthetic.test",
+                [prefix + "time"] = timeValue,
+                [prefix + "attempt"] = 3,
+                [prefix + "enabled"] = true,
+            };
+            var message = ServiceBusModelFactory.ServiceBusReceivedMessage(
+                body: BinaryData.FromString("{}"), contentType: "application/json", properties: properties);
+
+            Assert.True(Decoder.IsCloudEvent(message));
+            var cloudEvent = new Decoder().Decode(message);
+
+            Assert.Equal("synthetic-event", cloudEvent.Id);
+            Assert.Equal("/test/source", cloudEvent.Source?.OriginalString);
+            Assert.Equal(new DateTimeOffset(time), cloudEvent.Time);
+            Assert.Equal(3, Assert.IsType<int>(cloudEvent["attempt"]));
+            Assert.True(Assert.IsType<bool>(cloudEvent["enabled"]));
+            Assert.Equal("{}", Assert.IsType<BinaryData>(cloudEvent.Data).ToString());
+        }
+    }
+    {%- endif %}
     {%- endfor %}
 }

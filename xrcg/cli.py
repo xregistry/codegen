@@ -88,8 +88,8 @@ def main():
         parser.print_help()
         return 1
     try:
-        args.func(args)
-        return 0
+        result = args.func(args)
+        return result if isinstance(result, int) else 0
     except ValueError as e:
         print(f"Error: {e.args[0]}")
         return 1

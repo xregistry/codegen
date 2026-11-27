@@ -5,14 +5,14 @@ The `validate` command checks xRegistry definition files for structural correctn
 ## Synopsis
 
 ```bash
-xrcg validate --definitions <file-or-url> [options]
+xrcg validate --definitions <file-or-url> [<file-or-url> ...] [options]
 ```
 
 ## Options
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `--definitions`, `-d` | Yes | Path to a local file or URL containing xRegistry definitions (JSON or YAML). |
+| `--definitions`, `-d` | Yes | One or more local files or URLs containing xRegistry definitions (JSON or YAML). Later documents override matching resources in earlier documents. |
 | `--requestheaders` | No | HTTP headers for fetching remote definitions, as `key=value`. Useful for authenticated endpoints. |
 
 ## What Gets Validated
@@ -22,7 +22,7 @@ The validator checks:
 ### Document Structure
 
 - Valid JSON/YAML syntax
-- Required top-level properties (`$schema`, `specversion`)
+- Attribute types and required properties declared by the document schema
 - Proper structure of `messagegroups`, `schemagroups`, and `endpoints`
 
 ### Message Groups
@@ -37,7 +37,7 @@ The validator checks:
 - Valid `schemagroupid` identifiers
 - Schema format specification (`JsonSchema/draft-07`, `Avro`, `Protobuf`)
 - Schema version management
-- Resolvable schema references
+- Mutually exclusive schema content: `schema`, `schemabase64`, or `schemaurl`
 
 ### Endpoints
 
@@ -46,11 +46,17 @@ The validator checks:
 - Message group references (JSON Pointers)
 - Protocol-specific options
 
-### Cross-References
+### References
 
-- JSON Pointer references resolve correctly (e.g., `#/schemagroups/foo/schemas/bar`)
-- `basemessageurl` references for message inheritance
-- Schema references from messages
+Validation checks the authored document, or the authored stack of documents.
+It projects resource aliases (`xref` or `meta.xref`) from targets in that
+same document or final stack. Invalid local alias targets are reported.
+It does not fetch linked schemas, materialize base messages, or check other
+reference targets. Generation resolves those references.
+
+For example, a version with only `schemaurl` is valid. A version containing
+both `schemaurl` and `schema` is rejected. Loading a linked schema for generation
+does not change the form checked by structural validation.
 
 ## Examples
 
@@ -62,20 +68,13 @@ xrcg validate --definitions ./my-catalog.json
 
 Output on success:
 ```
-✓ Validation passed: ./my-catalog.json
-  - 3 message groups
-  - 2 schema groups
-  - 4 endpoints
+OK: definitions file(s) ./my-catalog.json is valid
 ```
 
 Output on failure:
 ```
-✗ Validation failed: ./my-catalog.json
-
-Errors:
-  - /messagegroups/Orders/messages/OrderPlaced: Missing required field 'envelope'
-  - /schemagroups/Schemas/schemas/OrderData: Invalid schema format 'JSONSchema' (expected 'JsonSchema/draft-07')
-  - /endpoints/KafkaEndpoint: Unresolved reference '#/messagegroups/NonExistent'
+./my-catalog.json Validation errors:
+! at $.endpoints.KafkaEndpoint.protocol: 123 is not of type 'string'
 ```
 
 ### Validate a Remote Definition
@@ -135,7 +134,10 @@ Error: /messagegroups/Events: Invalid envelope 'CloudEvents' (expected format li
 
 **Fix:** Use the full envelope specification with version: `CloudEvents/1.0`.
 
-### Unresolved Reference
+### Reference Errors During Generation
+
+Structural validation does not verify reference targets. Generation can report
+an unresolved reference:
 
 ```
 Error: /endpoints/MyEndpoint/messagegroups/0: Cannot resolve '#/messagegroups/NonExistent'
@@ -151,7 +153,9 @@ Error: /schemagroups/Data/schemas/Order: Unknown schema format 'json-schema'
 
 **Fix:** Use a valid format identifier: `JsonSchema/draft-07`, `Avro`, or `Protobuf`.
 
-### Circular Base Message Reference
+### Circular Base Message Reference During Generation
+
+Generation resolves inheritance chains and can report a cycle:
 
 ```
 Error: /messagegroups/Events/messages/EventA: Circular reference detected in basemessageurl chain
@@ -165,12 +169,13 @@ The `validate` command performs structural validation only. It ensures:
 
 - ✓ The document is syntactically correct
 - ✓ Required fields are present
-- ✓ References are resolvable
+- ✓ Reference attributes have the required structural form
 - ✓ Types and formats are valid
 
 It does **not** verify:
 
 - ✗ Schema content validity (e.g., JSON Schema semantics)
+- ✗ Reference targets or inheritance cycles
 - ✗ Protocol-specific constraints
 - ✗ Business logic rules
 

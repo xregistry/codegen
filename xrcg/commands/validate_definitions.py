@@ -45,10 +45,12 @@ def validate(definitions_uris, headers, verbose=False):
     loader = XRegistryLoader()
     
     if len(definitions_uris) == 1:
-        definitions_file, docroot = loader.load(definitions_uris[0], headers, False, True)
+        definitions_file, docroot = loader.load(
+            definitions_uris[0], headers, resolve_references=False)
         display_name = definitions_uris[0]
     else:
-        definitions_file, docroot = loader.load_stacked(definitions_uris, headers, False, True)
+        definitions_file, docroot = loader.load_stacked(
+            definitions_uris, headers, resolve_references=False)
         display_name = " + ".join(definitions_uris)
     
     if not docroot:

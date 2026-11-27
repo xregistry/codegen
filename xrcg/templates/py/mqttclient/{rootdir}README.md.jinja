@@ -200,5 +200,17 @@ the keyword arguments. On **subscribe**, placeholders are converted to MQTT `+`
 single-level wildcards, and on **receive** the concrete values are extracted from the
 topic and handed to your handler as `topic_params`.
 
+{% if uri_template_encoding | default("legacy") == "percent" -%}
+This client uses percent-encoded simple URI-template values. Pass original
+identifiers to publish methods: `A2/A10` occupies one topic level as `A2%2FA10`.
+CloudEvents URI-template metadata uses the same encoding. Payload fields are
+unchanged, and received `topic_params` are decoded once.
+{% else -%}
+This client uses legacy literal interpolation. To keep reserved characters such
+as `/`, `+`, and `#` inside one topic level, regenerate producers and consumers
+with `--template-args uri_template_encoding=percent`. That option also encodes
+matching CloudEvents URI-template metadata; received parameters are decoded once.
+{% endif %}
+
 To override the defaults, pass a `topic_mappings` dictionary (message id → topic
 template) to the client constructor.
