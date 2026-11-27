@@ -704,39 +704,7 @@ class {{ class_name }}(_ClientBase):
     {%- set messagename = messageid | dotunderscore | snake %}
     {%- set type_name = util.DeclareDataType( data_project_name, root, message ) %}
     {%- set uri_template_vars = [] %}
-    {%- for attrname, attribute in message.envelopemetadata.items() %}
-        {%- if attribute.value and attribute.type == "uritemplate" and attrname != "time" %}
-            {%- set phs = attribute.value | regex_search('\\{([A-Za-z0-9_]+)\\}') %}
-            {%- if phs %}
-                {%- for placeholder in phs %}
-                    {%- if placeholder not in uri_template_vars %}
-                        {%- set _ = uri_template_vars.append(placeholder) %}
-                    {%- endif %}
-                {%- endfor %}
-            {%- endif %}
-        {%- endif %}
-    {%- endfor %}
-    {#- Also include URI template placeholders that appear in the message-level
-        MQTT topic uritemplate (protocoloptions.topic_name per spec) so the
-        publish method exposes every variable the topic requires. -#}
-    {%- set _topic_value = none -%}
-    {%- if message.protocoloptions and message.protocoloptions.topic_name -%}
-        {%- set _topic_value = message.protocoloptions.topic_name -%}
-    {%- elif message.protocoloptions and message.protocoloptions['topic-name'] -%}
-        {%- set _topic_value = message.protocoloptions['topic-name'] -%}
-    {%- elif message.protocoloptions and message.protocoloptions.topic -%}
-        {%- set _topic_value = message.protocoloptions.topic -%}
-    {%- endif -%}
-    {%- if _topic_value -%}
-        {%- set topic_phs = _topic_value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}
-        {%- if topic_phs %}
-            {%- for placeholder in topic_phs %}
-                {%- if placeholder not in uri_template_vars %}
-                    {%- set _ = uri_template_vars.append(placeholder) %}
-                {%- endif %}
-            {%- endfor %}
-        {%- endif %}
-    {%- endif %}
+    {%- set _ = util.CollectMqttUriTemplateVariables(message, uri_template_vars) %}
     {%- set time_uri_template_vars = [] %}
     {%- if 'time' in message.envelopemetadata and message.envelopemetadata['time'].value and message.envelopemetadata['time'].type == "uritemplate" -%}
         {%- for placeholder in message.envelopemetadata['time'].value | regex_search('\\{([A-Za-z0-9_]+)\\}') -%}

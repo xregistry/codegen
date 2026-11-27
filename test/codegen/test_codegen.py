@@ -825,6 +825,81 @@ def test_codegen_dataschema_matches_generated_payload_version(pinned, tmp_path, 
     assert ("/versions/zzz" if pinned else "/versions/stable") in source
 
 
+@pytest.mark.parametrize("topic_key", ["topic_name", "topic-name", "topic"])
+def test_codegen_py_mqtt_tests_cover_topic_and_envelope_variables(topic_key, tmp_path, monkeypatch):
+    import ast
+    import py_compile
+
+    document = _versioned_schema_document()
+    message = document["messagegroups"]["Example"]["messages"]["Reading"]
+    message["envelopemetadata"]["source"] = {
+        "type": "uritemplate", "value": "https://example.test/{station_id}",
+    }
+    message["envelopemetadata"]["subject"] = {"type": "uritemplate", "value": "{station_id}"}
+    message["protocoloptions"] = {topic_key: "hydro/{water_shortname}/{station_id}/{station_id}"}
+    definitions = tmp_path / "catalog.json"
+    definitions.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "out"
+    monkeypatch.setattr(sys, "argv", [
+        "xrcg", "generate", "--language", "py", "--style", "mqttclient",
+        "--definitions", str(definitions), "--output", str(output), "--projectname", "TopicContract",
+    ])
+    assert xrcg.cli() == 0
+    for source in output.rglob("*.py"):
+        py_compile.compile(str(source), doraise=True)
+    generated = ast.parse(next(output.rglob("test_client.py")).read_text(encoding="utf-8"))
+    calls = [node for node in ast.walk(generated)
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+             and node.func.attr.startswith("publish_")]
+    assert len(calls) == 1
+    names = [keyword.arg for keyword in calls[0].keywords]
+    assert names.count("station_id") == 1
+    assert names.count("water_shortname") == 1
+    assert "_time" in names
+
+
+def test_codegen_py_kafka_cross_event_test_uses_inherited_wire_types(tmp_path, monkeypatch):
+    import ast
+    import copy
+    import py_compile
+
+    document = _versioned_schema_document()
+    messages = document["messagegroups"]["Example"]["messages"]
+    messages["Reading"]["envelopemetadata"]["subject"] = {
+        "type": "uritemplate", "value": "{station_id}",
+    }
+    messages["Other"] = copy.deepcopy(messages["Reading"])
+    messages["Other"]["envelopemetadata"]["type"]["value"] = "Example.Other"
+    document["messagegroups"]["Kafka"] = {"messages": {
+        "Reading.kafka": {"basemessageuri": "#/messagegroups/Example/messages/Reading"},
+        "Other.kafka": {"basemessageuri": "#/messagegroups/Example/messages/Other"},
+    }}
+    document["endpoints"] = {"Kafka": {
+        "protocol": "Kafka", "usage": ["producer"], "messagegroups": ["#/messagegroups/Kafka"],
+        "protocoloptions": {"options": {"key": "{station_id}"}},
+    }}
+    definitions = tmp_path / "catalog.json"
+    definitions.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "out"
+    monkeypatch.setattr(sys, "argv", [
+        "xrcg", "generate", "--language", "py", "--style", "kafkaproducer",
+        "--endpoint", "Kafka", "--definitions", str(definitions),
+        "--output", str(output), "--projectname", "WireTypeContract",
+    ])
+    assert xrcg.cli() == 0
+    for source in output.rglob("*.py"):
+        py_compile.compile(str(source), doraise=True)
+    generated = ast.parse(next(output.rglob("test_producer.py")).read_text(encoding="utf-8"))
+    test = next(node for node in generated.body if isinstance(node, ast.FunctionDef)
+                and node.name.endswith("cross_event_type_kafka_key"))
+    filters = [node.comparators[0] for node in ast.walk(test)
+               if isinstance(node, ast.Compare) and isinstance(node.ops[0], ast.In)
+               and isinstance(node.left, ast.Subscript) and isinstance(node.left.slice, ast.Constant)
+               and node.left.slice.value == "type"]
+    assert len(filters) == 1
+    assert [item.value for item in filters[0].elts] == ["Example.Reading", "Example.Other"]
+
+
 @pytest.mark.parametrize("content_mode", ["binary", "structured"])
 @pytest.mark.parametrize("mapping_kind", ["none", "empty", "match", "unmatched", "chain"])
 def test_generated_dataschema_overrides(content_mode, mapping_kind, tmp_path, monkeypatch):
@@ -844,6 +919,9 @@ def test_generated_dataschema_overrides(content_mode, mapping_kind, tmp_path, mo
     overrides = mappings[mapping_kind]
     document = _versioned_schema_document()
     messages = document["messagegroups"]["Example"]["messages"]
+    messages["Reading"]["envelopemetadata"]["datacontenttype"] = {
+        "type": "string", "value": "application/json",
+    }
     for name in ("Shared", "Explicit"):
         messages[name] = copy.deepcopy(messages["Reading"])
         messages[name]["messageid"] = name
@@ -885,6 +963,20 @@ def test_generated_dataschema_overrides(content_mode, mapping_kind, tmp_path, mo
     expected = registered if mapping_kind in ("match", "chain") else original
     expected_explicit = registered if mapping_kind in ("match", "chain") else explicit
     assert list(map(schema, sender.messages)) == [expected, expected, expected_explicit]
+    if content_mode == "structured":
+        import base64
+
+        for message in sender.messages:
+            envelope = json.loads(message["value"])
+            assert envelope["data"] == json.loads(data.to_json())
+            assert "data_base64" not in envelope
+        binary_payload = CaptureProducer()
+        producer_class(binary_payload, "readings", content_mode).send_reading(
+            data, content_type="application/vnd.apache.avro+avro", flush_producer=False)
+        envelope = json.loads(binary_payload.messages[0]["value"])
+        assert "data" not in envelope
+        assert base64.b64decode(envelope["data_base64"], validate=True) == data.to_byte_array(
+            "application/vnd.apache.avro+avro")
     untouched = CaptureProducer()
     producer_class(untouched, "readings", content_mode).send_reading(data, flush_producer=False)
     assert schema(untouched.messages[0]) == original
