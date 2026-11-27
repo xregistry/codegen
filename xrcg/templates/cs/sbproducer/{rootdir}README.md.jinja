@@ -75,6 +75,12 @@ var producer = new {{ class_name }}(
 
 ## Available Methods
 
+For raw AMQP messages, `Create<Message>Event` factory names use the full catalogue message
+ID: `example.001.02` becomes `CreateExample00102Event`. Dotted segments are not
+stripped as namespaces. CloudEvents factory naming is unchanged.
+Raw messages use the declared AMQP subject and content type. XSD-backed bodies
+are serialized as XML, without a CloudEvents envelope.
+
 {% for messageid, message in messagegroup.messages.items() -%}
 {%- set messagename = messageid | pascal | strip_namespace %}
 {%- set message_body_type = util.body_type(data_project_name, root, message) %}

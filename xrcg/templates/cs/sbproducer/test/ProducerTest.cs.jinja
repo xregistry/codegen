@@ -206,10 +206,10 @@ namespace {{ project_name | pascal }}.Test
 #pragma warning disable CS8604 // init takes care of nullables 
 
         {%- for messageid, message in messagegroup.messages.items() %}
-        {%- set messagename = messageid | strip_namespace | pascal %}
-        {%- set is_amqp = amqp.is_amqp(message) %}
+        {%- set is_amqp = amqp.is_amqp(message) or amqp.IsRawServiceBusMessage(messagegroup, message) %}
         {%- set isCloudEvent = cloudEvents.isCloudEvent(message) %}
-        {%- set uriargs = cloudEvents.DeclareUriTemplateArguments(message) %}
+        {%- set messagename = amqp.ServiceBusFactoryMessageName(messageid, is_amqp and not isCloudEvent) %}
+        {%- set uriargs = cloudEvents.DeclareUriTemplateArguments(message) if isCloudEvent else (amqp.DeclareUriTemplateArguments(message) if message.protocoloptions else "") %}
         [Fact]
         public async Task Test{{ messagename }}Message()
         {
