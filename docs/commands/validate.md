@@ -49,8 +49,10 @@ The validator checks:
 ### References
 
 Validation checks the authored document, or the authored stack of documents.
-It does not fetch linked schemas, expand aliases, materialize base messages,
-or check whether reference targets exist. Generation resolves those references.
+It projects resource aliases (`xref` or `meta.xref`) from targets in that
+same document or final stack. Invalid local alias targets are reported.
+It does not fetch linked schemas, materialize base messages, or check other
+reference targets. Generation resolves those references.
 
 For example, a version with only `schemaurl` is valid. A version containing
 both `schemaurl` and `schema` is rejected. Loading a linked schema for generation

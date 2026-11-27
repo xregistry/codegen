@@ -1230,7 +1230,8 @@ class XRegistryLoader:
             expand_refs: Whether to expand references (legacy parameter)
             messagegroup_filter: Filter for message groups
             endpoint_filter: Filter for endpoints
-            resolve_references: Whether to materialize linked resources and inherited metadata
+            resolve_references: Whether to materialize linked resources and base messages.
+                Same-document resource aliases are always projected.
             
         Returns:
             Tuple of (resolved_uri, document) or (uri, None) on error
@@ -1270,10 +1271,11 @@ class XRegistryLoader:
                 # Apply basic resource resolution
                 self.resource_resolver.resolve_all_resources(document, headers)
 
-                # Resolve resource aliases (xref) so they are transparent to codegen
-                if isinstance(document, dict):
-                    self.alias_resolver.resolve_all_aliases(document)
+            # Project local aliases without fetching linked schema content.
+            if isinstance(document, dict):
+                self.alias_resolver.resolve_all_aliases(document)
 
+            if resolve_references:
                 # Resolve basemessage references
                 if isinstance(document, dict):
                     self.message_resolver.resolve_all_basemessages(document)
@@ -1313,7 +1315,8 @@ class XRegistryLoader:
             expand_refs: Whether to expand references (legacy parameter)
             messagegroup_filter: Filter for message groups
             endpoint_filter: Filter for endpoints
-            resolve_references: Whether to materialize linked resources and inherited metadata
+            resolve_references: Whether to materialize linked resources and base messages.
+                Same-document resource aliases are always projected.
             
         Returns:
             Tuple of (last_resolved_uri, stacked_document) or (first_uri, None) on error
@@ -1355,11 +1358,11 @@ class XRegistryLoader:
             if stacked_document is None:
                 return uris[0], None
             
-            if resolve_references:
-                # Resolve resource aliases (xref) so they are transparent to codegen
-                if isinstance(stacked_document, dict):
-                    self.alias_resolver.resolve_all_aliases(stacked_document)
+            # Project local aliases against the final stack.
+            if isinstance(stacked_document, dict):
+                self.alias_resolver.resolve_all_aliases(stacked_document)
 
+            if resolve_references:
                 # Resolve basemessage references in the final stacked document
                 if isinstance(stacked_document, dict):
                     self.message_resolver.resolve_all_basemessages(stacked_document)

@@ -31,7 +31,8 @@ def test_validate():
 
 @pytest.mark.parametrize("stacked", [False, True])
 @pytest.mark.parametrize("inline_schema,expected", [(False, 0), (True, 1)])
-def test_validate_preserves_schema_content_choice(tmp_path, monkeypatch, stacked, inline_schema, expected):
+@pytest.mark.parametrize("aliased", [False, True])
+def test_validate_preserves_schema_content_choice(tmp_path, monkeypatch, stacked, inline_schema, expected, aliased):
     schema = {"type": "object", "properties": {"value": {"type": "string"}}}
     schema_path = tmp_path / "schema.json"
     schema_path.write_text(json.dumps(schema), encoding="utf-8")
@@ -45,6 +46,10 @@ def test_validate_preserves_schema_content_choice(tmp_path, monkeypatch, stacked
             },
         },
     }
+    if aliased:
+        document["schemagroups"]["route"] = {
+            "schemas": {"record": {"meta": {"xref": "/schemagroups/example/schemas/record"}}},
+        }
     definitions_path = tmp_path / "definitions.xreg.json"
     definitions_path.write_text(json.dumps(document), encoding="utf-8")
     definitions = [str(definitions_path)]
