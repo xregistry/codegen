@@ -216,6 +216,44 @@ def test_sbconsumer_lightbulb_go():
         run_go_test(os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json').replace(
             '/', os.sep), tmpdirname, "test_sbconsumer_lightbulb_go", "sbconsumer")
 
+@pytest.mark.parametrize(
+    ("style", "test_filename"),
+    [
+        ("sbproducer", "producer_test.go"),
+        ("sbconsumer", "consumer_test.go"),
+    ],
+)
+def test_servicebus_live_test_logs_startup_failure_and_registers_cleanup(style, test_filename):
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        original_argv = sys.argv
+        try:
+            sys.argv = [
+                'xregistry',
+                'generate',
+                '--definitions', os.path.join(project_root, 'samples', 'message-definitions', 'lightbulb.xreg.json'),
+                '--output', tmpdirname,
+                '--projectname', f'test_{style}_startup_diagnostics_go',
+                '--style', style,
+                '--language', 'go',
+            ]
+            xrcg.cli()
+        finally:
+            sys.argv = original_argv
+
+        test_path = os.path.join(
+            tmpdirname, f'test_{style}_startup_diagnostics_go', 'tests', test_filename
+        )
+        with open(test_path, encoding='utf-8') as generated_test:
+            source = generated_test.read()
+
+        startup = source.index('container, err := servicebus.Run')
+        cleanup = source.index('t.Cleanup(func()', startup)
+        diagnostics = source.index('logServiceBusStartupFailure(t, ctx, container, err)', startup)
+        require_no_error = source.index('require.NoError(t, err)', startup)
+        assert startup < cleanup < diagnostics < require_no_error
+        assert 'logServiceBusContainerDiagnostics(t, ctx, "Service Bus emulator", container.Container)' in source
+        assert 'logServiceBusContainerDiagnostics(t, ctx, "MSSQL dependency", mssql.Container)' in source
+
 
 # Event Hubs Producer Tests
 

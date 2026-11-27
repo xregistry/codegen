@@ -20,6 +20,7 @@ import (
 	"context"
 	{%- if live_is_ce %}
 	"encoding/json"
+	"io"
 	"strings"
 	{%- endif %}
 	"testing"
@@ -138,8 +139,17 @@ func Test{{ fg_class_name }}_LiveRoundTrip(t *testing.T) {
 		servicebus.WithAcceptEULA(),
 		servicebus.WithConfig(strings.NewReader(liveSbConfig)),
 	)
+	if container != nil {
+		t.Cleanup(func() {
+			if err := testcontainers.TerminateContainer(container); err != nil {
+				t.Errorf("failed to terminate Service Bus emulator and dependencies: %v", err)
+			}
+		})
+	}
+	if err != nil {
+		logServiceBusStartupFailure(t, ctx, container, err)
+	}
 	require.NoError(t, err)
-	defer func() { _ = testcontainers.TerminateContainer(container) }()
 
 	connStr, err := container.ConnectionString(ctx)
 	require.NoError(t, err)
@@ -187,5 +197,47 @@ func sendSbLiveWithRetry(t *testing.T, fn func() error) {
 		time.Sleep(2 * time.Second)
 	}
 	require.NoError(t, err)
+}
+
+func logServiceBusStartupFailure(t *testing.T, ctx context.Context, container *servicebus.Container, startupErr error) {
+	t.Helper()
+	t.Logf("Service Bus emulator startup failed: %v", startupErr)
+	if container == nil {
+		return
+	}
+	logServiceBusContainerDiagnostics(t, ctx, "Service Bus emulator", container.Container)
+	if mssql := container.MSSQLContainer(); mssql != nil {
+		logServiceBusContainerDiagnostics(t, ctx, "MSSQL dependency", mssql.Container)
+	}
+}
+
+func logServiceBusContainerDiagnostics(t *testing.T, ctx context.Context, name string, container testcontainers.Container) {
+	t.Helper()
+	if container == nil {
+		t.Logf("%s container is unavailable", name)
+		return
+	}
+	t.Logf("%s container ID: %s", name, container.GetContainerID())
+	state, err := container.State(ctx)
+	if err != nil {
+		t.Logf("%s container state unavailable: %v", name, err)
+	} else {
+		t.Logf("%s container state: status=%q running=%t exit-code=%d", name, state.Status, state.Running, state.ExitCode)
+	}
+	logs, err := container.Logs(ctx)
+	if err != nil {
+		t.Logf("%s container logs unavailable: %v", name, err)
+		return
+	}
+	output, readErr := io.ReadAll(logs)
+	closeErr := logs.Close()
+	if readErr != nil {
+		t.Logf("%s container log read failed: %v", name, readErr)
+	} else {
+		t.Logf("%s container logs:\n%s", name, output)
+	}
+	if closeErr != nil {
+		t.Logf("%s container log close failed: %v", name, closeErr)
+	}
 }
 {%- endif %}
